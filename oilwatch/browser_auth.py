@@ -94,6 +94,12 @@ class BrowserAuth:
         options.add_argument("--disable-extensions")
         options.add_argument("--no-first-run")
         options.add_argument("--no-default-browser-check")
+        # Autofill is actively harmful here: it pre-fills the Magento login
+        # fields and re-populates them mid-typing, which appends to what we send
+        # and doubles the username.
+        options.add_argument(
+            "--disable-features=AutofillServerCommunication,AutofillEnableAccountWalletStorage"
+        )
         options.add_argument(f"--user-data-dir={self.profile_dir}")
         options.add_argument("--profile-directory=Default")
         if headless:
@@ -238,34 +244,53 @@ class BrowserAuth:
             return False
 
     @staticmethod
-    def _set_field_value(driver, element, value: str, *, attempts: int = 3) -> None:
-        """Put ``value`` into a field, tolerating autofill. Raises if it won't stick.
+    def _set_field_value(
+        driver,
+        element,
+        value: str,
+        *,
+        attempts: int = 3,
+        per_char_delay: float = 0.03,
+    ) -> None:
+        """Put ``value`` into a field without racing Chrome autofill.
 
-        Chrome autofill pre-fills these Magento fields and re-populates them
-        after ``clear()``, so a blind ``send_keys`` *appends* to what is already
-        there — submitting ``user@example.comuser@example.com`` and failing as an
-        invalid login. If the field already holds the right value, leave it alone.
+        Autofill pre-fills these Magento fields and re-populates them mid-typing,
+        so a blind ``send_keys`` *appends* — submitting ``user@example.comuser@example.com``
+        and failing as an invalid login. Three defences, in order:
+
+        1. Leave the field alone if it already holds the right value.
+        2. Switch autofill off for this input. Setting an attribute is harmless,
+           unlike blanking ``.value``, which detaches what the page is watching
+           and makes ``send_keys`` land nowhere.
+        3. Type character by character, so autofill cannot land between whole
+           keystrokes.
 
         Deliberately never puts the value in an error message: one of the two
         callers is passing a password.
         """
         from selenium.webdriver.common.keys import Keys
 
+        driver.execute_script(
+            "arguments[0].setAttribute('autocomplete', 'off');"
+            "arguments[0].setAttribute('autocorrect', 'off');"
+            "arguments[0].setAttribute('spellcheck', 'false');",
+            element,
+        )
+
         for _ in range(attempts):
             if (element.get_attribute("value") or "") == value:
-                return  # autofill already supplied it; do not type on top
+                return  # already correct; do not type on top
 
-            # Keyboard clearing only. Assigning .value via JS and firing a
-            # synthetic input event detaches what the page is watching, after
-            # which send_keys lands nowhere — tried, and it fails this form.
             element.click()
             element.send_keys(Keys.CONTROL, "a")
             element.send_keys(Keys.DELETE)
-            element.send_keys(value)
+            for character in value:
+                element.send_keys(character)
+                time.sleep(per_char_delay)
             if (element.get_attribute("value") or "") == value:
                 return
             time.sleep(0.3)
-        raise RuntimeError("a login field would not accept the intended value (autofill fighting back?)")
+        raise RuntimeError("a login field would not accept the intended value")
 
     def automated_login(
         self,
