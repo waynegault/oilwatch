@@ -237,7 +237,10 @@ class GraphEmailMonitor:
                 quantity = app.settings.quote_quantity_liters
                 record = {
                     "supplier_id": supplier["id"],
-                    "observed_at": datetime.now().isoformat(),
+                    # The email's own date, not now: now that the sweep reaches
+                    # back through old mail, dating an old reply today would let a
+                    # stale price pass the recency window as if it were current.
+                    "observed_at": stamp.isoformat(),
                     "quantity_liters": quantity,
                     "status": "ok",
                     "price_per_liter": price_per_liter,
