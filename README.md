@@ -502,6 +502,11 @@ uses a temp database), so no network or supplier sites are touched.
 
 # Run the full suite
 python -m unittest discover -s tests -t . -v
+
+# Line + branch coverage of the package (needs the dev extra:
+#   python -m pip install -e ".[dev]" )
+python -m coverage run -m unittest discover -s tests -t .
+python -m coverage report -m
 ```
 
 ### Run from VS Code
