@@ -153,6 +153,13 @@ class DiscoveryService:
     @staticmethod
     def _supplier_name_from_title(title: str, domain: str) -> str:
         generic_terms = ("home", "heating oil", "fuel", "quote", "prices", "local")
+
+        def is_generic(text: str) -> bool:
+            # Word boundaries, so "fuel" does not match "Fuels": a name ending in
+            # "Fuels" is exactly the supplier we want, not a generic page title.
+            lowered = text.lower()
+            return any(re.search(rf"\b{re.escape(term)}\b", lowered) for term in generic_terms)
+
         for separator in ("|", " - ", " — "):
             if separator not in title:
                 continue
@@ -161,7 +168,7 @@ class DiscoveryService:
                 first, last = parts[0], parts[-1]
                 if first.lower() == "home" or first.lower().startswith("heating oil in"):
                     return last
-                if any(term in first.lower() for term in generic_terms) and not any(term in last.lower() for term in generic_terms):
+                if is_generic(first) and not is_generic(last):
                     return last
                 return first
         return domain.split(".")[0].replace("-", " ").title()
