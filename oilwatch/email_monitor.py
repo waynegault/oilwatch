@@ -52,6 +52,9 @@ PPL_PATTERNS = [
     r"(\d+(?:\.\d{1,2})?)\s*p\s*\(?excl?\.?\s*vat\)?",
     r"price\s*per\s*litre[^£\n]*[£]?\s*(\d+(?:\.\d{1,2})?)\s*p",
     r"£\s?(\d+(?:\.\d{1,2})?)\s*(?:per\s*/?\s*litre|/l)\b",
+    # "107.50PPL" — Highland Fuels states the unit price as pence per litre with
+    # a PPL suffix and no "per litre" wording.
+    r"(\d+(?:\.\d{1,2})?)\s*ppl\b",
 ]
 
 

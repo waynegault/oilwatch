@@ -9,6 +9,7 @@ from oilwatch.email_monitor import SUPPLIER_DOMAINS, extract_ppl, load_email_con
 from oilwatch.form_submit import SUPPLIER_FORMS
 from oilwatch.graph_email import GraphEmailMonitor, sender_domain_from_email
 from oilwatch.identity import Contact
+from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
 
 
 class ExtractPplTests(unittest.TestCase):
@@ -117,6 +118,36 @@ class LoadEmailConfigTests(unittest.TestCase):
         self.assertEqual(config["password"], "pw")
         self.assertEqual(config["imap_server"], "imap.example.com")
         self.assertEqual(config["imap_port"], 123)
+
+
+class HighlandFuelsReplyTests(unittest.TestCase):
+    """A real reply stating the price as 'PPL' plus an inc-VAT order total."""
+
+    BODY = (
+        "Good morning,\n\n"
+        "Please see todays quote below,\n\n"
+        "1000L – 107.50PPL – Total Inc VAT is £1128.75\n\n"
+        "Kind regards\nJames"
+    )
+
+    def test_extracts_the_ppl_price_ex_vat(self) -> None:
+        self.assertEqual(extract_ppl(self.BODY), 1.075)
+
+    def test_ppl_alone_is_understood(self) -> None:
+        self.assertEqual(extract_ppl("107.50PPL"), 1.075)
+
+    def test_the_stated_total_cross_checks(self) -> None:
+        """The derived total lands on the supplier's own, to within rounding.
+
+        107.50p ex-VAT over 1000L plus 5% is £1128.75. The pipeline stores the
+        per-litre price rounded to 4 decimals, so a 1000L total can differ by up
+        to 5p. That tolerance still proves the parse is right — reading pence as
+        pounds or applying VAT twice would be out by orders of magnitude.
+        """
+        ex_vat = extract_ppl(self.BODY)
+        assert ex_vat is not None
+        inc_vat = apply_vat(ex_vat, DOMESTIC_VAT_RATE)
+        self.assertAlmostEqual(inclusive_total(inc_vat, 1000), 1128.75, delta=0.06)
 
 
 if __name__ == "__main__":
