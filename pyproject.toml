@@ -33,3 +33,14 @@ oilwatch-mcp = "oilwatch.mcp_server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["oilwatch"]
 
+[project.optional-dependencies]
+dev = ["coverage>=7"]
+
+[tool.coverage.run]
+source = ["oilwatch"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
+
