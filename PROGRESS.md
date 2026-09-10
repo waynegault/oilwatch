@@ -19,12 +19,12 @@ It is a working system, not a prototype:
 
 | Area | State |
 |------|-------|
-| Modules under `oilwatch/` | 46 Python files |
+| Modules under `oilwatch/` | 52 Python files |
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
-| CLI commands | 19 |
-| MCP tools | 8 (served over streamable HTTP) |
-| Tests | 88, all passing offline |
-| Database | 26 suppliers, 185 quotes, 0 orders |
+| CLI commands | 22 |
+| MCP tools | 9 (served over streamable HTTP) |
+| Tests | 221, all passing offline |
+| Database | 26 suppliers, 224 quotes, 0 orders |
 
 ---
 
@@ -34,9 +34,9 @@ It is a working system, not a prototype:
 
 | File | Purpose |
 |------|---------|
-| `cli.py` | CLI entry point (19 commands) |
+| `cli.py` | CLI entry point (22 commands) |
 | `service.py` | `OilWatchApp` — orchestration used by both CLI and MCP |
-| `mcp_server.py` | FastMCP server, 8 tools, streamable HTTP on `/mcp` |
+| `mcp_server.py` | FastMCP server, 9 tools, streamable HTTP on `/mcp` |
 | `scheduler.py` | APScheduler jobs for recurring discovery / quotes |
 | `db.py` | SQLite layer (`data/oilwatch.sqlite`) |
 | `models.py`, `config.py`, `pricing.py` | Data models, settings, VAT + £/p normalisation |
@@ -104,8 +104,18 @@ monitoring, and end-to-end app wiring.
 
 - **Path:** `data/oilwatch.sqlite`
 - **Suppliers:** 26 (17 `active`, the rest historical)
-- **Quotes:** 185
+- **Quotes:** 224
 - **Orders:** 0
+
+**Added 2026-09-10 — purchases can be recorded.** The `orders` table was
+write-only: `place_order` wrote to it but nothing ever read it back, so "who did
+I buy from last time, and what did I pay" had no answer, and no agent could see
+it. `oilwatch record-purchase` now writes down a purchase the owner made
+themselves (supplier by name fragment or id, price per litre *or* total paid,
+optional discount code and reference), with an ambiguous name refused rather
+than guessed. `oilwatch purchases` and the read-only MCP `purchases` tool read
+them back, and `status` carries the last one. Nothing in this path drives a
+browser or contacts a supplier — recording is kept separate from buying.
 
 Quote timestamps span **2007-01-26 → 2026-09-10**, because
 `import-spreadsheet` loaded the historical workbook. Recent automated runs

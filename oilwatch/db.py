@@ -241,6 +241,26 @@ class Database:
             )
             return int(cursor.lastrowid)
 
+    def list_orders(self, limit: int | None = None) -> list[dict[str, Any]]:
+        """Recorded purchases, newest first, with the supplier's name.
+
+        The orders table was write-only: nothing ever read it back, so "who did
+        I buy from last time, and what did I pay" had no answer.
+        """
+        query = """
+            SELECT o.*, s.name AS supplier_name, s.website
+            FROM orders o
+            LEFT JOIN suppliers s ON s.id = o.supplier_id
+            ORDER BY o.created_at DESC
+        """
+        params: tuple[Any, ...] = ()
+        if limit is not None:
+            query += " LIMIT ?"
+            params = (limit,)
+        with closing(self.connect()) as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
     def list_suppliers(self, include_inactive: bool = False) -> list[dict[str, Any]]:
         query = "SELECT * FROM suppliers"
         if not include_inactive:

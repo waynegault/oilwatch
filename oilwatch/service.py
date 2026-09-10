@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -193,6 +194,9 @@ class OilWatchApp:
             "market_snapshot": snapshot,
             "trend": trend,
             "recommendation": self.analytics.recommendation(snapshot, trend),
+            # Carried here so "have I already ordered, and what did I pay?" is
+            # answerable without a second call.
+            "last_purchase": next(iter(self.purchases(limit=1)), None),
         }
 
     def monitor_email(self) -> dict[str, Any]:
@@ -241,6 +245,108 @@ class OilWatchApp:
 
         self.db.init_schema()
         return update_brent(self.db)
+
+    def _resolve_supplier(self, supplier: str | int) -> dict[str, Any]:
+        """Find a supplier by id, or by a fragment of its name or website.
+
+        The owner says "I bought from Scottish Fuels", not "supplier id 1", so a
+        name has to work. An ambiguous name is refused rather than guessed:
+        filing a purchase against the wrong supplier would be worse than asking.
+        """
+        if isinstance(supplier, int) or str(supplier).strip().isdigit():
+            found = self.db.get_supplier(int(supplier))
+            if not found:
+                raise ValueError(f"Unknown supplier id: {supplier}")
+            return found
+
+        needle = str(supplier).strip().lower()
+        if not needle:
+            raise ValueError("Name the supplier you bought from.")
+        matches = [
+            row
+            for row in self.db.list_suppliers(include_inactive=True)
+            if needle in (row.get("name") or "").lower() or needle in (row.get("website") or "").lower()
+        ]
+        if not matches:
+            raise ValueError(f"No supplier matches {supplier!r}. Run `oilwatch suppliers` for the list.")
+        if len(matches) > 1:
+            options = ", ".join(f"{row['id']}: {row['name']}" for row in matches)
+            raise ValueError(f"{supplier!r} matches several suppliers ({options}). Use the supplier id.")
+        return matches[0]
+
+    def record_purchase(
+        self,
+        supplier: str | int,
+        *,
+        quantity_liters: int | None = None,
+        price_per_liter: float | None = None,
+        total_price: float | None = None,
+        code: str | None = None,
+        reference: str | None = None,
+        notes: str = "",
+        ordered_at: str | None = None,
+        status: str = "ordered",
+    ) -> dict[str, Any]:
+        """Write down a purchase the owner has already made.
+
+        Nothing here drives a browser or calls a connector: the owner buys by
+        phone or on a supplier's own site, and this only records what happened.
+        Prices are GBP per litre inclusive of VAT, like every other price in the
+        database, so a purchase can be compared with the quotes behind it.
+        Either the per-litre price or the total paid is enough; the other is
+        derived from the quantity.
+        """
+        self.db.init_schema()
+        resolved = self._resolve_supplier(supplier)
+        litres = quantity_liters or self.settings.quote_quantity_liters
+
+        if price_per_liter is None and total_price is None:
+            raise ValueError("Give the price per litre or the total paid.")
+        if price_per_liter is None:
+            price_per_liter = round(float(total_price) / litres, 4)
+        if total_price is None:
+            total_price = round(price_per_liter * litres, 2)
+
+        record = {
+            "supplier_id": resolved["id"],
+            "created_at": ordered_at or utcnow_naive().isoformat(),
+            "quantity_liters": litres,
+            "agreed_price_per_liter": price_per_liter,
+            "status": status,
+            "reference": reference,
+            "notes": notes,
+            "raw_payload": {
+                "total_price": total_price,
+                "discount_code": code,
+                "supplier_name": resolved["name"],
+            },
+        }
+        # Returned from the record rather than read back as "the newest row": a
+        # purchase entered with a back-dated --date is not the newest row.
+        return {
+            "id": self.db.record_order(record),
+            "supplier_id": resolved["id"],
+            "supplier_name": resolved["name"],
+            "website": resolved.get("website"),
+            "created_at": record["created_at"],
+            "quantity_liters": litres,
+            "agreed_price_per_liter": price_per_liter,
+            "total_price": total_price,
+            "discount_code": code,
+            "status": status,
+            "reference": reference,
+            "notes": notes,
+        }
+
+    def purchases(self, limit: int | None = None) -> list[dict[str, Any]]:
+        """Purchases already recorded, newest first, totals and codes unpacked."""
+        self.db.init_schema()
+        rows = self.db.list_orders(limit=limit)
+        for row in rows:
+            payload = json.loads(row.pop("raw_payload_json") or "{}")
+            row["total_price"] = payload.get("total_price")
+            row["discount_code"] = payload.get("discount_code")
+        return rows
 
     def place_order(
         self,

@@ -83,6 +83,16 @@ def cheapest() -> dict[str, Any]:
     return _app.cheapest()
 
 
+@mcp.tool(title="Recorded purchases", annotations=_READ_ONLY)
+def purchases() -> list[dict[str, Any]]:
+    """Return purchases already recorded, newest first, with totals and codes.
+
+    Recording happens through the CLI (``oilwatch record-purchase``), which is a
+    deliberate act by the owner; this tool only reads them back.
+    """
+    return _app.purchases()
+
+
 @mcp.tool(title="Market status", annotations=_READ_ONLY)
 def status() -> dict[str, Any]:
     """Return the market snapshot, price trend, and a buy/hold recommendation."""

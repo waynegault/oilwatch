@@ -55,6 +55,22 @@ def build_parser() -> argparse.ArgumentParser:
     order.add_argument("--postcode")
     order.add_argument("--quantity-liters", type=int)
 
+    # Record a purchase already made by phone or on a supplier's own site.
+    purchase = subparsers.add_parser(
+        "record-purchase", help="Record a purchase you have made (no automation)"
+    )
+    purchase.add_argument("supplier", help='Supplier name or id, e.g. "Scottish Fuels"')
+    purchase.add_argument("--price-per-liter", type=float, help="Price paid, GBP/L inc VAT")
+    purchase.add_argument("--total", type=float, help="Total paid, if that is what you know")
+    purchase.add_argument("--litres", type=int, default=None, help="Quantity; defaults to the usual order")
+    purchase.add_argument("--code", default=None, help="Discount code used, if any")
+    purchase.add_argument("--reference", default=None, help="Supplier order reference")
+    purchase.add_argument("--notes", default="")
+    purchase.add_argument("--date", dest="ordered_at", default=None, help="ISO date, if not today")
+
+    purchases = subparsers.add_parser("purchases", help="List recorded purchases")
+    purchases.add_argument("--limit", type=int, default=None)
+
     schedule = subparsers.add_parser("schedule")
     schedule.add_argument("--postcode")
 
@@ -143,6 +159,21 @@ def main() -> None:
                 quantity_liters=args.quantity_liters,
             )
         )
+    elif args.command == "record-purchase":
+        _print(
+            app.record_purchase(
+                args.supplier,
+                quantity_liters=args.litres,
+                price_per_liter=args.price_per_liter,
+                total_price=args.total,
+                code=args.code,
+                reference=args.reference,
+                notes=args.notes,
+                ordered_at=args.ordered_at,
+            )
+        )
+    elif args.command == "purchases":
+        _print(app.purchases(limit=args.limit))
     elif args.command == "schedule":
         OilWatchScheduler(app, postcode=args.postcode).run_forever()
     elif args.command == "phone-script":

@@ -129,6 +129,26 @@ python -m oilwatch.cli phone-script --postcode "AB21 0YA" --name "Your Name"
 python -m oilwatch.cli phone-script --postcode "AB21 0YA" --name "Your Name" --output data\call-sheets.json
 ```
 
+### Purchase Records
+
+Recording a purchase is separate from buying: nothing here drives a browser or
+contacts a supplier. You buy by phone or on the supplier's own site, then write
+down what happened, so the market data is not the only thing the database knows.
+
+```powershell
+# Record a purchase you have made (supplier by name, name fragment, or id)
+python -m oilwatch.cli record-purchase "Scottish Fuels" --price-per-liter 1.0894 --code autumn25
+
+# If you know the total rather than the unit price, give that instead
+python -m oilwatch.cli record-purchase "Scottish Fuels" --total 1089.40 --litres 1000
+
+# List recorded purchases, newest first
+python -m oilwatch.cli purchases
+```
+
+A name that matches several suppliers is refused rather than guessed, so a
+purchase cannot be filed against the wrong one.
+
 ### Automation Commands
 
 ```powershell
@@ -160,15 +180,18 @@ OilWatch exposes all functionality through an **MCP (Model Context Protocol) ser
 
 ### MCP Tools Available
 
-The server exposes eight tools, all read-mostly. There is **no** ordering tool:
+The server exposes nine tools, all read-mostly. There is **no** ordering tool:
 `place_order` does not exist, and an agent must never claim an order was placed.
+Recording a purchase is a deliberate CLI act by the owner
+(`oilwatch record-purchase`); agents can only read them back via `purchases`.
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `list_suppliers` | Suppliers on record | None |
 | `current_prices` | Latest price per supplier (£/L inc. VAT) with `valid_until`; ignores quotes older than `max_quote_age_days` | None |
 | `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`) | None |
-| `status` | Snapshot + price trend + buy/hold recommendation | None |
+| `purchases` | Purchases already recorded, newest first, with totals and discount codes | None |
+| `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase | None |
 | `chart` | Market summary chart; returns a file path | None |
 | `time_series_chart` | Per-supplier prices with Brent crude on a second axis; returns a path | None |
 | `refresh_prices` | Scrape fresh quotes from all suppliers — **slow** (minutes, browser automation) | `postcode: str` |
