@@ -1,19 +1,22 @@
 """Email monitoring: read supplier quote replies, record them, then delete.
 
 Suppliers that only quote by form/email (Gleaner Oils, Oilfast, Highland Fuels,
-Regency Oils) reply by email with their price. This module polls the user's
-inbox (IMAP), matches replies to suppliers, extracts the price per litre, feeds
-it into the OilWatch database, and deletes the processed email.
+Regency Oils) reply by email with their price.
 
-Email credentials are read from the environment by default::
+**The live path is Microsoft Graph, in ``graph_email.py``** — Outlook no longer
+accepts basic/IMAP password authentication, so ``EmailMonitor`` below cannot
+connect to a real mailbox and is reachable from no entry point; ``oilwatch
+monitor-email`` runs the Graph monitor instead. What is still used from this
+module is the supplier domain map and the price parser (``SUPPLIER_DOMAINS``,
+``extract_ppl``), which Graph reuses.
 
-    MICROSOFT_PASSWORD    (required) - the Outlook app password
+Only ``extract_ppl`` and ``SUPPLIER_DOMAINS`` should be imported from here. The
+IMAP class and its configuration still describe this interface::
+
+    MICROSOFT_PASSWORD    (legacy, no longer authenticates anything)
     MICROSOFT_EMAIL       - the mailbox to poll (else the configured contact email)
     MICROSOFT_IMAP_SERVER (default outlook.office365.com)
     MICROSOFT_IMAP_PORT   (default 993)
-
-As a fallback, ``config/email_credentials.json`` (gitignored) is read if
-``MICROSOFT_PASSWORD`` is not set.
 """
 
 from __future__ import annotations
