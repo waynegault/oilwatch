@@ -8,6 +8,10 @@ from typing import Any
 
 from playwright.async_api import Page, Playwright, async_playwright
 
+# Pause between intercepted requests so discovery cannot burst a supplier.
+# Small on purpose: it only needs to break up a flood, not slow the tool down.
+REQUEST_DELAY_SECONDS = 0.25
+
 
 class APIDiscoveryTool:
     """
@@ -62,6 +66,11 @@ class APIDiscoveryTool:
         }
         self._requests.append(request_data)
         
+        # Pace the requests we let through. Discovery only loads one page, but
+        # that page can fire a burst of XHRs, and there was no throttle at all —
+        # this keeps it from looking like a flood to the supplier.
+        await asyncio.sleep(REQUEST_DELAY_SECONDS)
+
         # Continue and capture response
         try:
             response = await route.fetch()
