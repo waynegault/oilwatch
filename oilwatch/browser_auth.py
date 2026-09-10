@@ -28,6 +28,10 @@ import time
 import winreg
 from pathlib import Path
 
+from oilwatch.logging_setup import get_logger
+
+log = get_logger("browser_auth")
+
 # Login form fields, most specific first. Magento themes differ between the
 # Luma theme (#email/#pass) and blank-theme forms (login[username]).
 EMAIL_SELECTORS = (
@@ -198,10 +202,40 @@ class BrowserAuth:
         submit = self._find_first(driver, SUBMIT_SELECTORS)
         if submit is None:
             raise RuntimeError(f"Could not find the Sign In button on {url}")
-        driver.execute_script("arguments[0].click();", submit)
+
+        # Submit like a person. reCAPTCHA v3 weighs whether the interaction was
+        # a *trusted* event, and execute_script() clicks are not — the form then
+        # reloads silently, indistinguishable from a missing token. A normal
+        # click, then Enter in the password field, are both trusted; the JS
+        # click is kept only as a last resort.
+        if not self._submit_sign_in(driver, submit, password_field):
+            raise RuntimeError(f"Could not activate the Sign In button on {url}")
 
         time.sleep(wait_after_submit)
         return self.is_authenticated(driver)
+
+    @staticmethod
+    def _submit_sign_in(driver, button, password_field) -> bool:
+        """Activate Sign In using the most human interaction available."""
+        from selenium.common.exceptions import WebDriverException
+        from selenium.webdriver.common.keys import Keys
+
+        try:
+            button.click()
+            return True
+        except WebDriverException as exc:
+            log.debug("plain click on Sign In failed (%s); trying Enter", exc)
+        try:
+            password_field.send_keys(Keys.ENTER)
+            return True
+        except WebDriverException as exc:
+            log.debug("Enter in the password field failed (%s); falling back to JS click", exc)
+        try:
+            driver.execute_script("arguments[0].click();", button)
+            return True
+        except WebDriverException as exc:
+            log.debug("JS click on Sign In failed too: %s", exc)
+            return False
 
     @staticmethod
     def _set_field_value(driver, element, value: str, *, attempts: int = 3) -> None:
@@ -263,16 +297,33 @@ class BrowserAuth:
         finally:
             self.close()
 
-    @staticmethod
-    def _find_first(driver, selectors: tuple[str, ...]):
-        """Return the first element matching any selector, or None."""
+    @classmethod
+    def _find_first(cls, driver, selectors: tuple[str, ...], *, timeout: float = 15.0):
+        """Return the first *visible* element matching any selector, waiting for it.
+
+        Two reasons this is not a plain find_element:
+
+        * The page carries more than one email-looking input (a newsletter
+          signup, for one), and typing into a hidden one fails in a way that
+          looks like autofill interference.
+        * Searching immediately after ``driver.get()`` can match nothing at all,
+          because the form has not rendered yet.
+        """
+        from selenium.common.exceptions import WebDriverException
         from selenium.webdriver.common.by import By
 
-        for selector in selectors:
-            found = driver.find_elements(By.CSS_SELECTOR, selector)
-            if found:
-                return found[0]
-        return None
+        deadline = time.time() + timeout
+        while True:
+            for selector in selectors:
+                for element in driver.find_elements(By.CSS_SELECTOR, selector):
+                    try:
+                        if element.is_displayed() and element.is_enabled():
+                            return element
+                    except WebDriverException:
+                        continue
+            if time.time() >= deadline:
+                return None
+            time.sleep(0.25)
 
     @classmethod
     def is_authenticated(cls, driver) -> bool:
