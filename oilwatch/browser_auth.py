@@ -86,24 +86,50 @@ class BrowserAuth:
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-extensions")
         options.add_argument("--no-first-run")
         options.add_argument("--no-default-browser-check")
         options.add_argument(f"--user-data-dir={self.profile_dir}")
+        options.add_argument("--profile-directory=Default")
         if headless:
             options.add_argument("--headless=new")
             options.add_argument("--window-size=1920,1080")
         return options
 
+    def _reset_preferences(self) -> None:
+        """Write a minimal Chrome ``Preferences`` file before launching.
+
+        Adapted from the Ancestry project. A profile that does not record
+        ``exited_cleanly`` makes Chrome offer to restore pages, and an unset
+        welcome flag can open a first-run tab — either steals focus from, or
+        covers, the sign-in form on a headful run.
+        """
+        profile = self.profile_dir / "Default"
+        profile.mkdir(parents=True, exist_ok=True)
+        preferences = {
+            "profile": {"exit_type": "Normal", "exited_cleanly": True},
+            "browser": {"has_seen_welcome_page": True},
+            "sync": {"allowed": False},
+            "session": {"restore_on_startup": 4, "startup_urls": []},
+        }
+        (profile / "Preferences").write_text(json.dumps(preferences), encoding="utf-8")
+
     def launch(self, headless: bool = False) -> uc.Chrome:
         """Launch (or reuse) the persistent undetected Chrome session."""
-        self.profile_dir.mkdir(parents=True, exist_ok=True)
-        # Let undetected-chromedriver auto-detect the installed Chrome version;
-        # the registry value can be stale right after a Chrome auto-update.
-        self.driver = uc.Chrome(
-            options=self._options(headless),
-            use_subprocess=False,
-            suppress_welcome=True,
-        )
+        self._reset_preferences()
+        kwargs: dict[str, object] = {
+            "options": self._options(headless),
+            "use_subprocess": False,
+            "suppress_welcome": True,
+        }
+        # Pin chromedriver to the installed Chrome, as Ancestry does: a mismatched
+        # driver is both fragile and easier to fingerprint. Fall back to
+        # auto-detection when the registry value is stale (e.g. mid auto-update).
+        chrome_major = detect_chrome_major_version()
+        if chrome_major is not None:
+            kwargs["version_main"] = chrome_major
+        self.driver = uc.Chrome(**kwargs)
         return self.driver
 
     def cookies_path(self) -> Path:
@@ -139,7 +165,7 @@ class BrowserAuth:
         email: str,
         password: str,
         *,
-        wait_before_submit: float = 5.0,
+        wait_before_submit: float = 2.0,
         wait_after_submit: float = 10.0,
     ) -> bool:
         """Sign in on an already-open driver. Returns True when authenticated.
@@ -161,10 +187,11 @@ class BrowserAuth:
         if email_field is None or password_field is None:
             raise RuntimeError(f"Could not find the login fields on {url}")
 
-        email_field.clear()
-        email_field.send_keys(email)
-        password_field.clear()
-        password_field.send_keys(password)
+        # These fields arrive pre-populated by Chrome autofill, which re-fills
+        # them *after* a plain clear() — so the form would submit the stored
+        # username instead of ours and come back as "invalid login".
+        self._set_field_value(driver, email_field, email)
+        self._set_field_value(driver, password_field, password)
 
         time.sleep(wait_before_submit)  # let the reCAPTCHA token populate
 
@@ -175,6 +202,36 @@ class BrowserAuth:
 
         time.sleep(wait_after_submit)
         return self.is_authenticated(driver)
+
+    @staticmethod
+    def _set_field_value(driver, element, value: str, *, attempts: int = 3) -> None:
+        """Put ``value`` into a field, tolerating autofill. Raises if it won't stick.
+
+        Chrome autofill pre-fills these Magento fields and re-populates them
+        after ``clear()``, so a blind ``send_keys`` *appends* to what is already
+        there — submitting ``user@example.comuser@example.com`` and failing as an
+        invalid login. If the field already holds the right value, leave it alone.
+
+        Deliberately never puts the value in an error message: one of the two
+        callers is passing a password.
+        """
+        from selenium.webdriver.common.keys import Keys
+
+        for _ in range(attempts):
+            if (element.get_attribute("value") or "") == value:
+                return  # autofill already supplied it; do not type on top
+
+            # Keyboard clearing only. Assigning .value via JS and firing a
+            # synthetic input event detaches what the page is watching, after
+            # which send_keys lands nowhere — tried, and it fails this form.
+            element.click()
+            element.send_keys(Keys.CONTROL, "a")
+            element.send_keys(Keys.DELETE)
+            element.send_keys(value)
+            if (element.get_attribute("value") or "") == value:
+                return
+            time.sleep(0.3)
+        raise RuntimeError("a login field would not accept the intended value (autofill fighting back?)")
 
     def automated_login(
         self,

@@ -71,7 +71,10 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             from oilwatch.browser_auth import BrowserAuth
 
             auth = BrowserAuth("scottish_fuels")
-            driver = auth.launch(headless=True)
+            # Headful on purpose. reCAPTCHA v3 scores a headless browser far
+            # lower, which is what made the credential sign-in fail. Ancestry
+            # runs headful by default (HEADLESS_MODE=false) for the same reason.
+            driver = auth.launch(headless=False)
             try:
                 driver.get(self.quote_url)
                 time.sleep(6)
