@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.common.keys import Keys
 
 from oilwatch.browser_auth import BrowserAuth, detect_chrome_major_version
 
@@ -28,6 +29,30 @@ class FakeUC:
         self.Chrome = MagicMock(return_value="DRIVER")
 
 
+class FakeElement:
+    """A login-form element, as Selenium reports it.
+
+    ``is_displayed``/``is_enabled`` is exactly what the field search filters on,
+    and a stale handle raises from both, so the outcome is modelled rather than
+    assumed to be True.
+    """
+
+    def __init__(self, *, displayed: bool = True, enabled: bool = True, stale: bool = False) -> None:
+        self.displayed = displayed
+        self.enabled = enabled
+        self.stale = stale
+
+    def is_displayed(self) -> bool:
+        if self.stale:
+            raise WebDriverException("stale element reference")
+        return self.displayed
+
+    def is_enabled(self) -> bool:
+        if self.stale:
+            raise WebDriverException("stale element reference")
+        return self.enabled
+
+
 class FakeDriver:
     def __init__(
         self,
@@ -36,9 +61,11 @@ class FakeDriver:
         quit_raises: bool = False,
         add_cookie_raises: bool = False,
         logout_links: list | None = None,
+        elements_by_selector: dict[str, list] | None = None,
     ) -> None:
         self._cookies = cookies or []
         self._logout_links = logout_links or []
+        self._elements_by_selector = elements_by_selector
         self.quit_raises = quit_raises
         self.add_cookie_raises = add_cookie_raises
         self.urls: list[str] = []
@@ -66,12 +93,17 @@ class FakeDriver:
         self.scripts.append(script)
 
     def find_elements(self, by: str, selector: str) -> list:
+        if self._elements_by_selector is not None:
+            return list(self._elements_by_selector.get(selector, []))
         return self._logout_links
 
 
 class FakeField:
-    def __init__(self, value: str = "") -> None:
+    """A login input, where Ctrl+A then Delete really does clear it."""
+
+    def __init__(self, value: str = "", *, refuses: bool = False) -> None:
         self.value = value
+        self.refuses = refuses
         self.sent: list = []
         self.clicked = 0
 
@@ -83,7 +115,10 @@ class FakeField:
 
     def send_keys(self, *keys) -> None:
         for key in keys:
-            if isinstance(key, str) and len(key) == 1:
+            if key == Keys.DELETE:
+                # The Ctrl+A just before it selected everything in the field.
+                self.value = ""
+            elif isinstance(key, str) and key.isprintable() and not self.refuses:
                 self.value += key
             self.sent.append(key)
 
@@ -207,6 +242,11 @@ class CookieTests(unittest.TestCase):
         self.auth.close()
         self.assertIsNone(self.auth.driver)
 
+    def test_close_without_a_driver_is_a_noop(self) -> None:
+        """Callers close in a finally, so this runs even when launch never did."""
+        self.auth.close()
+        self.assertIsNone(self.auth.driver)
+
 
 class SignInTests(unittest.TestCase):
     URL = "https://quote.scottishfuels.co.uk/customer/account/login/"
@@ -316,7 +356,109 @@ class ElementHelpersTests(unittest.TestCase):
     def test_set_field_value_raises_when_the_field_will_not_stick(self) -> None:
         with patch("oilwatch.browser_auth.time.sleep"):
             with self.assertRaises(RuntimeError):
-                BrowserAuth._set_field_value(FakeDriver(), FakeField(value="wrong"), "owner@example.test")
+                BrowserAuth._set_field_value(
+                    FakeDriver(), FakeField(value="wrong", refuses=True), "owner@example.test"
+                )
+
+    def test_set_field_value_replaces_an_autofilled_value(self) -> None:
+        """The doubled-username bug: autofill's value is replaced, not added to."""
+        field = FakeField(value="stored@example.com")
+
+        with patch("oilwatch.browser_auth.time.sleep"):
+            BrowserAuth._set_field_value(FakeDriver(), field, "owner@example.test")
+
+        self.assertEqual(field.value, "owner@example.test")
+        self.assertIn(Keys.DELETE, field.sent)  # the field was cleared before typing
+        self.assertEqual(field.clicked, 1)  # and one attempt was enough
+
+    def test_submit_falls_back_to_enter_when_the_click_is_blocked(self) -> None:
+        button = MagicMock()
+        button.click.side_effect = WebDriverException("element not interactable")
+        password = MagicMock()
+        driver = FakeDriver()
+
+        self.assertTrue(BrowserAuth._submit_sign_in(driver, button, password))
+
+        password.send_keys.assert_called_once()
+        self.assertEqual(driver.scripts, [])  # the JavaScript click was not needed
+
+    def test_submit_reports_failure_when_nothing_activates_the_button(self) -> None:
+        button = MagicMock()
+        button.click.side_effect = WebDriverException("not clickable")
+        password = MagicMock()
+        password.send_keys.side_effect = WebDriverException("no keyboard")
+        driver = FakeDriver()
+        driver.execute_script = MagicMock(side_effect=WebDriverException("no script"))
+
+        self.assertFalse(BrowserAuth._submit_sign_in(driver, button, password))
+
+    def test_is_authenticated_is_false_when_the_browser_is_dead(self) -> None:
+        driver = FakeDriver()
+        driver.find_elements = MagicMock(side_effect=WebDriverException("no such window"))
+
+        self.assertFalse(BrowserAuth.is_authenticated(driver))
+
+
+class FindFirstTests(unittest.TestCase):
+    """The login-field search, which the sign-in tests patch out entirely.
+
+    It has to wait for the form to render and pick a *visible* field: the pages
+    carry more than one email-looking input (a newsletter signup, for one), and
+    typing into a hidden one fails in a way that reads as autofill interference.
+    """
+
+    def _find(self, driver, *selectors):
+        with patch("oilwatch.browser_auth.time.sleep"):
+            return BrowserAuth._find_first(driver, selectors, timeout=0)
+
+    def test_returns_the_first_visible_enabled_field(self) -> None:
+        hidden, visible = FakeElement(displayed=False), FakeElement()
+        driver = FakeDriver(elements_by_selector={"input#email": [hidden, visible]})
+
+        self.assertIs(self._find(driver, "input#email"), visible)
+
+    def test_a_disabled_field_is_not_used(self) -> None:
+        disabled, enabled = FakeElement(enabled=False), FakeElement()
+        driver = FakeDriver(elements_by_selector={"input#pass": [disabled, enabled]})
+
+        self.assertIs(self._find(driver, "input#pass"), enabled)
+
+    def test_a_later_selector_is_tried(self) -> None:
+        newsletter, real = FakeElement(displayed=False), FakeElement()
+        driver = FakeDriver(
+            elements_by_selector={
+                "input[type='email']": [newsletter],
+                "input[name='email']": [real],
+            }
+        )
+
+        self.assertIs(self._find(driver, "input[type='email']", "input[name='email']"), real)
+
+    def test_an_element_that_will_not_answer_is_skipped(self) -> None:
+        stale, live = FakeElement(stale=True), FakeElement()
+        driver = FakeDriver(elements_by_selector={"input#email": [stale, live]})
+
+        self.assertIs(self._find(driver, "input#email"), live)
+
+    def test_gives_up_when_nothing_becomes_visible(self) -> None:
+        driver = FakeDriver(elements_by_selector={"input#email": [FakeElement(displayed=False)]})
+
+        self.assertIsNone(self._find(driver, "input#email"))
+
+    def test_keeps_looking_until_the_form_renders(self) -> None:
+        """Searching straight after driver.get() matches nothing, so it retries."""
+        calls = {"n": 0}
+
+        class SlowDriver(FakeDriver):
+            def find_elements(self, by: str, selector: str) -> list:
+                calls["n"] += 1
+                return [] if calls["n"] < 3 else [FakeElement()]
+
+        with patch("oilwatch.browser_auth.time.sleep"):
+            found = BrowserAuth._find_first(SlowDriver(), ("input#email",), timeout=5)
+
+        self.assertIsInstance(found, FakeElement)
+        self.assertEqual(calls["n"], 3)
 
 
 if __name__ == "__main__":
