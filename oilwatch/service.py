@@ -8,9 +8,12 @@ from oilwatch.config import Settings, load_settings, load_supplier_overrides
 from oilwatch.db import Database
 from oilwatch.discovery import DiscoveryService
 from oilwatch.geo import GeoService
+from oilwatch.logging_setup import get_logger
 from oilwatch.models import utcnow_naive
 from oilwatch.ordering import OrderService
 from oilwatch.quotes import QuoteService
+
+log = get_logger("service")
 
 
 class OilWatchApp:
@@ -91,6 +94,7 @@ class OilWatchApp:
                 )
                 payload = result.to_record()
             except Exception as exc:  # noqa: BLE001
+                log.warning("Quote collection failed for %s: %s", supplier["name"], exc)
                 payload = {
                     "supplier_id": supplier["id"],
                     "supplier_name": supplier["name"],
@@ -105,6 +109,15 @@ class OilWatchApp:
                     "raw_payload": {},
                 }
             self.db.record_quote(payload)
+
+            # Errors are worth a warning; the routine manual_action_required
+            # results stay at debug so a normal run does not produce a wall of
+            # lines for suppliers that only ever quote by phone.
+            status = payload.get("status")
+            if status == "error":
+                log.warning("%s returned an error: %s", supplier["name"], payload.get("notes", ""))
+            elif status != "ok":
+                log.debug("%s: %s", supplier["name"], payload.get("notes") or status)
             results.append(payload)
         return results
 

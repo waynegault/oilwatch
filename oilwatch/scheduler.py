@@ -4,7 +4,10 @@ import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+from oilwatch.logging_setup import get_logger
 from oilwatch.service import OilWatchApp
+
+log = get_logger("scheduler")
 
 
 class OilWatchScheduler:
@@ -19,16 +22,16 @@ class OilWatchScheduler:
         # stop the scheduler, and the next run retries them anyway.
         try:
             self.app.update_brent()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001 - next run retries it
+            log.warning("Brent price update failed: %s", exc)
         try:
             self.app.chart()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001 - charting is cosmetic
+            log.warning("Market chart failed: %s", exc)
         try:
             self.app.time_series_chart()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001 - charting is cosmetic
+            log.warning("Time-series chart failed: %s", exc)
 
     def start(self) -> None:
         self.app.init()

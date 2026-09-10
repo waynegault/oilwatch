@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from oilwatch.models import utcnow_naive
 from oilwatch.service import OilWatchApp
@@ -199,6 +200,57 @@ class OilWatchAppTests(unittest.TestCase):
         snapshot = self.app.cheapest()
         self.assertEqual(snapshot["cheapest_supplier"]["name"], "Fresh")
         self.assertEqual(snapshot["quotes_considered"], 1)
+
+
+class QuoteFailureLoggingTests(unittest.TestCase):
+    """A connector blowing up must be logged, not only stored in a quote's notes."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        (self.root / "config").mkdir(parents=True, exist_ok=True)
+        (self.root / "data").mkdir(parents=True, exist_ok=True)
+        settings = {
+            "database_path": "data/test.sqlite",
+            "chart_path": "data/test-chart.png",
+            "home": {"label": "Hatton of Fintray", "latitude": 57.251, "longitude": -2.242},
+            "radius_miles": 50,
+            "quote_quantity_liters": 1000,
+            "currency": "GBP",
+            "search_queries": [],
+            "excluded_domains": [],
+            "scheduler": {"discovery_interval_hours": 168, "quote_interval_hours": 24},
+        }
+        (self.root / "config" / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        self.app = OilWatchApp(self.root)
+        self.app.init()
+        self.app.db.upsert_supplier(
+            {
+                "name": "Exploding",
+                "website": "https://exploding.example.com",
+                "status": "active",
+                "connector_type": "manual",
+                "connector_config": {},
+            }
+        )
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_failed_quote_is_logged_and_recorded_as_error(self) -> None:
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("connector exploded")
+
+        with patch.object(self.app.quotes, "quote_supplier", side_effect=boom), self.assertLogs(
+            "oilwatch.service", level="WARNING"
+        ) as captured:
+            results = self.app.quote_all()
+
+        self.assertEqual(results[0]["status"], "error")
+        self.assertTrue(
+            any("Exploding" in message for message in captured.output),
+            f"expected the supplier to be named in the log: {captured.output}",
+        )
 
 
 if __name__ == "__main__":

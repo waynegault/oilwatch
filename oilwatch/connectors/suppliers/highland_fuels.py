@@ -41,14 +41,22 @@ from typing import Any
 import httpx
 
 from oilwatch.connectors.base import BaseConnector
+from oilwatch.http import build_client, request_with_retry
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import get_logger
 from oilwatch.models import OrderResult, QuoteResult
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total, pence_to_pounds
+
+log = get_logger("connectors.highland_fuels")
 
 
 class HighlandFuelsConnector(BaseConnector):
     quote_url = "https://iqo-highland.fuels.app/lib/getoffers.php"
     product_value = "043"  # DOMESTIC OIL
+
+    def __init__(self) -> None:
+        # Shared client: timeouts, browser headers and transport-level retries.
+        self.client = build_client(headers={"Content-Type": "application/xml"})
 
     def quote(
         self,
@@ -73,14 +81,16 @@ class HighlandFuelsConnector(BaseConnector):
         )
 
         try:
-            response = httpx.post(
+            response = request_with_retry(
+                self.client,
+                "POST",
                 self.quote_url,
                 content=request_xml,
                 headers={"Content-Type": "application/xml"},
-                timeout=30.0,
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            log.warning("Highland Fuels quote request failed: %s", exc)
             return self._manual(supplier, quantity_liters, f"HTTP error: {exc}")
 
         ex_vat_price = self.parse_offers_response(response.text)
