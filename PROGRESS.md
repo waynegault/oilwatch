@@ -187,12 +187,10 @@ Start it with `start_mcp_server.bat` (binds `0.0.0.0:8000`).
    (Connon Bros, Highland Fuels, Turriff Fuels and Gleaner Oils are all active),
    but the manual `Oil Prices.xls` workbook remains the authority on which
    suppliers actually matter and what their URLs are.
-2. **Add retry/backoff and structured logging** — currently a transient HTTP
-   failure or a changed selector is only visible in a quote's `notes`.
-3. **Keep the OpenClaw `oilwatch` URL valid** — it points at the WSL NAT gateway
+2. **Keep the OpenClaw `oilwatch` URL valid** — it points at the WSL NAT gateway
    (`172.28.144.1`), which changes if the WSL vEthernet is recreated; re-check
    with `wsl -e ip route` after a mode change or reboot.
-4. **Tune `max_quote_age_days`** if 30 days proves too tight for suppliers that
+3. **Tune `max_quote_age_days`** if 30 days proves too tight for suppliers that
    are only quoted monthly.
-5. **Run the MCP server as a scheduled task / logon service** rather than
+4. **Run the MCP server as a scheduled task / logon service** rather than
    leaving it foreground under `start_mcp_server.bat`.
