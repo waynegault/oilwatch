@@ -507,6 +507,8 @@ python -m unittest discover -s tests -t . -v
 #   python -m pip install -e ".[dev]" )
 python -m coverage run -m unittest discover -s tests -t .
 python -m coverage report -m
+# The report exits non-zero below the floor set in pyproject.toml
+# ([tool.coverage.report] fail_under), so a silent slide fails the run.
 ```
 
 ### Run from VS Code

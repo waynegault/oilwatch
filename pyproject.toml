@@ -42,5 +42,9 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
+# Measured at 88.82pc when this floor was set. The floor sits a little below
+# that so a real slide fails the report while fraction-of-a-point drift (a
+# Python or platform difference) does not.
+fail_under = 88
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 
