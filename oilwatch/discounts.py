@@ -131,20 +131,25 @@ def parse_discounts(text: str, *, received_at: datetime | None = None) -> list[D
 
     stamp = received_at or utcnow_naive()
     expires_at = _expiry_from(text, stamp)
-    lines = [line for line in text.splitlines() if line.strip()]
-    terms = next((line.strip()[:200] for line in lines if _TERMS.search(line)), "")
+    terms_line = next((line.strip()[:200] for line in text.splitlines() if _TERMS.search(line)), "")
 
+    # Walk *every* amount, not just the first one on each line. A marketing email
+    # collapses into a single long line once the HTML is stripped — the real
+    # ValueOils message did exactly that — so first-per-line captured only the
+    # £10 code and silently missed the £12 code that applied to a 1,000L order.
+    # Each offer's window runs to the next amount, so a band or code cannot be
+    # borrowed from the offer that follows it.
+    matches = list(_AMOUNT.finditer(text))
     offers: list[DiscountOffer] = []
-    for line in lines:
-        amount = _AMOUNT.search(line)
-        if not amount:
-            continue
+    for index, amount in enumerate(matches):
+        window_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        window = text[amount.start():window_end]
         try:
             amount_gbp = float(amount.group("amount"))
         except ValueError:
             continue
-        code = _CODE.search(line)
-        low, high = _band_from(line)
+        code = _CODE.search(window)
+        low, high = _band_from(window)
         offers.append(
             DiscountOffer(
                 amount_gbp=amount_gbp,
@@ -152,7 +157,7 @@ def parse_discounts(text: str, *, received_at: datetime | None = None) -> list[D
                 min_litres=low,
                 max_litres=high,
                 expires_at=expires_at,
-                terms=terms,
+                terms=terms_line,
             )
         )
     return offers
