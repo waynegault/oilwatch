@@ -17,21 +17,25 @@ from __future__ import annotations
 
 from typing import Any
 
-from oilwatch.connectors.base import BaseConnector
+from oilwatch.connectors.sync_browser import SyncBrowserConnector
 from oilwatch.identity import load_contact
-from oilwatch.models import OrderResult, QuoteResult
-from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
 
 
-class FuelsoftConnector(BaseConnector):
+class FuelsoftConnector(SyncBrowserConnector):
     product_value = "003"  # KERO
 
-    def quote(
+    source = "fuelsoft"
+    price_description = "Fuelsoft quote form"
+    no_price_note = "Could not extract a price from the quote response."
+    order_notes = "Order via the supplier's Fuelsoft portal or by phone."
+
+    def collect_price(
         self,
+        page: Any,
         supplier: dict[str, Any],
         quantity_liters: int,
         context: dict[str, Any],
-    ) -> QuoteResult:
+    ) -> tuple[float | None, dict[str, Any]]:
         postcode = context.get("postcode", "") or ""
         email = context.get("email", "") or load_contact().email
         address_line1 = context.get("home_label", "") or "Hatton of Fintray"
@@ -41,49 +45,24 @@ class FuelsoftConnector(BaseConnector):
 
         captured: dict[str, Any] = {}
 
-        try:
-            from playwright.sync_api import sync_playwright
-
-            def on_response(resp) -> None:
-                # Johnston Oils uses .../quote/..., Regency uses .../quoteAll/...
-                if "Quotes/deliveryschedules/quote" in resp.url:
-                    try:
-                        captured["body"] = resp.json()
-                    except Exception:  # noqa: BLE001
-                        captured["body"] = resp.text()
-
-            with sync_playwright() as pw:
-                browser = pw.chromium.launch(headless=True)
-                page = browser.new_page()
-                page.on("response", on_response)
+        def on_response(resp) -> None:
+            # Johnston Oils uses .../quote/..., Regency uses .../quoteAll/...
+            if "Quotes/deliveryschedules/quote" in resp.url:
                 try:
-                    page.goto(quote_url, wait_until="domcontentloaded", timeout=60000)
-                    self._dismiss_cookie_dialog(page)
-                    self._fill_form(page, postcode, address_line1, email, quantity_liters, product_value)
-                    self._get_quote(page)
-                    page.wait_for_timeout(8000)  # wait for the quote API response
-                finally:
-                    browser.close()
-        except Exception as exc:  # noqa: BLE001
-            return self._manual(supplier, quantity_liters, f"Browser automation error: {exc}")
+                    captured["body"] = resp.json()
+                except Exception:  # noqa: BLE001
+                    captured["body"] = resp.text()
+
+        page.on("response", on_response)
+        page.goto(quote_url, wait_until="domcontentloaded", timeout=60000)
+        self._dismiss_cookie_dialog(page)
+        self._fill_form(page, postcode, address_line1, email, quantity_liters, product_value)
+        self._get_quote(page)
+        page.wait_for_timeout(8000)  # wait for the quote API response
 
         ex_vat_price = self.parse_quote_response(captured.get("body"))
-        if ex_vat_price is None:
-            return self._manual(supplier, quantity_liters, "Could not extract a price from the quote response.")
-
-        price_per_liter = apply_vat(ex_vat_price, DOMESTIC_VAT_RATE)
-        return QuoteResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            observed_at=self.now(),
-            quantity_liters=quantity_liters,
-            status="ok",
-            price_per_liter=price_per_liter,
-            total_price=inclusive_total(price_per_liter, quantity_liters),
-            source="fuelsoft",
-            notes=f"Price from Fuelsoft quote form for {quantity_liters}L (ex-VAT £{ex_vat_price:.4f}/L, inc-VAT £{price_per_liter:.4f}/L). Postcode: {postcode or 'not provided'}",
-            raw_payload={"quote_url": quote_url, "postcode": postcode, "price_ex_vat": ex_vat_price},
-        )
+        raw_payload = {"quote_url": quote_url, "postcode": postcode, "price_ex_vat": ex_vat_price}
+        return ex_vat_price, raw_payload
 
     @staticmethod
     def _dismiss_cookie_dialog(page) -> None:
@@ -184,32 +163,3 @@ class FuelsoftConnector(BaseConnector):
         if not ppls:
             return None
         return round(min(ppls), 4)
-
-    def _manual(self, supplier: dict[str, Any], quantity_liters: int, notes: str) -> QuoteResult:
-        contact = ", ".join(p for p in [supplier.get("phone"), supplier.get("email"), supplier.get("website")] if p)
-        return QuoteResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            observed_at=self.now(),
-            quantity_liters=quantity_liters,
-            status="manual_action_required",
-            source="fuelsoft",
-            notes=f"{notes} Contact: {contact or 'supplier website'}",
-        )
-
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes="Order via the supplier's Fuelsoft portal or by phone.",
-        )

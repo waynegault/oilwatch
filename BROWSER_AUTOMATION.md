@@ -26,9 +26,14 @@ interchangeable:
 | **Selenium + undetected-chromedriver** | `browser_auth.py`, `form_submit.py`, `connectors/suppliers/scottish_fuels_browser.py` | Interactive login (persistent Chrome profile) and price-enquiry form submission, where anti-bot measures matter |
 
 Playwright is the default; the Selenium stack exists only where a persistent,
-less-detectable session is required. Consolidating them is deliberately deferred:
-it would rewrite live-verified supplier flows that have no offline test coverage,
-so it needs characterization tests first.
+less-detectable session is required. The two synchronous Playwright connectors
+share `connectors/sync_browser.py` (browser launch/teardown plus the ok/manual
+result shaping), and `tests/test_sync_browser_connectors.py` pins their
+page-interaction sequences against a fake Playwright. Merging the Selenium stack
+into Playwright is deliberately deferred: its whole value is anti-detection and a
+persistent Chrome profile, the flows are live-verified and cannot be exercised
+offline, so it is a rewrite to attempt only with a way to test against the real
+sites.
 
 ---
 
