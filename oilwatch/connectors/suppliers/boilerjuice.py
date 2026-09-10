@@ -10,7 +10,7 @@ from playwright.async_api import Page
 from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import QuoteResult
+from oilwatch.models import OrderResult, QuoteResult
 from oilwatch.pricing import normalise_price_per_litre
 
 log = get_logger("connectors.boilerjuice")
