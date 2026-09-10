@@ -104,11 +104,32 @@ class RobustnessTests(unittest.TestCase):
         self.assertEqual(len(offers), 1)
         self.assertIsNone(offers[0].code)
 
-    def test_lower_case_code_words_are_ignored(self) -> None:
-        """Codes are upper case; matching case-insensitively would find noise."""
+    def test_an_ordinary_lower_case_word_is_not_a_code(self) -> None:
+        """A code may be lower case now, but a plain word still is not one."""
         offers = parse_discounts("£5 off 500+ litres, use code abcdef", received_at=RECEIVED)
         self.assertEqual(len(offers), 1)
         self.assertIsNone(offers[0].code)
+
+    def test_a_lower_case_code_is_captured(self) -> None:
+        """Scottish Fuels issued "autumn25"; a missed code is a lost discount.
+
+        The amount was always captured, so the offer was known but unusable —
+        the code is the half that has to survive to the checkout.
+        """
+        offers = parse_discounts(
+            "£25 off your next order - use code autumn25", received_at=RECEIVED
+        )
+        self.assertEqual(len(offers), 1)
+        self.assertEqual(offers[0].amount_gbp, 25.0)
+        self.assertEqual(offers[0].code, "autumn25")
+
+    def test_a_mixed_case_code_is_captured_as_written(self) -> None:
+        offers = parse_discounts("£25 off, use code Autumn25", received_at=RECEIVED)
+        self.assertEqual(offers[0].code, "Autumn25")
+
+    def test_an_upper_case_code_is_unchanged(self) -> None:
+        offers = parse_discounts("£25 off, use code AUTUMN25", received_at=RECEIVED)
+        self.assertEqual(offers[0].code, "AUTUMN25")
 
     def test_band_accepts_both_hyphen_and_en_dash(self) -> None:
         hyphen = parse_discounts("£12 OFF 1,000-1,999 litres - Code: ABC12345", received_at=RECEIVED)

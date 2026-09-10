@@ -35,9 +35,13 @@ _BAND = re.compile(
     re.IGNORECASE,
 )
 
-# Case-sensitive on the value: supplier codes are upper case, and matching
-# lower case would sweep up ordinary words.
-_CODE = re.compile(r"(?:[Cc]ode|[Vv]oucher)\s*[:\s]\s*(?P<code>[A-Z0-9]{4,})")
+# The value may be any case: a supplier really did issue "autumn25", and a code
+# we fail to capture is a discount lost at checkout. A plain lower-case word is
+# still not a code, so the token must carry an upper-case letter or a digit —
+# "use code abcdef" stays ignored, "autumn25" does not.
+_CODE = re.compile(
+    r"(?:[Cc]ode|[Vv]oucher)\s*[:\s]\s*(?P<code>(?=[A-Za-z0-9]*[A-Z0-9])[A-Za-z0-9]{4,})"
+)
 
 # "expires in 48 hours", "expire in 3 days", "expires 48 hours"
 _EXPIRY = re.compile(r"expires?\s+(?:in\s+)?(?P<n>\d+)\s*(?P<unit>hour|day)s?", re.IGNORECASE)
