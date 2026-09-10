@@ -50,6 +50,16 @@ class FakeElement:
         self.selected.append(value)
 
 
+class FakeBrowserContext:
+    """The context a page belongs to; closing it is how a connector tears down."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
 class FakeAsyncPage:
     """Matches selectors by substring, so a connector's exact selector strings
     (which are long, comma-joined lists) do not have to be reproduced."""
@@ -68,6 +78,7 @@ class FakeAsyncPage:
         self._all = selector_all or []
         self.goto_urls: list[str] = []
         self.waits: list[int] = []
+        self.context = FakeBrowserContext()
 
     async def goto(self, url: str, **kwargs: Any) -> None:
         self.goto_urls.append(url)
