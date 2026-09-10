@@ -9,8 +9,11 @@ from playwright.async_api import Page
 
 from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
 from oilwatch.pricing import normalise_price_per_litre
+
+log = get_logger("connectors.boilerjuice")
 
 
 class BoilerJuiceBrowserConnector(BrowserConnector):
@@ -62,8 +65,8 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 # Wait for navigation
                 try:
                     await page.wait_for_load_state("networkidle", timeout=10000)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("login page did not reach networkidle: %s", exc)
                 
                 await page.wait_for_timeout(3000)
                 

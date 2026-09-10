@@ -10,7 +10,8 @@ response.
 The form is a fragile, stateful WebForms page (cookie dialog, hidden fields),
 so every step is best-effort: on any failure the connector returns
 ``manual_action_required`` with the supplier contact details rather than a bogus
-price.
+price. Each best-effort step logs why it was skipped, so a failed run can be
+diagnosed instead of only showing the final "manual" fallback.
 """
 
 from __future__ import annotations
@@ -19,6 +20,26 @@ from typing import Any
 
 from oilwatch.connectors.sync_browser import SyncBrowserConnector
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import get_logger
+
+log = get_logger("connectors.fuelsoft")
+
+COOKIE_SELECTORS = [
+    ".dialogWindow button",
+    "button:has-text('Confirm')",
+    "button:has-text('Accept')",
+    "button:has-text('Accept all')",
+    "button:has-text('OK')",
+    "button:has-text('Continue')",
+]
+
+# Wizard sections that start hidden and must be revealed before their controls
+# can be driven.
+HIDDEN_SECTIONS = (
+    "mainContent_buttonGetProducts",
+    "mainContent_productSection",
+    "mainContent_deliveryOptionSection",
+)
 
 
 class FuelsoftConnector(SyncBrowserConnector):
@@ -50,7 +71,8 @@ class FuelsoftConnector(SyncBrowserConnector):
             if "Quotes/deliveryschedules/quote" in resp.url:
                 try:
                     captured["body"] = resp.json()
-                except Exception:  # noqa: BLE001
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("quote response was not JSON, using text: %s", exc)
                     captured["body"] = resp.text()
 
         page.on("response", on_response)
@@ -67,19 +89,20 @@ class FuelsoftConnector(SyncBrowserConnector):
     @staticmethod
     def _dismiss_cookie_dialog(page) -> None:
         page.wait_for_timeout(2500)
-        for selector in [".dialogWindow button", "button:has-text('Confirm')", "button:has-text('Accept')", "button:has-text('Accept all')", "button:has-text('OK')", "button:has-text('Continue')"]:
+        for selector in COOKIE_SELECTORS:
             try:
                 if page.query_selector(selector):
                     page.click(selector, timeout=3000)
                     page.wait_for_timeout(1000)
                     return
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                log.debug("cookie selector %r not clickable: %s", selector, exc)
                 continue
         try:
             page.keyboard.press("Escape")
             page.wait_for_timeout(500)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.debug("cookie dialog escape failed: %s", exc)
 
     def _fill_form(self, page, postcode: str, address_line1: str, email: str, quantity_liters: int, product_value: str) -> None:
         # Reveal the manual address fields.
@@ -87,8 +110,8 @@ class FuelsoftConnector(SyncBrowserConnector):
             if page.query_selector("#btnEnterAddressManually"):
                 page.click("#btnEnterAddressManually", timeout=5000)
                 page.wait_for_timeout(1000)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.debug("could not reveal manual address fields: %s", exc)
 
         for selector, value in (("#txtPostcode", postcode), ("#txtDelAdd1", address_line1), ("#txtEmail", email)):
             if not value:
@@ -98,49 +121,50 @@ class FuelsoftConnector(SyncBrowserConnector):
                 if field:
                     field.fill(value, timeout=5000)
                     page.wait_for_timeout(500)
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                log.debug("could not fill %s: %s", selector, exc)
                 continue
 
         # The product/quote/delivery sections are hidden in a WebForms wizard;
         # reveal them so the remaining controls can be driven.
-        for section_id in ("mainContent_buttonGetProducts", "mainContent_productSection", "mainContent_deliveryOptionSection"):
+        for section_id in HIDDEN_SECTIONS:
             try:
                 page.evaluate(f"document.getElementById('{section_id}').style.display='block'")
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                log.debug("could not reveal section %s: %s", section_id, exc)
         page.wait_for_timeout(300)
 
         try:
             if page.query_selector("#btnGetProducts"):
                 page.click("#btnGetProducts", timeout=5000)
                 page.wait_for_timeout(5000)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.debug("get-products step failed: %s", exc)
 
         try:
             page.select_option("#mainContent_lstProduct", product_value, timeout=5000)
             page.wait_for_timeout(1200)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.debug("could not select product %s: %s", product_value, exc)
 
         try:
             page.fill("#txtQty", str(quantity_liters), timeout=5000)
             page.wait_for_timeout(500)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.debug("could not fill quantity: %s", exc)
 
         try:
             page.select_option("#mainContent_lstDeliveryOption", index=1, timeout=5000)
             page.wait_for_timeout(1000)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.debug("could not select delivery option: %s", exc)
 
     @staticmethod
     def _get_quote(page) -> None:
         try:
             page.click("#btnGetQuote", timeout=5000)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.debug("could not click Get Quote: %s", exc)
 
     @staticmethod
     def parse_quote_response(body: Any) -> float | None:

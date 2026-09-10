@@ -385,13 +385,14 @@ class BrowserAuth:
         for cookie in json.loads(path.read_text(encoding="utf-8")):
             try:
                 self.driver.add_cookie(cookie)
-            except Exception:  # noqa: BLE001 - domain/path mismatch is normal
+            except Exception as exc:  # noqa: BLE001 - domain/path mismatch is normal
+                log.debug("skipped cookie that does not apply to this domain: %s", exc)
                 continue
 
     def close(self) -> None:
         if self.driver is not None:
             try:
                 self.driver.quit()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                log.debug("browser quit raised: %s", exc)
             self.driver = None

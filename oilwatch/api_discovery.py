@@ -8,6 +8,10 @@ from typing import Any
 
 from playwright.async_api import Page, Playwright, async_playwright
 
+from oilwatch.logging_setup import get_logger
+
+log = get_logger("api_discovery")
+
 # Pause between intercepted requests so discovery cannot burst a supplier.
 # Small on purpose: it only needs to break up a flood, not slow the tool down.
 REQUEST_DELAY_SECONDS = 0.25
@@ -98,11 +102,11 @@ class APIDiscoveryTool:
                                 "response_status": response.status,
                                 "response_data": json_data,
                             }
-                        except json.JSONDecodeError:
-                            pass
-                            
-                except Exception:
-                    pass
+                        except json.JSONDecodeError as exc:
+                            log.debug("intercepted response was not JSON: %s", exc)
+
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("could not record intercepted response: %s", exc)
             
             await route.fulfill(response=response)
         except Exception:

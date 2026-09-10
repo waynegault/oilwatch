@@ -13,7 +13,10 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright, asyn
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.credentials import get_supplier_credentials, store_supplier_credentials
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import get_logger
 from oilwatch.models import OrderResult, QuoteResult
+
+log = get_logger("connectors.browser")
 
 
 class BrowserConnector(BaseConnector, ABC):
@@ -115,9 +118,9 @@ class BrowserConnector(BaseConnector, ABC):
                     "status": response.status,
                     "body": body[:5000],  # Limit size
                 })
-            except Exception:
-                pass
-        
+            except Exception as exc:  # noqa: BLE001
+                log.debug("could not read intercepted response body: %s", exc)
+
         await route.fulfill(response=response)
     
     async def _close_browser(self) -> None:

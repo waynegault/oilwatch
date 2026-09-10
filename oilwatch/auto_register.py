@@ -15,6 +15,9 @@ from oilwatch.credentials import (
     store_supplier_credentials,
 )
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import get_logger
+
+log = get_logger("auto_register")
 
 
 class AccountRegistrar:
@@ -81,18 +84,37 @@ class AccountRegistrar:
                     await button.click(timeout=3000)
                     await page.wait_for_timeout(1000)
                     return
-            except Exception:
-                pass
-        
+            except Exception as exc:  # noqa: BLE001
+                log.debug("cookie selector %r not clickable: %s", selector, exc)
+
         # Try to close cookie banner
         try:
             close_btn = await page.query_selector('.iubenda-cs-close, button[aria-label*="close"], .cookie-close')
             if close_btn:
                 await close_btn.click(timeout=3000)
                 await page.wait_for_timeout(1000)
-        except Exception:
-            pass
-    
+        except Exception as exc:  # noqa: BLE001
+            log.debug("cookie close button not clickable: %s", exc)
+
+    async def _fill_fields(self, page: Page, fields: dict[str, str]) -> int:
+        """Fill the first matching selector for each field; return how many took.
+
+        Every platform uses a different selector set and most of them will not
+        exist on a given page, so a miss is logged and skipped rather than fatal.
+        """
+        filled = 0
+        for selector, value in fields.items():
+            if not value:
+                continue
+            try:
+                field = await page.query_selector(selector)
+                if field:
+                    await field.fill(value)
+                    filled += 1
+            except Exception as exc:  # noqa: BLE001
+                log.debug("could not fill %s: %s", selector, exc)
+        return filled
+
     async def register_scottish_fuels(
         self,
         name: str,
@@ -140,11 +162,10 @@ class AccountRegistrar:
                 try:
                     await register_link.click()
                     await page.wait_for_timeout(2000)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("register link click failed: %s", exc)
             
             # Fill registration form
-            fields_filled = False
             fields = {
                 'input[name="username"]': name.split()[0].lower() if name else "",
                 'input[name="email"]': email,
@@ -152,16 +173,9 @@ class AccountRegistrar:
                 'input[name="account_email"]': email,
                 'input[name="account_password"]': password,
             }
-            
-            for selector, value in fields.items():
-                try:
-                    field = await page.query_selector(selector)
-                    if field and value:
-                        await field.fill(value)
-                        fields_filled = True
-                except Exception:
-                    pass
-            
+
+            fields_filled = await self._fill_fields(page, fields)
+
             if not fields_filled:
                 # Try alternative selectors
                 alt_fields = {
@@ -170,13 +184,7 @@ class AccountRegistrar:
                     'input[type="email"]': email,
                     'input[type="password"]': password,
                 }
-                for selector, value in alt_fields.items():
-                    try:
-                        field = await page.query_selector(selector)
-                        if field:
-                            await field.fill(value)
-                    except Exception:
-                        pass
+                await self._fill_fields(page, alt_fields)
             
             # Try to find and click register button
             register_button = await page.query_selector(
@@ -189,9 +197,10 @@ class AccountRegistrar:
                 try:
                     await register_button.click(timeout=5000)
                     await page.wait_for_timeout(5000)
-                except Exception as e:
-                    # Button clicked but navigation happened
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    # A successful click often navigates away, which surfaces as
+                    # an error here; log it so a real failure stays distinguishable.
+                    log.debug("register click raised (likely navigation): %s", exc)
                 
                 # Check for success or error
                 error = await page.query_selector(".woocommerce-error, .error, .alert")
@@ -289,13 +298,7 @@ class AccountRegistrar:
                 'input[id="reg_password"]': password,
             }
             
-            for selector, value in fields.items():
-                try:
-                    field = await page.query_selector(selector)
-                    if field and value:
-                        await field.fill(value)
-                except Exception:
-                    pass
+            await self._fill_fields(page, fields)
             
             # Find register button
             register_button = await page.query_selector(
@@ -307,8 +310,8 @@ class AccountRegistrar:
                 try:
                     await register_button.click(timeout=5000)
                     await page.wait_for_timeout(5000)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("register click raised (likely navigation): %s", exc)
                 
                 # Check for success or error
                 error = await page.query_selector(".error, .alert-danger, [class*='error'], .woocommerce-error")
@@ -391,13 +394,7 @@ class AccountRegistrar:
                 'input[id="reg_password"]': password,
             }
             
-            for selector, value in fields.items():
-                try:
-                    field = await page.query_selector(selector)
-                    if field and value:
-                        await field.fill(value)
-                except Exception:
-                    pass
+            await self._fill_fields(page, fields)
             
             # Find register button
             register_button = await page.query_selector(
@@ -409,8 +406,8 @@ class AccountRegistrar:
                 try:
                     await register_button.click(timeout=5000)
                     await page.wait_for_timeout(5000)
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("register click raised (likely navigation): %s", exc)
                 
                 # Check for success or error
                 error = await page.query_selector(".error, .alert, [class*='error'], .woocommerce-error")

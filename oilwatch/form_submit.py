@@ -97,12 +97,6 @@ SUPPLIER_FORMS: dict[str, dict[str, Any]] = {
 }
 
 
-def _set_value(driver, name: str, value: str) -> None:
-    el = driver.find_element(By.CSS_SELECTOR, f"[name='{name}']")
-    el.clear()
-    el.send_keys(value)
-
-
 def _resolve_field(driver, name: str):
     """Return the element to type into for a form field name.
 
@@ -124,10 +118,6 @@ def _resolve_field(driver, name: str):
     return element
 
 
-def _select_value(driver, name: str, value: str) -> None:
-    Select(driver.find_element(By.CSS_SELECTOR, f"[name='{name}']")).select_by_visible_text(value)
-
-
 def _select_option(element, value: str) -> None:
     """Select a dropdown option robustly.
 
@@ -138,7 +128,7 @@ def _select_option(element, value: str) -> None:
     try:
         sel.select_by_visible_text(value)
         return
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - exact match is best-effort; fall through to fuzzy
         pass
     for option in sel.options:
         if value in option.text:

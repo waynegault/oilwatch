@@ -9,7 +9,10 @@ from playwright.async_api import Page
 
 from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
+
+log = get_logger("connectors.valueoils")
 
 
 class ValueOilsBrowserConnector(BrowserConnector):
@@ -130,14 +133,14 @@ class ValueOilsBrowserConnector(BrowserConnector):
             if usage_select:
                 try:
                     await usage_select.select_option("domestic")
-                except Exception:
-                    pass
-            
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("could not select usage=domestic: %s", exc)
+
             if fuel_select:
                 try:
                     await fuel_select.select_option("kerosene")
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("could not select fuel=kerosene: %s", exc)
             
             if postcode_field:
                 await postcode_field.fill(postcode)
