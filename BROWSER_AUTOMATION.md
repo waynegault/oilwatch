@@ -14,6 +14,22 @@ OilWatch now includes **browser-based connectors** using Playwright that can:
 4. ✅ **Generate secure passwords** for new account registration
 5. ✅ **Fall back to HTTP scraping** if browser automation fails
 
+### Two automation stacks (and why)
+
+There are two browser stacks, not one — they cover different jobs and are not
+interchangeable:
+
+| Stack | Modules | Used for |
+|-------|---------|----------|
+| **Playwright (async)** | `connectors/browser_base.py` and the connectors that subclass `BrowserConnector` (BoilerJuice, ValueOils, HomeFuels Direct) | Quote extraction from JavaScript-rendered pages, plus API request interception |
+| **Playwright (sync)** | `connectors/suppliers/fuelsoft.py`, `rix_browser.py` | Fill-and-read quote flows; kept synchronous because their callers are |
+| **Selenium + undetected-chromedriver** | `browser_auth.py`, `form_submit.py`, `connectors/suppliers/scottish_fuels_browser.py` | Interactive login (persistent Chrome profile) and price-enquiry form submission, where anti-bot measures matter |
+
+Playwright is the default; the Selenium stack exists only where a persistent,
+less-detectable session is required. Consolidating them is deliberately deferred:
+it would rewrite live-verified supplier flows that have no offline test coverage,
+so it needs characterization tests first.
+
 ---
 
 ## Credentials Management
