@@ -407,9 +407,6 @@ envelope looks like this (`blob` is base64-encoded binary ciphertext):
 
 1. **Browser automation** is slow (10-30 s per supplier) and runs sequentially
 2. **No rate limiting** on API discovery
-3. **No error notifications** when a quote fails — failures are logged
-   (`OILWATCH_LOG_LEVEL`) and recorded as `error` quotes, but nothing pushes an
-   alert to the owner
 
 ### Known Issues
 
