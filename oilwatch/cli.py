@@ -8,6 +8,7 @@ from oilwatch.api_discovery import APIDiscoveryTool, discover_supplier_api
 from oilwatch.auto_register import register_all
 from oilwatch.connectors.suppliers.telephone import TelephoneQuoteScript
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import configure_logging
 from oilwatch.scheduler import OilWatchScheduler
 from oilwatch.service import OilWatchApp
 
@@ -106,6 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    configure_logging()
     parser = build_parser()
     args = parser.parse_args()
     app = OilWatchApp()

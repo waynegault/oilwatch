@@ -23,6 +23,7 @@ from typing import Any
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from oilwatch.logging_setup import configure_logging
 from oilwatch.service import OilWatchApp
 
 # Resolve the repo root from this file's location so the server works no matter
@@ -118,6 +119,7 @@ def update_brent() -> dict[str, Any]:
 
 def main() -> None:
     """Run the streamable-HTTP endpoint. Console-script entry point."""
+    configure_logging()
     mcp.run(transport="http", host=HOST, port=PORT)
 
 

@@ -13,17 +13,14 @@ from typing import Any
 import httpx
 
 from oilwatch.connectors.base import BaseConnector
+from oilwatch.http import build_client
 from oilwatch.models import OrderResult, QuoteResult
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total, pence_to_pounds
 
 
 class FueltoolConnector(BaseConnector):
     def __init__(self) -> None:
-        self.client = httpx.Client(
-            follow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"},
-            timeout=30.0,
-        )
+        self.client = build_client()
         self.quote_url = "https://www.fueltool.co.uk/"
 
     def quote(
