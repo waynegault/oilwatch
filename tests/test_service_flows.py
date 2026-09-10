@@ -151,61 +151,6 @@ class MaintenanceTests(AppTestCase):
             self.app.import_spreadsheet()
 
 
-class RecordPurchaseTests(AppTestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.ids = self._init()
-
-    def test_the_total_is_derived_from_the_price(self) -> None:
-        purchase = self.app.record_purchase("ValueOils", price_per_liter=1.05)
-        self.assertAlmostEqual(purchase["total_price"], 1050.0, places=2)
-        self.assertEqual(purchase["quantity_liters"], 1000)
-
-    def test_the_price_is_derived_from_the_total(self) -> None:
-        purchase = self.app.record_purchase("ValueOils", total_price=1050.0)
-        self.assertAlmostEqual(purchase["agreed_price_per_liter"], 1.05, places=4)
-
-    def test_a_code_and_reference_are_kept(self) -> None:
-        purchase = self.app.record_purchase("ValueOils", price_per_liter=1.05, code="autumn25", reference="AB-1")
-        self.assertEqual(purchase["discount_code"], "autumn25")
-        self.assertEqual(purchase["reference"], "AB-1")
-
-    def test_a_purchase_date_is_kept(self) -> None:
-        purchase = self.app.record_purchase("ValueOils", price_per_liter=1.05, ordered_at="2026-08-01T09:00:00")
-        self.assertTrue(purchase["created_at"].startswith("2026-08-01"))
-
-    def test_a_price_or_total_is_required(self) -> None:
-        with self.assertRaises(ValueError):
-            self.app.record_purchase("ValueOils")
-
-    def test_a_supplier_can_be_named_by_id(self) -> None:
-        purchase = self.app.record_purchase(self.ids["ValueOils"], price_per_liter=1.05)
-        self.assertEqual(purchase["supplier_name"], "ValueOils")
-
-    def test_an_ambiguous_name_is_refused(self) -> None:
-        with self.assertRaises(ValueError) as ctx:
-            self.app.record_purchase("Scottish Fuels")
-        self.assertIn("matches several", str(ctx.exception))
-
-    def test_an_unknown_name_is_refused(self) -> None:
-        with self.assertRaises(ValueError):
-            self.app.record_purchase("Nobody Fuels", price_per_liter=1.0)
-
-    def test_an_unknown_id_is_refused(self) -> None:
-        with self.assertRaises(ValueError):
-            self.app.record_purchase(999, price_per_liter=1.0)
-
-    def test_an_empty_name_is_refused(self) -> None:
-        with self.assertRaises(ValueError):
-            self.app.record_purchase("   ", price_per_liter=1.0)
-
-    def test_purchases_are_listed_with_the_code_unpacked(self) -> None:
-        self.app.record_purchase("ValueOils", price_per_liter=1.05, code="autumn25")
-        rows = self.app.purchases(limit=1)
-        self.assertEqual(rows[0]["discount_code"], "autumn25")
-        self.assertAlmostEqual(rows[0]["total_price"], 1050.0, places=2)
-
-
 class PlaceOrderTests(AppTestCase):
     def setUp(self) -> None:
         super().setUp()

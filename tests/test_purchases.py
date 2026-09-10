@@ -39,18 +39,21 @@ class PurchaseRecordingTests(unittest.TestCase):
             ("Scottish Fuels", "https://quote.scottishfuels.co.uk/quote/"),
             ("HomeFuels Direct", "https://homefuelsdirect.co.uk/home/heating-oil-prices/aberdeenshire"),
         ):
-            self.app.db.upsert_supplier(
-                {
-                    "name": name,
-                    "website": website,
-                    "status": "active",
-                    "connector_type": "manual",
-                    "connector_config": {},
-                }
-            )
+            self._add_supplier(name, website)
         self.ids = {
             row["name"]: row["id"] for row in self.app.db.list_suppliers(include_inactive=True)
         }
+
+    def _add_supplier(self, name: str, website: str) -> None:
+        self.app.db.upsert_supplier(
+            {
+                "name": name,
+                "website": website,
+                "status": "active",
+                "connector_type": "manual",
+                "connector_config": {},
+            }
+        )
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -71,6 +74,10 @@ class PurchaseRecordingTests(unittest.TestCase):
         self.assertEqual(purchases[0]["supplier_name"], "Scottish Fuels")
         self.assertEqual(purchases[0]["website"], "https://quote.scottishfuels.co.uk/quote/")
         self.assertEqual(purchases[0]["reference"], "SF-123")
+        # The code and the total live in the order's payload, not in its columns:
+        # reading them back is what makes the history legible.
+        self.assertEqual(purchases[0]["discount_code"], "autumn25")
+        self.assertEqual(purchases[0]["total_price"], 1089.40)
 
     def test_a_name_fragment_is_enough(self) -> None:
         """The owner says "scottish", not "Scottish Fuels Ltd"."""
@@ -86,6 +93,7 @@ class PurchaseRecordingTests(unittest.TestCase):
     def test_the_supplier_id_can_identify_the_supplier(self) -> None:
         recorded = self.app.record_purchase(self.ids["Scottish Fuels"], price_per_liter=1.0894)
         self.assertEqual(recorded["supplier_id"], self.ids["Scottish Fuels"])
+        self.assertEqual(recorded["supplier_name"], "Scottish Fuels")
 
     def test_the_total_paid_is_enough(self) -> None:
         recorded = self.app.record_purchase("Scottish Fuels", total_price=1089.40)
@@ -109,10 +117,28 @@ class PurchaseRecordingTests(unittest.TestCase):
             self.app.record_purchase("Nonexistent Oil Co", price_per_liter=1.0)
         self.assertIn("No supplier matches", str(caught.exception))
 
-    def test_an_ambiguous_supplier_is_refused_rather_than_guessed(self) -> None:
-        """Filing a purchase against the wrong supplier is worse than asking."""
+    def test_an_unknown_id_is_refused(self) -> None:
         with self.assertRaises(ValueError) as caught:
-            self.app.record_purchase("https://", price_per_liter=1.0)
+            self.app.record_purchase(999, price_per_liter=1.0)
+        self.assertIn("Unknown supplier id", str(caught.exception))
+
+    def test_a_blank_supplier_name_is_refused(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            self.app.record_purchase("   ", price_per_liter=1.0)
+        self.assertIn("Name the supplier", str(caught.exception))
+
+    def test_an_ambiguous_supplier_is_refused_rather_than_guessed(self) -> None:
+        """A fragment is only enough while one supplier answers to it.
+
+        Filing a purchase against the wrong supplier is worse than asking, and
+        the owner's own list carries a depot of the same name, so the fragment
+        that resolves above has to be refused here.
+        """
+        self._add_supplier("Scottish Fuels Depot", "https://quote.scottishfuels.co.uk/depot")
+
+        with self.assertRaises(ValueError) as caught:
+            self.app.record_purchase("scottish", price_per_liter=1.0)
+
         self.assertIn("matches several suppliers", str(caught.exception))
         self.assertEqual(self.app.purchases(), [], "nothing should have been written")
 
