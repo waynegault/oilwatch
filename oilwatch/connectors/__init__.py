@@ -1,8 +1,16 @@
+from __future__ import annotations
+
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.connectors.http_form import HTTPFormConnector
 from oilwatch.connectors.manual import ManualConnector
 from oilwatch.connectors.price_page import PricePageConnector
 from oilwatch.connectors.suppliers import get_supplier_connector
+from oilwatch.logging_setup import get_logger
+
+log = get_logger("connectors")
+
+# Generic (non supplier-specific) connector types a supplier row may name.
+GENERIC_CONNECTOR_TYPES = ("manual", "price_page", "http_form")
 
 
 def get_connector(name: str) -> BaseConnector:
@@ -34,9 +42,19 @@ def get_connector_for_supplier(supplier: dict, prefer_browser: bool = False) -> 
 
     # Check for explicit connector type
     connector_type = supplier.get("connector_type", "")
-    if connector_type in ("manual", "price_page", "http_form"):
+    if connector_type in GENERIC_CONNECTOR_TYPES:
         return get_connector(connector_type)
+    if connector_type:
+        # A set-but-unknown type is a configuration error, not a reason to
+        # silently downgrade the supplier to a manual quote.
+        raise ValueError(
+            f"Unknown connector_type {connector_type!r} for supplier "
+            f"{supplier.get('name') or supplier.get('id')}"
+        )
 
-    # Default to manual
+    log.info(
+        "No supplier-specific connector for %r (website=%r); using manual",
+        supplier.get("name") or supplier.get("id"),
+        website,
+    )
     return get_connector("manual")
-

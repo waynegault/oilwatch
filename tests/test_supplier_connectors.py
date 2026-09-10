@@ -4,7 +4,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 from oilwatch.connectors.suppliers import get_supplier_connector
+from oilwatch.connectors.suppliers.fuelsoft import FuelsoftConnector
 from oilwatch.connectors.suppliers.homefuels_direct import HomeFuelsDirectConnector
+from oilwatch.connectors.suppliers.regency_oils import RegencyOilsConnector
 from oilwatch.connectors.suppliers.scottish_fuels_browser import ScottishFuelsBrowserConnector
 from oilwatch.connectors.suppliers.valueoils import ValueOilsConnector
 
@@ -104,6 +106,27 @@ class SupplierConnectorRoutingTests(unittest.TestCase):
             get_supplier_connector("https://www.valueoils.com", prefer_browser=False),
             ValueOilsConnector,
         )
+
+    def test_browser_only_domain_needs_prefer_browser(self) -> None:
+        # Fuelsoft (Connon Bros / Johnson Oils) has no HTTP connector, so without
+        # --browser there is nothing to return and the caller quotes manually.
+        self.assertIsNone(get_supplier_connector("https://connon.fuelsoft.co.uk/"))
+        self.assertIsInstance(
+            get_supplier_connector("https://connon.fuelsoft.co.uk/", prefer_browser=True),
+            FuelsoftConnector,
+        )
+
+    def test_regency_prefers_browser_when_requested(self) -> None:
+        self.assertIsInstance(
+            get_supplier_connector("https://www.regencyoils.com/"), RegencyOilsConnector
+        )
+        self.assertIsInstance(
+            get_supplier_connector("https://www.regencyoils.com/", prefer_browser=True),
+            FuelsoftConnector,
+        )
+
+    def test_unknown_domain_returns_none(self) -> None:
+        self.assertIsNone(get_supplier_connector("https://example.invalid"))
 
 
 if __name__ == "__main__":

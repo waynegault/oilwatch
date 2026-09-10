@@ -3,7 +3,7 @@
 Suppliers without a public price (Gleaner Oils, Oilfast, and, where located,
 Highland Fuels / Regency Oils) quote by email after an enquiry form is
 submitted. This module drives those forms with the undetected browser so the
-replies can later be captured by ``oilwatch.email_monitor``.
+replies can later be captured by ``oilwatch.graph_email``.
 
 Field mappings are data-driven; each entry describes the form and which fields
 map to name/email/phone/postcode/quantity.

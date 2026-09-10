@@ -54,7 +54,7 @@ It is a working system, not a prototype:
 | `form_submit.py` | Quote-request form submission |
 | `quotes.py` | Quote collection orchestration |
 | `graph_email.py` | Poll the inbox via Microsoft Graph, extract replies and discount codes, delete processed mail |
-| `email_monitor.py` | Supplier reply domains + the price parser the Graph monitor reuses |
+| `email_parsing.py` | Supplier reply domains + the price parser the Graph monitor reuses |
 | `import_xls.py` | Import `Oil Prices.xls` history |
 | `brent.py` | Brent crude daily series from the EIA |
 | `analytics.py` | Cheapest / average / variance, trend, charts |

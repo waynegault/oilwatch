@@ -6,7 +6,7 @@ from pathlib import Path
 
 from oilwatch.api_discovery import APIDiscoveryTool, discover_supplier_api
 from oilwatch.auto_register import register_all
-from oilwatch.connectors.suppliers.telephone import TelephoneQuoteScript
+from oilwatch.connectors.suppliers import get_telephone_script
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import configure_logging
 from oilwatch.scheduler import OilWatchScheduler
@@ -177,7 +177,7 @@ def main() -> None:
     elif args.command == "schedule":
         OilWatchScheduler(app, postcode=args.postcode).run_forever()
     elif args.command == "phone-script":
-        script = TelephoneQuoteScript()
+        script = get_telephone_script()
         script.configure(
             quantity_liters=args.quantity_liters,
             postcode=args.postcode,

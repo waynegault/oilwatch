@@ -44,6 +44,9 @@ htmlcov/
 .coverage
 .coverage.*
 
+# graphify code graph (generated locally; the persistent graph lives in ~/.graphify)
+graphify-out/
+
 # Distribution
 dist/
 build/

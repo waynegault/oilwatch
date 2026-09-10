@@ -25,7 +25,7 @@ from typing import Any
 import httpx
 import msal
 
-from oilwatch.email_monitor import SUPPLIER_DOMAINS, extract_ppl
+from oilwatch.email_parsing import SUPPLIER_DOMAINS, extract_ppl
 from oilwatch.logging_setup import get_logger
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
 

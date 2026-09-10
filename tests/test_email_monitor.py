@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from oilwatch.db import Database
-from oilwatch.email_monitor import SUPPLIER_DOMAINS, extract_ppl
+from oilwatch.email_parsing import SUPPLIER_DOMAINS, extract_ppl
 from oilwatch.form_submit import SUPPLIER_FORMS
 from oilwatch.graph_email import GraphEmailMonitor, sender_domain_from_email
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
