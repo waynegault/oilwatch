@@ -219,11 +219,22 @@ class OilWatchApp:
         return str(path)
 
     def import_spreadsheet(self, xls_path: str | None = None) -> dict[str, Any]:
-        from oilwatch.import_xls import DEFAULT_XLS_PATH, import_spreadsheet
+        """Import historical prices recorded before OilWatch existed.
+
+        The workbook is no longer the source of truth — the database is — so this
+        is a one-off migration aid and the path must be given explicitly rather
+        than defaulting to a drive letter that may not be mapped.
+        """
+        from oilwatch.import_xls import import_spreadsheet
 
         self.db.init_schema()
-        path = Path(xls_path) if xls_path else DEFAULT_XLS_PATH
-        return import_spreadsheet(self.db, path, self.settings.quote_quantity_liters)
+        if not xls_path:
+            raise ValueError(
+                "Pass the workbook path explicitly, for example: "
+                "oilwatch import-spreadsheet --path \"P:\\Public Documents\\Oil Prices.xls\". "
+                "The database is the source of truth; this import is historical only."
+            )
+        return import_spreadsheet(self.db, Path(xls_path), self.settings.quote_quantity_liters)
 
     def update_brent(self) -> dict[str, Any]:
         from oilwatch.brent import update_brent

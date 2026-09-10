@@ -1,7 +1,9 @@
 """Import historical prices from the user's manual tracking spreadsheet.
 
-``P:\\Public Documents\\Oil Prices.xls`` (binary .xls) is the authoritative
-source of pre-existing, hand-recorded prices that predate OilWatch:
+This is a **historical migration aid, not a source of truth** — the database is
+authoritative for suppliers and prices. The workbook simply predates OilWatch,
+and its path is now passed explicitly rather than defaulted, because it lives on
+a drive letter that may not always be mapped:
 
 * ``Heating Oil`` sheet — one row per supplier, one column per check-in date,
   values in **pence per litre ex-VAT**. These are converted to GBP/litre
@@ -131,6 +133,3 @@ def import_spreadsheet(db: Database, xls_path: Path, quantity_liters: int = 1000
         "heating_oil_quotes": import_heating_oil(db, xls_path, quantity_liters),
         "brent_points": import_brent(db, xls_path),
     }
-
-
-DEFAULT_XLS_PATH = Path(r"P:\Public Documents\Oil Prices.xls")
