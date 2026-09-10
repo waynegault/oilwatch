@@ -103,6 +103,27 @@ def _set_value(driver, name: str, value: str) -> None:
     el.send_keys(value)
 
 
+def _resolve_field(driver, name: str):
+    """Return the element to type into for a form field name.
+
+    wpforms' *smart phone field* keeps the value it submits in a hidden input
+    (``wpforms[fields][6]``, ``type=hidden``, zero size) and puts the control a
+    person actually types into beside it under a ``wpf-temp-`` name. Typing into
+    the hidden one raises "invalid element state", which is what made the Gleaner
+    submission fail while the other four suppliers worked.
+
+    Deliberately does **not** test ``is_displayed()``: on these pages every field
+    reports not-displayed, including the ones that fill perfectly well, so a
+    visibility check would reject working fields.
+    """
+    element = driver.find_element(By.CSS_SELECTOR, f"[name='{name}']")
+    if element.get_attribute("type") == "hidden":
+        for candidate in driver.find_elements(By.CSS_SELECTOR, f"[name='wpf-temp-{name}']"):
+            if candidate.get_attribute("type") in ("tel", "text", "email", "number"):
+                return candidate
+    return element
+
+
 def _select_value(driver, name: str, value: str) -> None:
     Select(driver.find_element(By.CSS_SELECTOR, f"[name='{name}']")).select_by_visible_text(value)
 
@@ -174,7 +195,7 @@ def submit_request(
         if not value:
             continue  # skip empty optional fields (e.g. phone)
         try:
-            el = driver.find_element(By.CSS_SELECTOR, f"[name='{field_name}']")
+            el = _resolve_field(driver, field_name)
             tag = el.tag_name
             if tag == "select":
                 _select_option(el, value)
