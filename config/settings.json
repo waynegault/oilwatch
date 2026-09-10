@@ -28,6 +28,7 @@
     "spendlessonfuel.com",
     "yell.com"
   ],
+  "microsoft_client_id": "7767e037-c75b-489a-a4fc-7177d0067013",
   "scheduler": {
     "discovery_interval_hours": 168,
     "quote_interval_hours": 24,

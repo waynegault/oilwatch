@@ -22,26 +22,26 @@ class AnalyticsService:
                 "variance": None,
                 "quotes_considered": 0,
             }
-        prices = [row["price_per_liter"] for row in latest_quotes if row["price_per_liter"] is not None]
-        if not prices:
+        priced = [row for row in latest_quotes if row["price_per_liter"] is not None]
+        if not priced:
             return {
                 "cheapest_supplier": None,
                 "average_price_per_liter": None,
                 "variance": None,
                 "quotes_considered": 0,
             }
-        priced = [row for row in latest_quotes if row["price_per_liter"] is not None]
 
-        def rank_by(row: dict[str, Any]) -> float:
-            """Rank on what the order costs, not on what the supplier lists.
+        def effective_of(row: dict[str, Any]) -> float:
+            """What the order would cost: the posted price less any useful code.
 
-            A discount code is real money off, so the supplier with the higher
-            headline price can still be the cheapest way to buy.
+            Drives the ranking, the average and the variance alike, so the whole
+            snapshot describes the same thing — the price actually available.
             """
             effective = row.get("effective_price_per_liter")
             return float(effective if effective is not None else row["price_per_liter"])
 
-        cheapest = min(priced, key=rank_by)
+        prices = [effective_of(row) for row in priced]
+        cheapest = min(priced, key=effective_of)
         return {
             "cheapest_supplier": {
                 "supplier_id": cheapest["supplier_id"],

@@ -34,6 +34,10 @@ class Settings:
     currency: str = "GBP"
     search_queries: list[str] = field(default_factory=list)
     excluded_domains: list[str] = field(default_factory=list)
+    # Public OAuth client id for the mailbox grant (not a secret — it already
+    # appears in monitor_email.bat). Kept here so the CLI works without needing
+    # that script purely to set one environment variable.
+    microsoft_client_id: str = ""
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
 
 
@@ -55,6 +59,7 @@ def load_settings(root: Path | None = None) -> Settings:
         currency=data.get("currency", "GBP"),
         search_queries=data.get("search_queries", []),
         excluded_domains=data.get("excluded_domains", []),
+        microsoft_client_id=data.get("microsoft_client_id", ""),
         scheduler=SchedulerConfig(**data.get("scheduler", {})),
     )
 

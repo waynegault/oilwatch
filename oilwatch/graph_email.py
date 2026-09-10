@@ -37,11 +37,26 @@ GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
 
 
 def load_client_id() -> str:
+    """The Entra app (client) id for the mailbox grant.
+
+    Not a secret — it is a public OAuth client id, already written out in
+    monitor_email.bat — so it is allowed to live in settings.json. That means
+    `oilwatch monitor-email` works on its own, instead of failing unless it is
+    launched through that batch file.
+    """
     client_id = os.environ.get("MICROSOFT_CLIENT_ID")
     if not client_id:
+        try:
+            from oilwatch.config import load_settings
+
+            client_id = load_settings().microsoft_client_id
+        except Exception:  # noqa: BLE001 - a missing settings file is not the problem here
+            client_id = ""
+    if not client_id:
         raise RuntimeError(
-            "Set the MICROSOFT_CLIENT_ID environment variable "
-            "(the Entra app registration Application (client) ID)."
+            "Set the MICROSOFT_CLIENT_ID environment variable (the Entra app "
+            "registration Application (client) ID), or add microsoft_client_id "
+            "to config/settings.json."
         )
     return client_id
 
