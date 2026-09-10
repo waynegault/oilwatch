@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oilwatch"
+version = "0.1.0"
+description = "Domestic heating oil supplier discovery, quote tracking, analytics, ordering hooks, and MCP tools."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+  { name = "Wayne and Codex" }
+]
+dependencies = [
+  "apscheduler>=3.10,<4",
+  "beautifulsoup4>=4.12",
+  "fastmcp>=3.1,<4",
+  "geopy>=2.4",
+  "httpx>=0.28",
+  "matplotlib>=3.10",
+  "msal>=1.30",
+  "playwright>=1.40",
+  "selenium>=4.20",
+  "undetected-chromedriver>=3.5",
+  "setuptools>=68"
+]
+
+[project.scripts]
+oilwatch = "oilwatch.cli:main"
+oilwatch-mcp = "oilwatch.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["oilwatch"]
+

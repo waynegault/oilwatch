@@ -1,0 +1,301 @@
+"""Base browser connector for supplier automation using Playwright."""
+
+from __future__ import annotations
+
+import asyncio
+from abc import ABC, abstractmethod
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
+
+from oilwatch.connectors.base import BaseConnector
+from oilwatch.credentials import get_supplier_credentials, store_supplier_credentials
+from oilwatch.identity import load_contact
+from oilwatch.models import OrderResult, QuoteResult
+
+
+class BrowserConnector(BaseConnector, ABC):
+    """
+    Base class for browser-based supplier connectors.
+    
+    Provides:
+    - Automatic browser management
+    - Login functionality with credential storage
+    - API request interception
+    - Screenshot capture for debugging
+    """
+    
+    def __init__(self) -> None:
+        self.supplier_key = ""
+        self.supplier_name = ""
+        self.login_url = ""
+        self.base_url = ""
+        self._playwright: Playwright | None = None
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self._page: Page | None = None
+        self._api_requests: list[dict[str, Any]] = []
+        self._api_responses: list[dict[str, Any]] = []
+    
+    @abstractmethod
+    async def get_quote_with_browser(
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        context: dict[str, Any],
+        page: Page,
+    ) -> QuoteResult:
+        """
+        Get a quote using browser automation.
+        
+        Override this method to implement supplier-specific quote logic.
+        """
+        raise NotImplementedError
+    
+    async def login(self, page: Page, email: str, password: str) -> bool:
+        """
+        Log in to the supplier website.
+        
+        Override this method to implement supplier-specific login logic.
+        
+        Returns:
+            True if login successful, False otherwise
+        """
+        # Default implementation - override in subclasses
+        raise NotImplementedError
+    
+    async def _setup_browser(self, headless: bool = True) -> Page:
+        """Set up browser and return a new page."""
+        self._playwright = await async_playwright().start()
+        
+        self._browser = await self._playwright.chromium.launch(
+            headless=headless,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+            ],
+        )
+        
+        self._context = await self._browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        )
+        
+        # Enable request interception for API discovery
+        await self._context.route("**/*", self._intercept_request)
+        
+        self._page = await self._context.new_page()
+        return self._page
+    
+    async def _intercept_request(self, route):
+        """Intercept requests to discover APIs."""
+        request = route.request
+        url = request.url
+        
+        # Log API requests (filter for JSON/API endpoints)
+        if "/api/" in url.lower() or "/json" in url.lower() or ".json" in url.lower():
+            self._api_requests.append({
+                "method": request.method,
+                "url": url,
+                "headers": dict(request.headers),
+                "post_data": request.post_data,
+            })
+        
+        # Continue the request
+        response = await route.fetch()
+        
+        # Log API responses
+        if "/api/" in url.lower() or "/json" in url.lower() or ".json" in url.lower():
+            try:
+                body = await response.text()
+                self._api_responses.append({
+                    "url": url,
+                    "status": response.status,
+                    "body": body[:5000],  # Limit size
+                })
+            except Exception:
+                pass
+        
+        await route.fulfill(response=response)
+    
+    async def _close_browser(self) -> None:
+        """Close browser and clean up."""
+        if self._context:
+            await self._context.close()
+        if self._browser:
+            await self._browser.close()
+        if self._playwright:
+            await self._playwright.stop()
+        self._page = None
+        self._context = None
+        self._browser = None
+        self._playwright = None
+    
+    def _get_or_create_credentials(
+        self,
+        supplier: dict[str, Any],
+    ) -> dict[str, str]:
+        """Get existing credentials or generate new ones."""
+        creds = get_supplier_credentials(self.supplier_key)
+        if not creds:
+            # Generate new password
+            from oilwatch.credentials import generate_supplier_password
+            password = generate_supplier_password(self.supplier_name)
+            store_supplier_credentials(
+                supplier_key=self.supplier_key,
+                password=password,
+                supplier_name=self.supplier_name,
+            )
+            creds = {"email": load_contact().email, "password": password}
+        return creds
+    
+    def quote(
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        context: dict[str, Any],
+    ) -> QuoteResult:
+        """
+        Get a quote using browser automation.
+        
+        This is the synchronous entry point that runs async browser code.
+        """
+        async def _run() -> QuoteResult:
+            try:
+                page = await self._setup_browser(headless=True)
+                
+                # Get credentials
+                creds = self._get_or_create_credentials(supplier)
+                
+                # Navigate to login
+                await page.goto(self.login_url, wait_until="domcontentloaded")
+                
+                # Try to log in
+                try:
+                    login_success = await self.login(page, creds["email"], creds["password"])
+                    if not login_success:
+                        # Login failed - may need to register
+                        return await self._handle_registration_or_error(
+                            supplier, quantity_liters, context, page, creds
+                        )
+                except Exception as e:
+                    # Login threw exception - may need registration
+                    return await self._handle_registration_or_error(
+                        supplier, quantity_liters, context, page, creds, str(e)
+                    )
+                
+                # Get quote using browser
+                result = await self.get_quote_with_browser(supplier, quantity_liters, context, page)
+                return result
+                
+            except Exception as e:
+                return QuoteResult(
+                    supplier_id=int(supplier["id"]),
+                    supplier_name=supplier["name"],
+                    observed_at=self.now(),
+                    quantity_liters=quantity_liters,
+                    status="error",
+                    source=f"{self.supplier_key}_browser",
+                    notes=f"Browser automation error: {str(e)}",
+                )
+            finally:
+                await self._close_browser()
+        
+        return asyncio.run(_run())
+    
+    async def _handle_registration_or_error(
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        context: dict[str, Any],
+        page: Page,
+        creds: dict[str, str],
+        error: str = "",
+    ) -> QuoteResult:
+        """Handle registration flow or return error with instructions."""
+        # Check if there's a registration link
+        register_link = await page.query_selector('a:has-text("Register"), a:has-text("Sign Up"), a:has-text("Create Account")')
+        
+        if register_link:
+            # Registration available - return instructions
+            return QuoteResult(
+                supplier_id=int(supplier["id"]),
+                supplier_name=supplier["name"],
+                observed_at=self.now(),
+                quantity_liters=quantity_liters,
+                status="manual_action_required",
+                source=f"{self.supplier_key}_browser",
+                notes=self._build_registration_instructions(creds, error),
+            )
+        
+        # No registration - return error
+        return QuoteResult(
+            supplier_id=int(supplier["id"]),
+            supplier_name=supplier["name"],
+            observed_at=self.now(),
+            quantity_liters=quantity_liters,
+            status="error",
+            source=f"{self.supplier_key}_browser",
+            notes=f"Login failed: {error}. Manual action required.",
+        )
+    
+    def _build_registration_instructions(self, creds: dict[str, str], error: str = "") -> str:
+        """Build instructions for manual registration."""
+        return (
+            f"{self.supplier_name.upper()} - Account Registration Required\n\n"
+            f"LOGIN ATTEMPT FAILED: {error}\n\n"
+            f"CREDENTIALS (use for manual registration):\n"
+            f"Email: {creds['email']}\n"
+            f"Password: {creds['password']}\n\n"
+            f"REGISTRATION STEPS:\n"
+            f"1. Go to: {self.login_url}\n"
+            f"2. Click 'Register' or 'Sign Up'\n"
+            f"3. Use email: {creds['email']}\n"
+            f"4. Set password: {creds['password']}\n"
+            f"5. Complete registration form\n"
+            f"6. Verify email if required\n"
+            f"7. Log in and get quote for 1000L\n\n"
+            f"Note: Credentials have been saved for future automated access."
+        )
+    
+    def place_order(
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        agreed_price_per_liter: float,
+        context: dict[str, Any],
+    ) -> OrderResult:
+        """Place an order - requires manual confirmation for safety."""
+        return OrderResult(
+            supplier_id=int(supplier["id"]),
+            supplier_name=supplier["name"],
+            created_at=self.now(),
+            quantity_liters=quantity_liters,
+            agreed_price_per_liter=agreed_price_per_liter,
+            status="manual_action_required",
+            notes=f"Order placement requires manual confirmation. Log in at {self.base_url} to complete order.",
+        )
+    
+    async def discover_api(self) -> dict[str, Any]:
+        """
+        Discover API endpoints by browsing the site.
+        
+        Returns:
+            Dict with discovered API endpoints and patterns
+        """
+        await self._setup_browser(headless=True)
+        try:
+            if self._page:
+                await self._page.goto(self.base_url, wait_until="domcontentloaded")
+                await self._page.wait_for_timeout(3000)  # Let JS load
+                
+                return {
+                    "requests": self._api_requests,
+                    "responses": self._api_responses,
+                    "base_url": self.base_url,
+                }
+        finally:
+            await self._close_browser()
+        return {}

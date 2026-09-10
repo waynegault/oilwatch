@@ -1,0 +1,193 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from oilwatch.analytics import AnalyticsService
+from oilwatch.config import Settings, load_settings, load_supplier_overrides
+from oilwatch.db import Database
+from oilwatch.discovery import DiscoveryService
+from oilwatch.geo import GeoService
+from oilwatch.models import utcnow_naive
+from oilwatch.ordering import OrderService
+from oilwatch.quotes import QuoteService
+
+
+class OilWatchApp:
+    def __init__(self, root: Path | None = None) -> None:
+        self.root = root or Path.cwd()
+        self.settings: Settings = load_settings(self.root)
+        self.db = Database(self.settings.database_path)
+        self.geo = GeoService()
+        self.discovery = DiscoveryService(self.settings, self.geo)
+        self.quotes = QuoteService(self.settings.currency, self.settings.home.label)
+        self.analytics = AnalyticsService()
+        self.ordering = OrderService()
+
+    def init(self) -> dict[str, Any]:
+        self.db.init_schema()
+        imported = 0
+        for supplier in load_supplier_overrides(self.root):
+            self.db.upsert_supplier(supplier)
+            imported += 1
+        return {
+            "database_path": str(self.settings.database_path),
+            "imported_overrides": imported,
+        }
+
+    def discover_suppliers(self) -> dict[str, Any]:
+        self.db.init_schema()
+        candidates = self.discovery.discover()
+        stored = 0
+        active_websites: list[str] = []
+        for candidate in candidates:
+            self.db.upsert_supplier(candidate.to_record())
+            active_websites.append(candidate.website)
+            stored += 1
+        self.db.mark_missing_suppliers_inactive(active_websites)
+        return {
+            "stored_suppliers": stored,
+            "radius_miles": self.settings.radius_miles,
+            "home": self.settings.home.label,
+        }
+
+    def suppliers(self, include_inactive: bool = False) -> list[dict[str, Any]]:
+        self.db.init_schema()
+        return self.db.list_suppliers(include_inactive=include_inactive)
+
+    def quote_supplier(
+        self,
+        supplier_id: int,
+        postcode: str | None = None,
+        prefer_browser: bool = False,
+    ) -> dict[str, Any]:
+        self.db.init_schema()
+        supplier = self.db.get_supplier(supplier_id)
+        if not supplier:
+            raise ValueError(f"Unknown supplier id: {supplier_id}")
+        result = self.quotes.quote_supplier(
+            supplier,
+            self.settings.quote_quantity_liters,
+            postcode=postcode,
+            prefer_browser=prefer_browser,
+        )
+        self.db.record_quote(result.to_record())
+        return result.to_record()
+
+    def quote_all(
+        self,
+        postcode: str | None = None,
+        prefer_browser: bool = False,
+    ) -> list[dict[str, Any]]:
+        self.db.init_schema()
+        results: list[dict[str, Any]] = []
+        for supplier in self.db.list_suppliers(include_inactive=False):
+            try:
+                result = self.quotes.quote_supplier(
+                    supplier,
+                    self.settings.quote_quantity_liters,
+                    postcode=postcode,
+                    prefer_browser=prefer_browser,
+                )
+                payload = result.to_record()
+            except Exception as exc:  # noqa: BLE001
+                payload = {
+                    "supplier_id": supplier["id"],
+                    "supplier_name": supplier["name"],
+                    "observed_at": utcnow_naive().isoformat(),
+                    "quantity_liters": self.settings.quote_quantity_liters,
+                    "status": "error",
+                    "price_per_liter": None,
+                    "total_price": None,
+                    "currency": self.settings.currency,
+                    "source": supplier.get("connector_type", "unknown"),
+                    "notes": str(exc),
+                    "raw_payload": {},
+                }
+            self.db.record_quote(payload)
+            results.append(payload)
+        return results
+
+    def _current_quotes(self) -> list[dict[str, Any]]:
+        """Latest successful quote per supplier, ignoring stale history.
+
+        Without the age window a supplier whose only priced quote came from the
+        historical spreadsheet import would outrank suppliers quoted today.
+        """
+        return self.db.latest_quotes(max_age_days=self.settings.max_quote_age_days)
+
+    def cheapest(self) -> dict[str, Any]:
+        self.db.init_schema()
+        return self.analytics.latest_market_snapshot(self._current_quotes())
+
+    def current_prices(self) -> list[dict[str, Any]]:
+        self.db.init_schema()
+        return self._current_quotes()
+
+    def status(self) -> dict[str, Any]:
+        self.db.init_schema()
+        snapshot = self.analytics.latest_market_snapshot(self._current_quotes())
+        trend = self.analytics.price_trend(self.db.all_quotes())
+        return {
+            "market_snapshot": snapshot,
+            "trend": trend,
+            "recommendation": self.analytics.recommendation(snapshot, trend),
+        }
+
+    def monitor_email(self) -> dict[str, Any]:
+        """Poll the inbox for supplier replies, record quotes, delete emails."""
+        from oilwatch.graph_email import GraphEmailMonitor
+
+        self.db.init_schema()
+        try:
+            recorded = GraphEmailMonitor().run(self)
+        except Exception as exc:  # noqa: BLE001 - don't let a transient failure crash the scheduler
+            return {"recorded": [], "error": str(exc)}
+        return {"recorded": recorded}
+
+    def chart(self) -> str:
+        self.db.init_schema()
+        path = self.analytics.build_chart(self.db.all_quotes(), self.settings.chart_path)
+        return str(path)
+
+    def time_series_chart(self) -> str:
+        self.db.init_schema()
+        path = self.analytics.build_time_series_chart(
+            self.db.all_quotes(), self.settings.time_series_chart_path, brent=self.db.all_brent()
+        )
+        return str(path)
+
+    def import_spreadsheet(self, xls_path: str | None = None) -> dict[str, Any]:
+        from oilwatch.import_xls import DEFAULT_XLS_PATH, import_spreadsheet
+
+        self.db.init_schema()
+        path = Path(xls_path) if xls_path else DEFAULT_XLS_PATH
+        return import_spreadsheet(self.db, path, self.settings.quote_quantity_liters)
+
+    def update_brent(self) -> dict[str, Any]:
+        from oilwatch.brent import update_brent
+
+        self.db.init_schema()
+        return update_brent(self.db)
+
+    def place_order(
+        self,
+        supplier_id: int,
+        agreed_price_per_liter: float,
+        postcode: str | None = None,
+        quantity_liters: int | None = None,
+    ) -> dict[str, Any]:
+        self.db.init_schema()
+        supplier = self.db.get_supplier(supplier_id)
+        if not supplier:
+            raise ValueError(f"Unknown supplier id: {supplier_id}")
+        quantity = quantity_liters or self.settings.quote_quantity_liters
+        result = self.ordering.place_order(
+            supplier=supplier,
+            quantity_liters=quantity,
+            agreed_price_per_liter=agreed_price_per_liter,
+            postcode=postcode,
+            home_label=self.settings.home.label,
+        )
+        self.db.record_order(result.to_record())
+        return result.to_record()

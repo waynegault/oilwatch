@@ -1,0 +1,106 @@
+[
+  {
+    "name": "Connon Bros",
+    "website": "https://connon.fuelsoft.co.uk/",
+    "status": "active",
+    "phone": "01358 720320",
+    "connector_type": "manual",
+    "connector_config": {
+      "quote_url": "https://oilweb.johnstonfuels.co.uk/Connon/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore"
+    },
+    "notes": "Connon Oils is now part of Johnston Oils; Fuelsoft WebOrdering form (scraped via browser connector)."
+  },
+  {
+    "name": "Johnson Oils",
+    "website": "https://oilweb.johnstonfuels.co.uk/JOil/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore",
+    "status": "active",
+    "phone": "01224 774774",
+    "connector_type": "manual",
+    "notes": "Fuelsoft WebOrdering form (scraped via browser connector)."
+  },
+  {
+    "name": "Regency Oils",
+    "website": "https://www.regencyoils.com/",
+    "status": "active",
+    "phone": "0800 838500",
+    "connector_type": "manual",
+    "connector_config": {
+      "quote_url": "https://order.regencyoils.co.uk/WEBPLUS/Portal.aspx?action=quote",
+      "product_value": "3302"
+    },
+    "notes": "Fuelsoft WEBPLUS platform (scraped via browser connector)."
+  },
+  {
+    "name": "Gleaner Oils",
+    "website": "https://www.gleaner.co.uk/",
+    "status": "active",
+    "phone": "01224 877575",
+    "connector_type": "manual",
+    "notes": "Quote via wpforms / phone."
+  },
+  {
+    "name": "Highland Fuels",
+    "website": "https://www.highlandfuels.co.uk/home-heating",
+    "status": "active",
+    "phone": "0800 224 224",
+    "connector_type": "manual",
+    "notes": "Quote via form / phone."
+  },
+  {
+    "name": "Fueltool",
+    "website": "https://www.fueltool.co.uk/",
+    "status": "active",
+    "connector_type": "manual",
+    "notes": "UK-average benchmark (scraped via HTTP). Not a local supplier."
+  },
+  {
+    "name": "Turriff Fuels",
+    "website": "https://turriff-fuels.co.uk",
+    "status": "active",
+    "phone": "01888 562706",
+    "connector_type": "manual",
+    "notes": "Phone only - no website found."
+  },
+  {
+    "name": "Compass Fuels",
+    "website": "https://compassfuels.co.uk/",
+    "status": "active",
+    "phone": "0330 128 9838",
+    "connector_type": "manual",
+    "notes": "Aberdeen depot (covers AB21); quote via EasyOil form / phone."
+  },
+  {
+    "name": "Carnegie Fuels",
+    "website": "https://carnegiefuels.co.uk/",
+    "status": "active",
+    "phone": "01356 648 648",
+    "email": "info@carnegiefuels.co.uk",
+    "connector_type": "manual",
+    "notes": "East Scotland (Dunfermline to Fraserburgh). Online ordering is suspended by their own notice, which points customers to phone/email, so this is a phone/email quote rather than a form."
+  },
+  {
+    "name": "Nationwide Fuels",
+    "website": "https://www.nationwidefuels.co.uk/",
+    "status": "active",
+    "phone": "0330 678 0880",
+    "connector_type": "manual",
+    "notes": "UK-wide; quote via form / phone."
+  },
+  {
+    "name": "Crown Oil",
+    "website": "https://www.crownoil.co.uk/",
+    "status": "active",
+    "phone": "0330 123 1444",
+    "connector_type": "manual",
+    "notes": "UK-wide; quote via form / phone."
+  },
+  {
+    "name": "Brogan Fuels",
+    "website": "https://www.brogans.co.uk/",
+    "status": "active",
+    "phone": "0345 300 8844",
+    "email": "domestic@brogans.co.uk",
+    "connector_type": "manual",
+    "notes": "Trades as part of Scottish Fuels (identical phone number), so the Scottish Fuels connector covers its price - no separate quote to fetch."
+  }
+]

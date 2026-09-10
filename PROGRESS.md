@@ -1,0 +1,201 @@
+# OilWatch Progress Summary
+
+**Date:** 10 September 2026
+**Package version:** 0.1.0 (unchanged since the prototype — see `pyproject.toml`)
+
+> This file supersedes a stale March-2026 version that described an empty
+> database and a single test file. None of that is true any more. Figures below
+> were verified on 2026-09-10.
+
+---
+
+## Executive summary
+
+OilWatch tracks domestic heating-oil prices around Hatton of Fintray,
+Aberdeenshire (AB21 0YA) to answer one question: **which supplier is cheapest
+right now, and is it a good moment to buy?**
+
+It is a working system, not a prototype:
+
+| Area | State |
+|------|-------|
+| Modules under `oilwatch/` | 46 Python files |
+| Supplier connectors | 16 supplier-specific, plus 4 generic |
+| CLI commands | 19 |
+| MCP tools | 8 (served over streamable HTTP) |
+| Tests | 88, all passing offline |
+| Database | 26 suppliers, 185 quotes, 0 orders |
+
+---
+
+## Verified components
+
+### Core
+
+| File | Purpose |
+|------|---------|
+| `cli.py` | CLI entry point (19 commands) |
+| `service.py` | `OilWatchApp` — orchestration used by both CLI and MCP |
+| `mcp_server.py` | FastMCP server, 8 tools, streamable HTTP on `/mcp` |
+| `scheduler.py` | APScheduler jobs for recurring discovery / quotes |
+| `db.py` | SQLite layer (`data/oilwatch.sqlite`) |
+| `models.py`, `config.py`, `pricing.py` | Data models, settings, VAT + £/p normalisation |
+| `credentials.py` | Supplier credential loading |
+
+### Collection
+
+| File | Purpose |
+|------|---------|
+| `discovery.py` | DuckDuckGo supplier discovery |
+| `geo.py` | Nominatim geocoding + distance |
+| `api_discovery.py` | Reverse-engineering of supplier quote APIs |
+| `auto_register.py` | Supplier account registration attempts |
+| `browser_auth.py` | Login + persisted session handling |
+| `form_submit.py` | Quote-request form submission |
+| `quotes.py` | Quote collection orchestration |
+| `email_monitor.py`, `graph_email.py` | Poll the inbox via Microsoft Graph, extract replies, delete processed mail |
+| `import_xls.py` | Import `Oil Prices.xls` history |
+| `brent.py` | Brent crude daily series from the EIA |
+| `analytics.py` | Cheapest / average / variance, trend, charts |
+| `ordering.py` | Order placement (platform only — not configured) |
+
+### Connectors
+
+Generic: `base.py`, `manual.py`, `price_page.py`, `http_form.py`,
+`browser_base.py`.
+
+Supplier-specific (`oilwatch/connectors/suppliers/`, 16): `valueoils`,
+`valueoils_browser`, `homefuels_direct`, `homefuels_direct_browser`, `rix`,
+`rix_browser`, `scottish_fuels`, `scottish_fuels_browser`, `regency_oils`,
+`fuelsoft`, `fueltool`, `boilerjuice`, `highland_fuels`, `oilfast`,
+`brogan_fuels`, `telephone`.
+
+Collection methods split three ways: plain HTTP where the price is
+server-rendered, browser automation (Playwright) where a form or login gates it,
+and a telephone script generator for the phone-only depots.
+
+### CLI commands
+
+`init`, `discover`, `suppliers`, `quote`, `quote-all`, `cheapest`, `status`,
+`chart`, `time-series`, `import-spreadsheet`, `update-brent`, `place-order`,
+`schedule`, `phone-script`, `api-discover`, `register`, `login`,
+`submit-requests`, `monitor-email`, `login-email`.
+
+### MCP tools
+
+`list_suppliers`, `current_prices`, `cheapest`, `status`, `chart`,
+`time_series_chart`, `refresh_prices`, `update_brent`.
+
+`refresh_prices` runs browser automation and takes minutes; OpenClaw is
+configured with a 300 s request timeout to accommodate it.
+
+### Tests
+
+`python -m unittest discover -s tests -t .` — 88 tests, all offline (mocked HTTP,
+temp SQLite).
+
+Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
+Fueltool/Fuelsoft parsing, browser auth, Brent, spreadsheet import, email
+monitoring, and end-to-end app wiring.
+
+---
+
+## Database (as of 2026-09-10)
+
+- **Path:** `data/oilwatch.sqlite`
+- **Suppliers:** 26 (17 `active`, the rest historical)
+- **Quotes:** 185
+- **Orders:** 0
+
+Quote timestamps span **2007-01-26 → 2026-09-10**, because
+`import-spreadsheet` loaded the historical workbook. Recent automated runs
+(2026-09-09 22:19–22:40 and 2026-09-10 00:13) produced priced `ok` quotes for
+Scottish Fuels, Rix, Regency Oils, Connon Bros, Johnson Oils, HomeFuels Direct,
+Highland Fuels, Fueltool and ValueOils.
+
+**Fixed 2026-09-10 — `cheapest` used to ignore recency.** `latest_quotes()` took
+the most recent *successful priced* quote per supplier with no age limit, so
+suppliers whose only priced row came from the spreadsheet import won on
+19-month-old numbers: `cheapest` reported **Gleaner Oils at 63.68p/L
+(2025-02-06)** when the cheapest real quote was **HomeFuels Direct at £1.0416/L
+(2026-09-09)**, and the average/variance were polluted the same way.
+`latest_quotes(max_age_days=…)` now takes a cut-off, driven by the
+`max_quote_age_days` setting (default 30 days); `cheapest`, `current_prices` and
+`status` all use it. Regression tests in `tests/test_db.py` and
+`tests/test_app.py`.
+
+---
+
+## Automation status
+
+- **Working end-to-end:** ValueOils, HomeFuels Direct, Fueltool (HTTP);
+  Rix, Regency Oils, Connon Bros / Johnston, Fuelsoft platform (browser);
+  Scottish Fuels (browser, Magento + reCAPTCHA login).
+- **Phone-only:** Oilfast Insch, Turriff Fuels, Brogan Fuels, Carnegie Fuels,
+  Compass Fuels, Gleaner Oils, Highland Fuels.
+- **Scheduled:** daily email monitor (`monitor_email.bat`), plus the in-process
+  scheduler for discovery and quotes.
+
+### MCP / OpenClaw integration
+
+The server is registered in OpenClaw (`~/.openclaw/openclaw.json`) as
+`mcp.servers.oilwatch`, `transport: "streamable-http"`, URL
+`http://172.28.144.1:8000/mcp` — the WSL **NAT gateway**, i.e. the Windows host.
+
+WSL cannot reach a Windows-hosted service on `localhost`/`127.0.0.1`, and the
+address that works **depends on the WSL networking mode**: under NAT (current) it
+is the NAT gateway `172.28.144.1`; under mirrored it was the LAN IP
+`192.168.33.56`. Switching modes silently breaks the integration — after any
+change verify from WSL and re-read `wsl -e ip route` (the `default via` line).
+
+Verified 2026-09-10 with OpenClaw 2026.9.2: `openclaw mcp probe oilwatch`
+reports **8 tools, resources, prompts**, and an MCP `initialize` handshake from
+WSL returns `serverInfo: {"name":"oilwatch","version":"3.1.1"}`.
+
+Start it with `start_mcp_server.bat` (binds `0.0.0.0:8000`).
+
+---
+
+## Documentation debt
+
+- **Resolved 2026-09-10:** the stale `data/SUPPLIER_PRICES.md`,
+  `data/AUTOMATION_STATUS.md` and `data/REGISTRATION_SUMMARY.md` reports — dated
+  2026-03-23, mutually contradictory on price and VAT, and carrying
+  account/credential notes — were deleted. Nothing generated or read them, and
+  they remain in git history if ever needed.
+- `README.md`'s body was refreshed against verified state on 2026-09-10 (its
+  automation table had claimed "2 of 8 suppliers" and a hand-set HomeFuels price,
+  both long obsolete). It now records *how* each supplier is reached rather than
+  hardcoding prices that rot.
+- **Resolved 2026-09-10:** the owner's name and email were hardcoded as defaults
+  across ~10 modules, so they were published with the repository. Identity now
+  comes from `config/contact.json` (gitignored) or the `OILWATCH_*` environment
+  variables via `oilwatch/identity.py`, and `tests/test_identity.py` fails the
+  build if a personal literal reappears. Two postcodes were also in conflict in
+  source (`AB52 6TA` vs `AB21 0YA`); both now resolve to
+  `settings.default_postcode`. The old values remain in git history.
+- The README's MCP section listed seven tools that do not exist
+  (`init_database`, `collect_all_quotes`, `place_order`, …) with a workflow that
+  would have failed. Replaced with the eight tools the server actually serves,
+  and a note that there is no ordering tool.
+
+---
+
+## Next actions
+
+1. **Decide the supplier source of truth** — suppliers are registered now
+   (Connon Bros, Highland Fuels, Turriff Fuels and Gleaner Oils are all active),
+   but the manual `Oil Prices.xls` workbook remains the authority on which
+   suppliers actually matter and what their URLs are.
+2. **Encrypt `config/supplier_credentials.json` at rest** — it is gitignored and
+   never committed, but the passwords are plain text on disk. Needs a key
+   management decision (OS keyring vs passphrase + env var).
+3. **Add retry/backoff and structured logging** — currently a transient HTTP
+   failure or a changed selector is only visible in a quote's `notes`.
+4. **Keep the OpenClaw `oilwatch` URL valid** — it points at the WSL NAT gateway
+   (`172.28.144.1`), which changes if the WSL vEthernet is recreated; re-check
+   with `wsl -e ip route` after a mode change or reboot.
+5. **Tune `max_quote_age_days`** if 30 days proves too tight for suppliers that
+   are only quoted monthly.
+6. **Run the MCP server as a scheduled task / logon service** rather than
+   leaving it foreground under `start_mcp_server.bat`.

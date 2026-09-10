@@ -1,0 +1,51 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Database files
+*.sqlite
+*.sqlite3
+
+# Chart images (generated)
+*.png
+
+# IDE
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+
+# Credentials and sensitive config
+config/supplier_credentials.json
+config/email_credentials.json
+config/contact.json
+config/*.json.example
+!config/contact.example.json
+
+# API discovery results (large files)
+data/api_discovery/
+
+# Registration results
+data/registration_results.json
+
+# Test coverage
+htmlcov/
+.coverage
+.coverage.*
+
+# Distribution
+dist/
+build/
+*.egg-info/
+

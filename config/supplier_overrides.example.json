@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Example Direct Price Supplier",
+    "website": "https://example.com/heating-oil",
+    "status": "active",
+    "connector_type": "price_page",
+    "connector_config": {
+      "quote_url": "https://example.com/heating-oil",
+      "price_regex": "(\\d+\\.\\d+)\\s*p(?:ence)?\\s*/\\s*l"
+    }
+  },
+  {
+    "name": "Example Web Form Supplier",
+    "website": "https://example.com/quote",
+    "status": "active",
+    "connector_type": "http_form",
+    "connector_config": {
+      "quote_url": "https://example.com/api/quote",
+      "quote_method": "POST",
+      "quote_fields": {
+        "postcode": "{postcode}",
+        "quantity": "{quantity_liters}"
+      },
+      "price_regex": "\"price_per_liter\"\\s*:\\s*(\\d+\\.\\d+)",
+      "order_url": "https://example.com/api/order",
+      "order_method": "POST",
+      "order_fields": {
+        "quantity": "{quantity_liters}",
+        "price_per_liter": "{agreed_price_per_liter}"
+      },
+      "reference_regex": "\"order_reference\"\\s*:\\s*\"([^\"]+)\""
+    }
+  }
+]
