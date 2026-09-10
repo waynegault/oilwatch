@@ -286,69 +286,66 @@ HomeFuels Direct was compared at 20% VAT, producing a misleading ranking.
 
 | Type | How It Works | Suppliers |
 |------|--------------|-----------|
-| **Browser Automation** | Playwright launches browser, logs in, extracts price | ValueOils, BoilerJuice |
-| **HTTP Scraping** | Direct HTTP request, regex price extraction | HomeFuels Direct |
-| **Manual** | Returns contact details + call script | All others |
+| **HTTP scraping** | One request; price parsed from the response (HTML or XML) | ValueOils, HomeFuels Direct, Fueltool, Highland Fuels |
+| **Browser automation** | Playwright drives the supplier's own quote form, sometimes behind a login session | Rix, Regency Oils, Connon Bros, Johnson Oils, Scottish Fuels, BoilerJuice |
+| **Enquiry form + email** | Form submitted once; the reply price is read from the inbox and the message deleted | Gleaner Oils, Oilfast, Compass, Nationwide, Crown Oil |
+| **Manual / phone** | Contact details plus a generated call sheet | Turriff Fuels, Carnegie Fuels, Brogan Fuels |
 
 ---
 
 ## Local Suppliers (Aberdeenshire Area)
 
-### Automated Suppliers
+Grouped by *how* each supplier is reached rather than by what it charges today —
+run `oilwatch cheapest` for current figures. Hardcoded prices used to live here
+and rotted within weeks.
 
-#### 1. ValueOils ✅
-- **Website:** https://www.valueoils.com/Quote.aspx
-- **Phone:** 03300 57 08 57
-- **Current Price:** £1.558/L (£1,635.90 for 1000L)
-- **Account:** your supplier account email (password in `config/supplier_credentials.json`)
-- **Status:** Fully automated
+### Automated (live prices collected)
 
-#### 2. HomeFuels Direct ✅
-- **Website:** https://homefuelsdirect.co.uk/home/heating-oil-prices/aberdeenshire
-- **Current Price:** £1.46/L (£1,752.00 for 1000L inc 20% VAT)
-- **Account:** your supplier account email (password in `config/supplier_credentials.json`)
-- **Status:** Price tracked (manual update)
+| # | Supplier | Reached by | Website |
+|---|----------|-----------|---------|
+| 1 | ValueOils | HTTP scrape (`valueoils_auto`) | https://www.valueoils.com/Quote.aspx |
+| 2 | HomeFuels Direct | HTTP scrape (`homefuels_live_price`) | https://homefuelsdirect.co.uk/home/heating-oil-prices/aberdeenshire |
+| 3 | Fueltool — *UK-average benchmark, not a local supplier* | HTTP scrape (`fueltool`) | https://www.fueltool.co.uk/ |
+| 4 | Rix | Browser (`rix_browser`) | https://www.rix.co.uk/locations/aberdeen-depot |
+| 5 | Regency Oils | Browser (`fuelsoft`) | https://www.regencyoils.com/ |
+| 6 | Connon Bros | Browser (`fuelsoft`) | https://connon.fuelsoft.co.uk/ |
+| 7 | Johnson Oils | Browser (`fuelsoft`) | https://oilweb.johnstonfuels.co.uk/ |
+| 8 | Highland Fuels | Browser (`highland_fuels`, IQO XML) | https://www.highlandfuels.co.uk/home-heating |
+| 9 | Scottish Fuels | Browser (`scottish_fuels_browser`) plus email replies | https://quote.scottishfuels.co.uk/quote/ |
 
-### Account-Ready Suppliers
+Scottish Fuels needs a live login session: `/quote/` answers 302 to its account
+page once the session lapses, and the connector reports that rather than failing
+obscurely. Re-establish it with `oilwatch login scottish_fuels`.
 
-#### 3. BoilerJuice 🔑
-- **Website:** https://www.boilerjuice.com/uk/journeys/core/quote
-- **Login:** https://www.boilerjuice.com/uk/login
-- **Account:** your supplier account email (password in `config/supplier_credentials.json`)
-- **Status:** Browser connector ready
+BoilerJuice has a browser connector that is written but not yet collecting a
+price. Supplier accounts, where required, live in
+`config/supplier_credentials.json` (gitignored).
 
-#### 4. Scottish Fuels 🔑
-- **Website:** https://scottishfuels.co.uk/heating-oil-in-aberdeenshire/
-- **Quote:** https://quote.scottishfuels.co.uk/quote/
-- **Phone:** 0345 300 8844
-- **Account:** your supplier account email (password in `config/supplier_credentials.json`)
-- **Status:** Needs registration
+### Quote by enquiry form, then email
 
-#### 5. Regency Oils �
-- **Website:** https://www.regencyoils.com/
-- **Phone:** 01542 832327
-- **Account:** your supplier account email (password in `config/supplier_credentials.json`)
-- **Status:** Ready for testing
+These have no scrapeable price page. `oilwatch submit-requests` fills the form;
+`oilwatch monitor-email` then records the reply price and deletes the message.
+Each also has a phone number available through `oilwatch phone-script`.
 
-### Manual Quote Suppliers
+| Supplier | Form platform |
+|----------|---------------|
+| Gleaner Oils | wpforms |
+| Oilfast Insch | enquiry form |
+| Compass Fuels | EasyOil |
+| Nationwide Fuels | enquiry form |
+| Crown Oil | enquiry form |
 
-#### 6. Oilfast Insch 📞
-- **Website:** https://oilfast.co.uk/depot/insch/
-- **Phone:** 01464 631 835 (Insch) | 03302 320 104 (General)
-- **Email:** insch@oilfast.co.uk
-- **Notes:** Local Aberdeenshire supplier, 24hr response
+### Phone only
 
-#### 7. Rix 📞
-- **Website:** https://www.rix.co.uk/locations/aberdeen-depot
-- **Phone:** 01224 418294 (Aberdeen) | 0800 542 4207 (General)
-- **Email:** montsales@rix.co.uk
-- **Notes:** Local Aberdeen depot
+| Supplier | Phone | Email |
+|----------|-------|-------|
+| Turriff Fuels | 01888 562706 | — |
+| Carnegie Fuels | 01356 648 648 | info@carnegiefuels.co.uk |
+| Brogan Fuels | 0345 300 8844 | domestic@brogans.co.uk |
 
-#### 8. Brogan Fuels 📞
-- **Website:** https://www.brogans.co.uk/
-- **Phone:** 0345 300 8844
-- **Email:** domestic@brogans.co.uk
-- **Notes:** Part of Scottish Fuels group
+Carnegie's online ordering is suspended by its own notice, which points
+customers at phone/email. Brogan Fuels trades as part of Scottish Fuels, so the
+Scottish Fuels figure covers it.
 
 ---
 
@@ -375,24 +372,20 @@ HomeFuels Direct was compared at 20% VAT, producing a misleading ranking.
 
 ### Credentials (`config/supplier_credentials.json`)
 
-Supplier account passwords live here, in plain text, because the browser
-connectors must supply the real password to sign in.
+Supplier account passwords live here because the browser connectors must
+supply the real password to sign in.
 
-**This file is gitignored and has never been committed** — `git log --all --
-config/supplier_credentials.json` returns nothing — so publishing the repository
-does not expose it. It is still readable by anything running as your user, so
-treat it like any password file. Encrypting it at rest is an open item (see
-`ROADMAP.md`). Format:
+**This file is gitignored, and it is encrypted at rest** with Windows DPAPI
+(`oilwatch/secretstore.py`), so it is readable only by your Windows account on
+this machine — a copy taken to another machine or account is useless. Legacy
+plain-JSON files are still read, and are re-encrypted on the next save. The
+envelope looks like this (`blob` is base64-encoded binary ciphertext):
 
 ```json
 {
-  "email": "you@example.com",
-  "credentials": {
-    "valueoils": {
-      "email": "you@example.com",
-      "password": "<your password here>"
-    }
-  }
+  "format": "dpapi",
+  "hint": "Encrypted with Windows DPAPI: readable only by this Windows account on this machine.",
+  "blob": "<base64 ciphertext>"
 }
 ```
 
@@ -415,9 +408,8 @@ treat it like any password file. Encrypting it at rest is an open item (see
 1. **Browser automation** is slow (10-30 s per supplier) and runs sequentially
 2. **No retry/backoff** for transient HTTP failures
 3. **No rate limiting** on API discovery
-4. **Credentials stored in plain text** (not encrypted) — local file only, gitignored
-5. **No error notifications** when a quote fails
-6. **No structured logging** — a failure is visible only in that quote's `notes`
+4. **No error notifications** when a quote fails
+5. **No structured logging** — a failure is visible only in that quote's `notes`
 
 ### Known Issues
 

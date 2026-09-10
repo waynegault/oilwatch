@@ -251,11 +251,11 @@ The API discovery tool found these endpoints:
 ## Security Notes
 
 ### Credential Storage
-- Credentials stored in plain text JSON file
-- For production, consider:
-  - Windows Credential Manager integration
-  - Environment variables
-  - Encrypted secrets manager
+- Credentials are encrypted at rest with Windows DPAPI (`oilwatch/secretstore.py`),
+  so `config/supplier_credentials.json` is readable only by this Windows account
+  on this machine
+- The file is gitignored; legacy plain-JSON files are read and re-encrypted on
+  the next save
 
 ### Browser Automation
 - Runs in headless mode by default

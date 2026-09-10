@@ -27,7 +27,7 @@ __pycache__/
 .idea/
 
 # Credentials and sensitive config
-config/supplier_credentials.json
+config/supplier_credentials.json*
 config/email_credentials.json
 config/contact.json
 config/*.json.example
