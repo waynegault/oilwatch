@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import email
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
+from oilwatch.db import Database
 from oilwatch.email_monitor import SUPPLIER_DOMAINS, extract_ppl, load_email_config, sender_domain
 from oilwatch.form_submit import SUPPLIER_FORMS
 from oilwatch.graph_email import GraphEmailMonitor, sender_domain_from_email
@@ -148,6 +151,135 @@ class HighlandFuelsReplyTests(unittest.TestCase):
         assert ex_vat is not None
         inc_vat = apply_vat(ex_vat, DOMESTIC_VAT_RATE)
         self.assertAlmostEqual(inclusive_total(inc_vat, 1000), 1128.75, delta=0.06)
+
+
+class _Response:
+    """Just enough of an httpx.Response for the monitor's calls."""
+
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _Settings:
+    quote_quantity_liters = 1000
+    currency = "GBP"
+
+
+class _App:
+    def __init__(self, db: Database) -> None:
+        self.db = db
+        self.settings = _Settings()
+
+
+class GraphRequestHeaderTests(unittest.TestCase):
+    def test_requests_pin_immutable_message_ids(self) -> None:
+        """Without this, deleting a reply changes its id and it is mined again."""
+        monitor = GraphEmailMonitor(client_id="00000000-0000-0000-0000-000000000000")
+        headers = monitor._headers({"access_token": "secret"})
+        self.assertEqual(headers["Authorization"], "Bearer secret")
+        self.assertIn("ImmutableId", headers["Prefer"])
+
+
+class GraphSweepRerunTests(unittest.TestCase):
+    """A reply must not be recorded twice when its id changes on a folder move.
+
+    The monitor deletes a processed reply out of the inbox, which moves it to
+    Deleted Items, and Graph hands the moved copy a *different* id. The next
+    sweep therefore reads it as unseen mail, and on 2026-09-10 that produced
+    seven duplicate quotes and three duplicate discount codes.
+    """
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.temp_dir.name) / "test.sqlite")
+        self.db.init_schema()
+        self.db.upsert_supplier(
+            {
+                "name": "Rix",
+                "website": "https://rix.co.uk/homes/fuel-quote",
+                "status": "active",
+                "connector_type": "manual",
+                "connector_config": {},
+            }
+        )
+        self.app = _App(self.db)
+        self.monitor = GraphEmailMonitor(client_id="00000000-0000-0000-0000-000000000000")
+        self._get_patcher = patch.object(GraphEmailMonitor, "get_token")
+        self._get_patcher.start().return_value = {"access_token": "token", "refresh_token": ""}
+        self.addCleanup(self._get_patcher.stop)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    @staticmethod
+    def _message(message_id: str, folder: str, received: str = "2026-09-10T09:22:18Z") -> dict:
+        return {
+            "id": message_id,
+            "parentFolderId": folder,
+            "receivedDateTime": received,
+            "from": {"emailAddress": {"address": "sales@rix.co.uk"}},
+            "subject": "Your latest heating oil quote from Rix",
+            "body": {"contentType": "text", "content": "Price per litre 110.35 Total cost £1158.68"},
+        }
+
+    def _sweep(self, inbox: list[dict], deleted_items: list[dict]) -> tuple[list[dict], list[str]]:
+        """One monitor pass, with these messages visible where indicated."""
+        deleted_urls: list[str] = []
+
+        def fake_get(url: str, **kwargs: object) -> _Response:
+            if url.endswith("/me/mailFolders/inbox"):
+                return _Response({"id": "inbox-id"})
+            if "recoverableitemsdeletions" in url:
+                return _Response({"value": deleted_items})
+            return _Response({"value": inbox})
+
+        def fake_delete(url: str, **kwargs: object) -> _Response:
+            deleted_urls.append(url)
+            return _Response({})
+
+        with patch("oilwatch.graph_email.httpx.get", side_effect=fake_get), patch(
+            "oilwatch.graph_email.httpx.delete", side_effect=fake_delete
+        ):
+            recorded = self.monitor.run(self.app)
+        return recorded, deleted_urls
+
+    def test_a_reply_mined_twice_is_recorded_and_reported_once(self) -> None:
+        first, deleted = self._sweep([self._message("AAA", "inbox-id")], [])
+        self.assertEqual(len(first), 1)
+        self.assertEqual(len(self.db.all_quotes()), 1)
+        self.assertEqual(len(deleted), 1, "the processed reply is deleted from the inbox")
+
+        # The moved copy carries a new id, so the ledger cannot recognise it.
+        again, _ = self._sweep([], [self._message("BBB", "deleted-items-id")])
+        self.assertEqual(again, [], "the same observation must not be reported again")
+        self.assertEqual(len(self.db.all_quotes()), 1, "and must not be stored again")
+
+    def test_a_genuinely_new_quote_is_still_recorded(self) -> None:
+        self._sweep([self._message("AAA", "inbox-id")], [])
+
+        later, _ = self._sweep(
+            [], [self._message("CCC", "deleted-items-id", received="2026-09-10T10:22:18Z")]
+        )
+        self.assertEqual(len(later), 1)
+        self.assertEqual(len(self.db.all_quotes()), 2)
+
+    def test_a_repeat_discount_code_is_not_stored_twice(self) -> None:
+        body = "£10 OFF 500-999 litres - Code: UWCNI154305"
+        message = self._message("DDD", "inbox-id")
+        message["body"] = {"contentType": "text", "content": body}
+
+        self._sweep([message], [])
+        moved = self._message("EEE", "deleted-items-id")
+        moved["body"] = {"contentType": "text", "content": body}
+        self._sweep([], [moved])
+
+        self.assertEqual(len(self.db.active_discounts()), 1)
 
 
 if __name__ == "__main__":

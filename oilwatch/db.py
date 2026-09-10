@@ -194,6 +194,31 @@ class Database:
             )
             return int(cursor.lastrowid)
 
+    def quote_already_recorded(self, record: dict[str, Any]) -> bool:
+        """True when an identical observation is already stored.
+
+        Sweeping old mail is deliberate, so the same reply can reach the caller
+        twice — most often because a message's id changes when it moves between
+        folders, which slips past the processed-message ledger. The same
+        supplier, timestamp to the second, price and source is one observation,
+        not a second quote.
+        """
+        with closing(self.connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT 1 FROM quotes
+                WHERE supplier_id IS ? AND observed_at IS ? AND source IS ?
+                  AND price_per_liter IS ?
+                """,
+                (
+                    record["supplier_id"],
+                    record["observed_at"],
+                    record.get("source"),
+                    record.get("price_per_liter"),
+                ),
+            ).fetchone()
+        return row is not None
+
     def record_order(self, record: dict[str, Any]) -> int:
         with closing(self.connect()) as conn, conn:
             cursor = conn.execute(
@@ -265,8 +290,30 @@ class Database:
         return [dict(row) for row in rows]
 
     def record_discount(self, record: dict[str, Any]) -> int:
-        """Store one discount offer captured from a supplier email."""
+        """Store one discount offer captured from a supplier email.
+
+        An exact repeat is ignored rather than stored again: the same message can
+        be mined twice (its id changes when it moves to another folder, which
+        slips past the processed-message ledger) and duplicate rows only add
+        noise to every comparison.
+        """
         with closing(self.connect()) as conn, conn:
+            existing = conn.execute(
+                """
+                SELECT id FROM discounts
+                WHERE supplier_id IS ? AND code IS ? AND amount_gbp = ?
+                  AND min_litres IS ? AND max_litres IS ?
+                """,
+                (
+                    record.get("supplier_id"),
+                    record.get("code"),
+                    record["amount_gbp"],
+                    record.get("min_litres"),
+                    record.get("max_litres"),
+                ),
+            ).fetchone()
+            if existing is not None:
+                return int(existing["id"])
             cursor = conn.execute(
                 """
                 INSERT INTO discounts (

@@ -118,7 +118,14 @@ class GraphEmailMonitor:
         return None
 
     def _headers(self, token: dict[str, Any]) -> dict[str, str]:
-        return {"Authorization": f"Bearer {token['access_token']}"}
+        return {
+            "Authorization": f"Bearer {token['access_token']}",
+            # Immutable ids do not change when a message moves between folders.
+            # Without this, deleting a processed reply hands it a new id in
+            # Deleted Items, the next sweep reads that as unseen mail, and the
+            # same quote is recorded a second time.
+            "Prefer": 'IdType="ImmutableId"',
+        }
 
     def fetch_unseen(self, token: dict[str, Any]) -> list[dict[str, Any]]:
         response = httpx.get(
@@ -270,8 +277,12 @@ class GraphEmailMonitor:
                     "notes": f"From email reply ({domain})",
                     "raw_payload": {"from": sender, "subject": message.get("subject", "")},
                 }
-                app.db.record_quote(record)
-                recorded.append(record)
+                # A reply that was already mined can arrive here again when its
+                # id changed on a folder move; the same observation is not a
+                # second quote, and must not be reported as one either.
+                if not app.db.quote_already_recorded(record):
+                    app.db.record_quote(record)
+                    recorded.append(record)
 
             app.db.mark_message_processed(message_id)
             # Delete only from the inbox. Mail already sitting in Deleted Items is

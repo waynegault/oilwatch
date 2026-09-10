@@ -184,5 +184,89 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(rows[0]["source"], "eia")
 
 
+class DuplicateObservationTests(unittest.TestCase):
+    """Guards against storing the same observation twice."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.temp_dir.name) / "test.sqlite")
+        self.db.init_schema()
+        self.supplier_id = self.db.upsert_supplier(
+            {
+                "name": "A",
+                "website": "https://a.example.com",
+                "status": "active",
+                "connector_type": "manual",
+                "connector_config": {},
+            }
+        )
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _quote(self, **overrides: object) -> dict:
+        record = {
+            "supplier_id": self.supplier_id,
+            "observed_at": "2026-09-10T09:21:51",
+            "quantity_liters": 1000,
+            "status": "ok",
+            "price_per_liter": 1.1331,
+            "total_price": 1133.1,
+            "currency": "GBP",
+            "source": "email",
+            "notes": "",
+            "raw_payload": {},
+        }
+        record.update(overrides)
+        return record
+
+    def test_an_identical_quote_is_recognised(self) -> None:
+        record = self._quote()
+        self.assertFalse(self.db.quote_already_recorded(record))
+        self.db.record_quote(record)
+        self.assertTrue(self.db.quote_already_recorded(record))
+
+    def test_a_different_price_at_the_same_instant_is_a_new_quote(self) -> None:
+        self.db.record_quote(self._quote())
+        self.assertFalse(self.db.quote_already_recorded(self._quote(price_per_liter=1.1400)))
+
+    def test_a_different_timestamp_is_a_new_quote(self) -> None:
+        self.db.record_quote(self._quote())
+        self.assertFalse(self.db.quote_already_recorded(self._quote(observed_at="2026-09-10T10:22:18")))
+
+    def test_the_same_price_from_the_web_is_a_separate_observation(self) -> None:
+        self.db.record_quote(self._quote())
+        self.assertFalse(self.db.quote_already_recorded(self._quote(source="web")))
+
+    def test_an_identical_discount_is_not_stored_twice(self) -> None:
+        offer = {
+            "supplier_id": self.supplier_id,
+            "code": "UWCNI154305",
+            "amount_gbp": 10.0,
+            "min_litres": 500,
+            "max_litres": 999,
+        }
+        first = self.db.record_discount(offer)
+        second = self.db.record_discount(offer)
+        self.assertEqual(first, second, "the repeat should report the row already stored")
+        self.assertEqual(len(self.db.active_discounts()), 1)
+
+    def test_a_discount_for_a_different_band_is_stored(self) -> None:
+        self.db.record_discount(
+            {"supplier_id": self.supplier_id, "code": "X1", "amount_gbp": 10.0, "min_litres": 500, "max_litres": 999}
+        )
+        self.db.record_discount(
+            {"supplier_id": self.supplier_id, "code": "X1", "amount_gbp": 10.0, "min_litres": 1000, "max_litres": 1999}
+        )
+        self.assertEqual(len(self.db.active_discounts()), 2)
+
+    def test_uncoded_offers_of_different_value_are_not_collapsed(self) -> None:
+        """Two offers with no code are only the same offer if they match exactly."""
+        self.db.record_discount({"supplier_id": self.supplier_id, "code": None, "amount_gbp": 10.0})
+        self.db.record_discount({"supplier_id": self.supplier_id, "code": None, "amount_gbp": 10.0})
+        self.db.record_discount({"supplier_id": self.supplier_id, "code": None, "amount_gbp": 12.0})
+        self.assertEqual(len(self.db.active_discounts()), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
