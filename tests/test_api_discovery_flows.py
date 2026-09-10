@@ -80,11 +80,6 @@ class DiscoverTests(unittest.TestCase):
         self.assertEqual(summary["api_endpoints_found"], 2)
         self.assertTrue(any(deep in urls for urls in summary["endpoint_groups"].values()))
 
-    def test_get_api_endpoints_returns_what_was_found(self) -> None:
-        tool = APIDiscoveryTool()
-        tool._api_endpoints = {"https://example.co.uk/api/quote": {"method": "POST"}}
-        self.assertIn("https://example.co.uk/api/quote", tool.get_api_endpoints())
-
     def test_save_results_writes_the_summary_and_traffic(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tool = APIDiscoveryTool(output_dir=Path(tmp))

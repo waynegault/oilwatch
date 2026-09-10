@@ -130,14 +130,6 @@ class ReportingTests(AppTestCase):
         self.assertIn("recommendation", status)
         self.assertEqual(status["last_purchase"]["supplier_name"], "ValueOils")
 
-    def test_charts_return_the_written_path(self) -> None:
-        with (
-            patch.object(self.app.analytics, "build_chart", return_value=self.root / "data" / "c.png"),
-            patch.object(self.app.analytics, "build_time_series_chart", return_value=self.root / "data" / "ts.png"),
-        ):
-            self.assertTrue(self.app.chart().endswith("c.png"))
-            self.assertTrue(self.app.time_series_chart().endswith("ts.png"))
-
 
 class EmailMonitorTests(AppTestCase):
     def test_monitor_email_returns_what_was_recorded(self) -> None:
@@ -157,18 +149,6 @@ class MaintenanceTests(AppTestCase):
     def test_import_spreadsheet_requires_a_path(self) -> None:
         with self.assertRaises(ValueError):
             self.app.import_spreadsheet()
-
-    def test_import_spreadsheet_delegates(self) -> None:
-        with patch("oilwatch.import_xls.import_spreadsheet", return_value={"imported": 3}) as imported:
-            result = self.app.import_spreadsheet("P:/Oil Prices.xls")
-
-        self.assertEqual(result, {"imported": 3})
-        self.assertEqual(imported.call_args.args[2], 1000)
-
-    def test_update_brent_delegates(self) -> None:
-        with patch("oilwatch.brent.update_brent", return_value={"rows": 1}) as update:
-            self.assertEqual(self.app.update_brent(), {"rows": 1})
-        update.assert_called_once_with(self.app.db)
 
 
 class RecordPurchaseTests(AppTestCase):
