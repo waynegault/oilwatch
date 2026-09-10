@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from oilwatch.connectors.base import BaseConnector
+from oilwatch.http import build_client
 from oilwatch.models import OrderResult, QuoteResult
 
 
@@ -21,14 +22,13 @@ class ScottishFuelsConnector(BaseConnector):
     """
     
     def __init__(self) -> None:
-        self.client = httpx.Client(
-            follow_redirects=True,
+        # Shared client: timeouts, browser headers and transport-level retries
+        # (see oilwatch/http.py, which also owns the default User-Agent).
+        self.client = build_client(
             headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
                 "Accept-Language": "en-GB,en;q=0.5",
-            },
-            timeout=30.0,
+            }
         )
         self.base_url = "https://scottishfuels.co.uk"
         self.quote_url = "https://scottishfuels.co.uk/heating-oil-in-aberdeenshire/"

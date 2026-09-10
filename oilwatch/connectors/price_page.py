@@ -6,16 +6,18 @@ from typing import Any
 import httpx
 
 from oilwatch.connectors.base import BaseConnector
+from oilwatch.http import build_client
 from oilwatch.models import OrderResult, QuoteResult
 from oilwatch.pricing import apply_vat, inclusive_total, normalise_price_per_litre
 
 
 class PricePageConnector(BaseConnector):
     def __init__(self) -> None:
-        self.client = httpx.Client(
-            follow_redirects=True,
-            headers={"User-Agent": "OilWatch/0.1 (+https://github.com/)"},
+        # Shared client (see oilwatch/http.py): timeouts plus transport-level
+        # retries. Keeps the honest OilWatch user agent rather than a browser's.
+        self.client = build_client(
             timeout=20.0,
+            headers={"User-Agent": "OilWatch/0.1 (+https://github.com/)"},
         )
 
     def quote(
