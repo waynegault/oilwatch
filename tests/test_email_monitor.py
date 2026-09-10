@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-import email
-import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from oilwatch.db import Database
-from oilwatch.email_monitor import SUPPLIER_DOMAINS, extract_ppl, load_email_config, sender_domain
+from oilwatch.email_monitor import SUPPLIER_DOMAINS, extract_ppl
 from oilwatch.form_submit import SUPPLIER_FORMS
 from oilwatch.graph_email import GraphEmailMonitor, sender_domain_from_email
-from oilwatch.identity import Contact
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
 
 
@@ -38,16 +35,6 @@ class ExtractPplTests(unittest.TestCase):
 
     def test_scottish_fuels_price_per_litre_p(self) -> None:
         self.assertEqual(extract_ppl("Price Per Litre (Excl. VAT): 101.03p"), 1.0103)
-
-
-class SenderDomainTests(unittest.TestCase):
-    def test_extracts_domain(self) -> None:
-        msg = email.message_from_string("From: John <quotes@gleaner.co.uk>\nSubject: Quote\n\nbody")
-        self.assertEqual(sender_domain(msg), "gleaner.co.uk")
-
-    def test_missing_from(self) -> None:
-        msg = email.message_from_string("Subject: no from\n\nbody")
-        self.assertEqual(sender_domain(msg), "")
 
 
 class SupplierMappingsTests(unittest.TestCase):
@@ -86,41 +73,6 @@ class SupplierMappingsTests(unittest.TestCase):
         self.assertIn("gleaner_oils", SUPPLIER_FORMS)
         self.assertIn("oilfast", SUPPLIER_FORMS)
         self.assertIn("highland_fuels", SUPPLIER_FORMS)
-
-
-class LoadEmailConfigTests(unittest.TestCase):
-    def test_reads_password_from_env(self) -> None:
-        env = {"MICROSOFT_PASSWORD": "secret123", "MICROSOFT_EMAIL": "owner@example.com"}
-        with patch.dict(os.environ, env, clear=False):
-            config = load_email_config()
-        self.assertEqual(config["email"], "owner@example.com")
-        self.assertEqual(config["password"], "secret123")
-        self.assertEqual(config["imap_server"], "outlook.office365.com")
-        self.assertEqual(config["imap_port"], 993)
-
-    def test_mailbox_defaults_to_configured_contact(self) -> None:
-        """With no MICROSOFT_EMAIL the mailbox comes from the contact, not source."""
-        env = {"MICROSOFT_PASSWORD": "secret123", "MICROSOFT_EMAIL": ""}
-        with patch.dict(os.environ, env, clear=False), patch(
-            "oilwatch.email_monitor.load_contact",
-            return_value=Contact(email="owner@example.com"),
-        ):
-            config = load_email_config()
-        self.assertEqual(config["email"], "owner@example.com")
-
-    def test_env_overrides_defaults(self) -> None:
-        env = {
-            "MICROSOFT_PASSWORD": "pw",
-            "MICROSOFT_EMAIL": "other@example.com",
-            "MICROSOFT_IMAP_SERVER": "imap.example.com",
-            "MICROSOFT_IMAP_PORT": "123",
-        }
-        with patch.dict(os.environ, env, clear=False):
-            config = load_email_config()
-        self.assertEqual(config["email"], "other@example.com")
-        self.assertEqual(config["password"], "pw")
-        self.assertEqual(config["imap_server"], "imap.example.com")
-        self.assertEqual(config["imap_port"], 123)
 
 
 class HighlandFuelsReplyTests(unittest.TestCase):

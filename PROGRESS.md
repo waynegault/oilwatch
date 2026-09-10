@@ -23,7 +23,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 22 |
 | MCP tools | 9 (served over streamable HTTP) |
-| Tests | 221, all passing offline |
+| Tests | 216, all passing offline |
 | Database | 26 suppliers, 224 quotes, 0 orders |
 
 ---
@@ -53,7 +53,8 @@ It is a working system, not a prototype:
 | `browser_auth.py` | Login + persisted session handling |
 | `form_submit.py` | Quote-request form submission |
 | `quotes.py` | Quote collection orchestration |
-| `email_monitor.py`, `graph_email.py` | Poll the inbox via Microsoft Graph, extract replies, delete processed mail |
+| `graph_email.py` | Poll the inbox via Microsoft Graph, extract replies and discount codes, delete processed mail |
+| `email_monitor.py` | Supplier reply domains + the price parser the Graph monitor reuses |
 | `import_xls.py` | Import `Oil Prices.xls` history |
 | `brent.py` | Brent crude daily series from the EIA |
 | `analytics.py` | Cheapest / average / variance, trend, charts |
