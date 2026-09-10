@@ -190,6 +190,11 @@ class GraphEmailMonitor:
         ).raise_for_status()
 
     def run(self, app: Any) -> list[dict[str, Any]]:
+        # Make sure the schema exists for direct callers too. The service path
+        # does this, but anything calling run() directly used to fail with
+        # "no such table: processed_messages" on an older database.
+        app.db.init_schema()
+
         token = self.get_token()
         if token is None:
             raise RuntimeError("Not authenticated. Run `oilwatch login-email` first.")

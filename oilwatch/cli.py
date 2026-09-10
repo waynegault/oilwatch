@@ -257,10 +257,11 @@ def main() -> None:
             auth.close()
         _print(results)
     elif args.command == "monitor-email":
-        from oilwatch.graph_email import GraphEmailMonitor
-
-        recorded = GraphEmailMonitor().run(app)
-        _print({"recorded": recorded})
+        # Go through the service rather than straight to GraphEmailMonitor: the
+        # service initialises the schema first (this path used to skip that, so a
+        # newly added table was simply missing on an existing database) and turns
+        # a transient failure into a message instead of a traceback.
+        _print(app.monitor_email())
     elif args.command == "login-email":
         from oilwatch.graph_email import GraphEmailMonitor
 
