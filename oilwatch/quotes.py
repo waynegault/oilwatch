@@ -18,15 +18,15 @@ class QuoteService:
         postcode: str | None = None,
         prefer_browser: bool = False,
     ) -> QuoteResult:
-        connector = get_connector_for_supplier(supplier, prefer_browser=prefer_browser)
-        result = connector.quote(
-            supplier=supplier,
-            quantity_liters=quantity_liters,
-            context={
-                "postcode": postcode,
-                "home_label": self.home_label,
-            },
-        )
+        with get_connector_for_supplier(supplier, prefer_browser=prefer_browser) as connector:
+            result = connector.quote(
+                supplier=supplier,
+                quantity_liters=quantity_liters,
+                context={
+                    "postcode": postcode,
+                    "home_label": self.home_label,
+                },
+            )
         result.currency = self.currency
         return result
 

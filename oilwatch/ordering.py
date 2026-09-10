@@ -13,14 +13,14 @@ class OrderService:
         postcode: str | None = None,
         home_label: str | None = None,
     ) -> OrderResult:
-        connector = get_connector_for_supplier(supplier)
-        return connector.place_order(
-            supplier=supplier,
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            context={
-                "postcode": postcode,
-                "home_label": home_label or "",
-            },
-        )
+        with get_connector_for_supplier(supplier) as connector:
+            return connector.place_order(
+                supplier=supplier,
+                quantity_liters=quantity_liters,
+                agreed_price_per_liter=agreed_price_per_liter,
+                context={
+                    "postcode": postcode,
+                    "home_label": home_label or "",
+                },
+            )
 
