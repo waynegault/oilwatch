@@ -137,17 +137,57 @@ class OilWatchApp:
         """
         return self.db.latest_quotes(max_age_days=self.settings.max_quote_age_days)
 
+    def _with_effective_prices(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Attach the best applicable discount code and the resulting price.
+
+        The stored price is already inclusive of 5% VAT, so ``effective_*`` is a
+        like-for-like comparison: it is what the order would actually cost once
+        any code is applied. The headline price is kept alongside it, because a
+        code may be single-use or non-combinable.
+        """
+        from oilwatch.discounts import DiscountOffer, best_discount_for, effective_price_per_litre
+
+        configured_quantity = self.settings.quote_quantity_liters
+        by_supplier: dict[Any, list[DiscountOffer]] = {}
+        for record in self.db.active_discounts():
+            by_supplier.setdefault(record.get("supplier_id"), []).append(DiscountOffer.from_record(record))
+
+        enriched_rows: list[dict[str, Any]] = []
+        for row in rows:
+            enriched = dict(row)
+            offers = by_supplier.get(row.get("supplier_id")) or []
+            litres = int(row.get("quantity_liters") or configured_quantity)
+            best = best_discount_for(offers, litres) if offers else None
+
+            price = row.get("price_per_liter")
+            if price is not None:
+                effective = effective_price_per_litre(float(price), litres, best)
+                enriched["effective_price_per_liter"] = effective
+                enriched["effective_total_price"] = round(effective * litres, 2)
+
+            enriched["discount"] = (
+                {
+                    "code": best.code,
+                    "amount_gbp": best.amount_gbp,
+                    "expires_at": best.expires_at.isoformat() if best.expires_at else None,
+                }
+                if best
+                else None
+            )
+            enriched_rows.append(enriched)
+        return enriched_rows
+
     def cheapest(self) -> dict[str, Any]:
         self.db.init_schema()
-        return self.analytics.latest_market_snapshot(self._current_quotes())
+        return self.analytics.latest_market_snapshot(self._with_effective_prices(self._current_quotes()))
 
     def current_prices(self) -> list[dict[str, Any]]:
         self.db.init_schema()
-        return self._current_quotes()
+        return self._with_effective_prices(self._current_quotes())
 
     def status(self) -> dict[str, Any]:
         self.db.init_schema()
-        snapshot = self.analytics.latest_market_snapshot(self._current_quotes())
+        snapshot = self.analytics.latest_market_snapshot(self._with_effective_prices(self._current_quotes()))
         trend = self.analytics.price_trend(self.db.all_quotes())
         return {
             "market_snapshot": snapshot,

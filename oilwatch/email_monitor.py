@@ -44,6 +44,14 @@ SUPPLIER_DOMAINS = {
     "brogans.co.uk": "brogans.co.uk",
     "connon-oils.co.uk": "connon",  # Connon Bros/Oils (Fuelsoft, website connon.fuelsoft.co.uk)
     "connon.fuelsoft.co.uk": "connon",
+    # Senders whose mail carries prices or discount codes. ValueOils was missing,
+    # which meant its emails were skipped before anything was parsed — including
+    # the discount offers it sends.
+    "valueoils.com": "valueoils.com",
+    "homefuelsdirect.co.uk": "homefuelsdirect.co.uk",
+    "crownoil.co.uk": "crownoil.co.uk",
+    "nationwidefuels.co.uk": "nationwidefuels.co.uk",
+    "compassfuels.co.uk": "compassfuels.co.uk",
 }
 
 # Price patterns found in supplier reply emails.

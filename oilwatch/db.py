@@ -66,6 +66,21 @@ CREATE TABLE IF NOT EXISTS brent_crude (
     price_usd_per_barrel REAL NOT NULL,
     source TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS discounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id INTEGER,
+    code TEXT,
+    amount_gbp REAL NOT NULL,
+    min_litres INTEGER,
+    max_litres INTEGER,
+    expires_at TEXT,
+    terms TEXT,
+    source TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    raw_text TEXT,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+);
 """
 
 
@@ -241,6 +256,47 @@ class Database:
                 ORDER BY q.price_per_liter ASC
                 """,
                 params,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def record_discount(self, record: dict[str, Any]) -> int:
+        """Store one discount offer captured from a supplier email."""
+        with closing(self.connect()) as conn, conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO discounts (
+                    supplier_id, code, amount_gbp, min_litres, max_litres,
+                    expires_at, terms, source, observed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.get("supplier_id"),
+                    record.get("code"),
+                    record["amount_gbp"],
+                    record.get("min_litres"),
+                    record.get("max_litres"),
+                    record.get("expires_at"),
+                    record.get("terms", ""),
+                    record.get("source", "email"),
+                    record.get("observed_at", utcnow_naive().isoformat()),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def active_discounts(self) -> list[dict[str, Any]]:
+        """Discount offers that have not expired, largest first.
+
+        Offers with no stated expiry are kept: "no expiry given" is not the same
+        as "expired".
+        """
+        with closing(self.connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM discounts
+                WHERE expires_at IS NULL OR expires_at > ?
+                ORDER BY amount_gbp DESC
+                """,
+                (utcnow_naive().isoformat(),),
             ).fetchall()
         return [dict(row) for row in rows]
 

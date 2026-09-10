@@ -140,8 +140,43 @@ class GraphEmailMonitor:
                 continue
 
             text = self._body_text(message)
+
+            # Capture discount codes before anything is deleted: the message is
+            # removed once processed, so an uncaptured code is gone for good.
+            # A discount-only email (no price in it) still earns its keep here.
+            from oilwatch.discounts import parse_discounts
+            from oilwatch.models import utcnow_naive
+
+            stamp = utcnow_naive()
+            raw_stamp = message.get("receivedDateTime") or ""
+            if raw_stamp:
+                try:
+                    # Graph sends "...Z"; keep it naive like the rest of the app so
+                    # expiry comparisons never mix aware and naive datetimes.
+                    stamp = datetime.fromisoformat(raw_stamp.replace("Z", "+00:00")).replace(tzinfo=None)
+                except ValueError:
+                    pass
+
+            offers = parse_discounts(text, received_at=stamp)
+            for offer in offers:
+                app.db.record_discount(
+                    {
+                        "supplier_id": supplier["id"],
+                        "code": offer.code,
+                        "amount_gbp": offer.amount_gbp,
+                        "min_litres": offer.min_litres,
+                        "max_litres": offer.max_litres,
+                        "expires_at": offer.expires_at.isoformat() if offer.expires_at else None,
+                        "terms": offer.terms,
+                        "source": "email",
+                        "observed_at": stamp.isoformat(),
+                    }
+                )
+
             ex_vat = extract_ppl(text)
             if ex_vat is None:
+                if offers:
+                    self.delete(token, message["id"])
                 continue
 
             price_per_liter = apply_vat(ex_vat, DOMESTIC_VAT_RATE)

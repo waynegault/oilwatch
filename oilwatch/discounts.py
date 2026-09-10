@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 from oilwatch.models import utcnow_naive
 
@@ -69,6 +70,25 @@ class DiscountOffer:
     def discounted_total(self, total: float) -> float:
         """Apply the discount to a total, never going below zero."""
         return round(max(0.0, total - self.amount_gbp), 2)
+
+    @classmethod
+    def from_record(cls, record: dict[str, Any]) -> DiscountOffer:
+        """Rebuild an offer from a stored ``discounts`` row."""
+        expires_raw = record.get("expires_at")
+        expires_at = None
+        if expires_raw:
+            try:
+                expires_at = datetime.fromisoformat(str(expires_raw))
+            except ValueError:
+                expires_at = None
+        return cls(
+            amount_gbp=float(record["amount_gbp"]),
+            code=record.get("code"),
+            min_litres=record.get("min_litres"),
+            max_litres=record.get("max_litres"),
+            expires_at=expires_at,
+            terms=record.get("terms") or "",
+        )
 
 
 def _int_or_none(value: str | None) -> int | None:
@@ -149,3 +169,18 @@ def best_discount_for(
     if not applicable:
         return None
     return max(applicable, key=lambda offer: offer.amount_gbp)
+
+
+def effective_price_per_litre(
+    price_per_litre: float,
+    litres: int,
+    discount: DiscountOffer | None,
+) -> float:
+    """Spread a discount across an order and return the resulting £/L.
+
+    This is the figure a comparison should quote: the headline price is what the
+    supplier lists, the effective price is what the order actually costs.
+    """
+    if discount is None or litres <= 0:
+        return round(price_per_litre, 4)
+    return round(discount.discounted_total(price_per_litre * litres) / litres, 4)
