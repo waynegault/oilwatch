@@ -24,8 +24,29 @@ from __future__ import annotations
 
 import json
 import platform
+import time
 import winreg
 from pathlib import Path
+
+# Login form fields, most specific first. Magento themes differ between the
+# Luma theme (#email/#pass) and blank-theme forms (login[username]).
+EMAIL_SELECTORS = (
+    "input[name='login[username]']",
+    "input#email",
+    "input[name='email']",
+    "input[type='email']",
+)
+PASSWORD_SELECTORS = (
+    "input[name='login[password]']",
+    "input#pass",
+    "input[name='password']",
+    "input[type='password']",
+)
+SUBMIT_SELECTORS = (
+    "button#send2",
+    "button[type='submit']",
+    "input[type='submit']",
+)
 
 # undetected-chromedriver imports distutils, which was removed from the stdlib
 # in Python 3.12+. Importing setuptools first provides the distutils shim.
@@ -110,6 +131,81 @@ class BrowserAuth:
             print("The session is still held in the persistent Chrome profile.")
         finally:
             self.close()
+
+    DEFINITION_MARKERS = ("logout", "sign out", "my account")
+
+    def automated_login(
+        self,
+        url: str,
+        email: str,
+        password: str,
+        *,
+        wait_before_submit: float = 5.0,
+        wait_after_submit: float = 10.0,
+        headless: bool = False,
+    ) -> bool:
+        """Sign in with stored credentials, without a human.
+
+        The form is guarded by *invisible* reCAPTCHA v3: a hidden ``token`` field
+        is populated by its JavaScript a moment after load. Clicking Sign In
+        before that fires silently reloads the login page — indistinguishable
+        from wrong credentials — so the wait below is load-bearing.
+
+        Returns True when the page then shows authenticated markers.
+        """
+        driver = self.launch(headless=headless)
+        driver.get(url)
+
+        email_field = self._find_first(driver, EMAIL_SELECTORS)
+        password_field = self._find_first(driver, PASSWORD_SELECTORS)
+        if email_field is None or password_field is None:
+            self.close()
+            raise RuntimeError(f"Could not find the login fields on {url}")
+
+        email_field.clear()
+        email_field.send_keys(email)
+        password_field.clear()
+        password_field.send_keys(password)
+
+        time.sleep(wait_before_submit)  # let the reCAPTCHA token populate
+
+        submit = self._find_first(driver, SUBMIT_SELECTORS)
+        if submit is None:
+            self.close()
+            raise RuntimeError(f"Could not find the Sign In button on {url}")
+        driver.execute_script("arguments[0].click();", submit)
+
+        time.sleep(wait_after_submit)
+        logged_in = self.is_authenticated(driver)
+        if logged_in:
+            self.save_cookies()
+        self.close()
+        return logged_in
+
+    @staticmethod
+    def _find_first(driver, selectors: tuple[str, ...]):
+        """Return the first element matching any selector, or None."""
+        from selenium.webdriver.common.by import By
+
+        for selector in selectors:
+            found = driver.find_elements(By.CSS_SELECTOR, selector)
+            if found:
+                return found[0]
+        return None
+
+    @classmethod
+    def is_authenticated(cls, driver) -> bool:
+        """True when the page renders signed-in markers.
+
+        Checked against page content rather than the URL: Magento redirects a
+        successful login to ``/customer/account/``, whose path also contains the
+        word "account", so a URL test would be ambiguous either way.
+        """
+        try:
+            source = (driver.page_source or "").lower()
+        except Exception:  # noqa: BLE001 - a dead browser is simply "not signed in"
+            return False
+        return any(marker in source for marker in cls.DEFINITION_MARKERS)
 
     def save_cookies(self, path: Path | None = None) -> Path:
         path = path or self.cookies_path()

@@ -9,7 +9,7 @@
   },
   "radius_miles": 50,
   "quote_quantity_liters": 1000,
-  "max_quote_age_days": 30,
+  "max_quote_age_days": 1,
   "currency": "GBP",
   "search_queries": [
     "domestic heating oil suppliers Aberdeenshire",
