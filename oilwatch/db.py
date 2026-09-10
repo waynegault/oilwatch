@@ -81,6 +81,11 @@ CREATE TABLE IF NOT EXISTS discounts (
     raw_text TEXT,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
+
+CREATE TABLE IF NOT EXISTS processed_messages (
+    message_id TEXT PRIMARY KEY,
+    processed_at TEXT NOT NULL
+);
 """
 
 
@@ -299,6 +304,30 @@ class Database:
                 (utcnow_naive().isoformat(),),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def message_processed(self, message_id: str) -> bool:
+        """True when this message has already been mined for prices or codes."""
+        if not message_id:
+            return False
+        with closing(self.connect()) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM processed_messages WHERE message_id = ?", (message_id,)
+            ).fetchone()
+        return row is not None
+
+    def mark_message_processed(self, message_id: str) -> None:
+        """Record a message as handled.
+
+        Needed now that the sweep looks at mail that is already read or deleted:
+        without it, a second pass would record the same quote again.
+        """
+        if not message_id:
+            return
+        with closing(self.connect()) as conn, conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO processed_messages (message_id, processed_at) VALUES (?, ?)",
+                (message_id, utcnow_naive().isoformat()),
+            )
 
     def all_quotes(self) -> list[dict[str, Any]]:
         with closing(self.connect()) as conn:

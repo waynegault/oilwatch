@@ -172,5 +172,82 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
         self.assertEqual(row["effective_price_per_liter"], 1.1144)
 
 
+    def test_the_ranking_uses_the_effective_price(self) -> None:
+        """A code can make the higher headline price the cheaper way to buy."""
+        headline_cheap = self._supplier("CheapHeadline")
+        coded = self._supplier("PriceyWithCode")
+        self._quote(headline_cheap, 1.0400)
+        self._quote(coded, 1.0500)  # £15 off 1,000L brings this to 1.0350
+        self.app.db.record_discount(
+            {
+                "supplier_id": coded,
+                "code": "BIG15",
+                "amount_gbp": 15.0,
+                "min_litres": 1000,
+                "max_litres": None,
+                "expires_at": None,
+                "source": "email",
+                "observed_at": RECEIVED.isoformat(),
+            }
+        )
+
+        winner = self.app.cheapest()["cheapest_supplier"]
+        self.assertEqual(winner["name"], "PriceyWithCode")
+        self.assertEqual(winner["price_per_liter"], 1.0500, "the headline is still reported")
+        self.assertEqual(winner["effective_price_per_liter"], 1.0350)
+        self.assertEqual(winner["discount"]["code"], "BIG15")
+
+    def test_an_expired_code_does_not_reorder_the_market(self) -> None:
+        headline_cheap = self._supplier("CheapHeadline")
+        stale = self._supplier("ExpiredCode")
+        self._quote(headline_cheap, 1.0400)
+        self._quote(stale, 1.0500)
+        self.app.db.record_discount(
+            {
+                "supplier_id": stale,
+                "code": "STALE",
+                "amount_gbp": 15.0,
+                "min_litres": 1000,
+                "max_litres": None,
+                "expires_at": "2020-01-01T00:00:00",
+                "source": "email",
+                "observed_at": "2020-01-01T00:00:00",
+            }
+        )
+
+        self.assertEqual(self.app.cheapest()["cheapest_supplier"]["name"], "CheapHeadline")
+
+
+class ProcessedMessageLedgerTests(unittest.TestCase):
+    """Sweeping old mail needs a ledger, or the same quote is recorded twice."""
+
+    def _db(self):
+        from oilwatch.db import Database
+
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        db = Database(Path(temp_dir.name) / "test.sqlite")
+        db.init_schema()
+        return db
+
+    def test_a_message_is_only_reported_processed_once_marked(self) -> None:
+        db = self._db()
+        self.assertFalse(db.message_processed("msg-1"))
+        db.mark_message_processed("msg-1")
+        self.assertTrue(db.message_processed("msg-1"))
+
+    def test_marking_twice_is_harmless(self) -> None:
+        db = self._db()
+        db.mark_message_processed("msg-1")
+        db.mark_message_processed("msg-1")  # must not raise on the primary key
+        self.assertTrue(db.message_processed("msg-1"))
+
+    def test_a_blank_id_is_never_processed(self) -> None:
+        db = self._db()
+        self.assertFalse(db.message_processed(""))
+        db.mark_message_processed("")  # must not write a row for a blank id
+        self.assertFalse(db.message_processed(""))
+
+
 if __name__ == "__main__":
     unittest.main()

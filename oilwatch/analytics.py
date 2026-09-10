@@ -31,7 +31,17 @@ class AnalyticsService:
                 "quotes_considered": 0,
             }
         priced = [row for row in latest_quotes if row["price_per_liter"] is not None]
-        cheapest = min(priced, key=lambda row: row["price_per_liter"])
+
+        def rank_by(row: dict[str, Any]) -> float:
+            """Rank on what the order costs, not on what the supplier lists.
+
+            A discount code is real money off, so the supplier with the higher
+            headline price can still be the cheapest way to buy.
+            """
+            effective = row.get("effective_price_per_liter")
+            return float(effective if effective is not None else row["price_per_liter"])
+
+        cheapest = min(priced, key=rank_by)
         return {
             "cheapest_supplier": {
                 "supplier_id": cheapest["supplier_id"],
