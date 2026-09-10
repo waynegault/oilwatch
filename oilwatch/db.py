@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS quotes (
     currency TEXT NOT NULL,
     source TEXT NOT NULL,
     notes TEXT,
+    valid_until TEXT,
     raw_payload_json TEXT NOT NULL DEFAULT '{}',
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
@@ -81,6 +82,19 @@ class Database:
     def init_schema(self) -> None:
         with closing(self.connect()) as conn, conn:
             conn.executescript(SCHEMA)
+            # `valid_until` arrived after the first release, so add it in place:
+            # an existing database keeps working instead of needing a reset.
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(quotes)")}
+            if "valid_until" not in columns:
+                conn.execute("ALTER TABLE quotes ADD COLUMN valid_until TEXT")
+            # Give pre-existing rows a validity too, so an older database compares
+            # on the same footing as a fresh one instead of reporting null. Idempotent:
+            # only rows where it is still unset are touched.
+            conn.execute(
+                "UPDATE quotes SET valid_until = "
+                "strftime('%Y-%m-%dT%H:%M:%S', datetime(observed_at, '+24 hours')) "
+                "WHERE valid_until IS NULL"
+            )
 
     def upsert_supplier(self, record: dict[str, Any]) -> int:
         payload = {
@@ -141,8 +155,8 @@ class Database:
                 """
                 INSERT INTO quotes (
                     supplier_id, observed_at, quantity_liters, status, price_per_liter,
-                    total_price, currency, source, notes, raw_payload_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    total_price, currency, source, notes, valid_until, raw_payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record["supplier_id"],
@@ -154,6 +168,7 @@ class Database:
                     record["currency"],
                     record["source"],
                     record.get("notes", ""),
+                    record.get("valid_until"),
                     json.dumps(record.get("raw_payload", {})),
                 ),
             )

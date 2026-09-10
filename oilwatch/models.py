@@ -50,10 +50,20 @@ class QuoteResult:
     source: str = "unknown"
     notes: str = ""
     raw_payload: dict[str, Any] = field(default_factory=dict)
+    #: When this quote stops being a valid offer. A connector may set it from
+    #: what the supplier states on the page; otherwise it defaults below, so
+    #: every quote carries a validity.
+    valid_until: datetime | None = None
 
     def to_record(self) -> dict[str, Any]:
+        from datetime import timedelta
+
         payload = asdict(self)
         payload["observed_at"] = self.observed_at.isoformat()
+        # A day is the working assumption for a heating-oil quote: the suppliers
+        # here re-price daily, and it matches the freshness window the tool uses.
+        valid_until = self.valid_until or self.observed_at + timedelta(hours=24)
+        payload["valid_until"] = valid_until.isoformat()
         return payload
 
 

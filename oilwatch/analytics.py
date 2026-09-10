@@ -39,6 +39,9 @@ class AnalyticsService:
                 "website": cheapest["website"],
                 "price_per_liter": cheapest["price_per_liter"],
                 "observed_at": cheapest["observed_at"],
+                # Surfaced so a comparison says how long the offer stands, not
+                # just what it costs.
+                "valid_until": cheapest.get("valid_until"),
             },
             "average_price_per_liter": round(mean(prices), 4),
             "variance": round(pvariance(prices), 6) if len(prices) > 1 else 0.0,

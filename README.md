@@ -166,8 +166,8 @@ The server exposes eight tools, all read-mostly. There is **no** ordering tool:
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `list_suppliers` | Suppliers on record | None |
-| `current_prices` | Latest price per supplier (£/L inc. VAT); ignores quotes older than `max_quote_age_days` | None |
-| `cheapest` | Cheapest supplier + market average and variance | None |
+| `current_prices` | Latest price per supplier (£/L inc. VAT) with `valid_until`; ignores quotes older than `max_quote_age_days` | None |
+| `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`) | None |
 | `status` | Snapshot + price trend + buy/hold recommendation | None |
 | `chart` | Market summary chart; returns a file path | None |
 | `time_series_chart` | Per-supplier prices with Brent crude on a second axis; returns a path | None |
