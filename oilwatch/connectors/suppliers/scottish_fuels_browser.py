@@ -270,10 +270,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
         """
         values = []
         for m in re.finditer(r"(\d+(?:\.\d{1,2})?)p(?:\s*per\s*litre)?\s*\(Excl\.?\s*VAT\)", text, re.IGNORECASE):
-            try:
-                values.append(float(m.group(1)))
-            except ValueError:
-                continue
+            values.append(float(m.group(1)))
         if not values:
             return None
         return pence_to_pounds(min(values))
