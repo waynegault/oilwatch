@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
-
 from oilwatch.connectors.base import BaseConnector
-from oilwatch.http import build_client
 from oilwatch.models import OrderResult, QuoteResult
 
 
@@ -23,14 +20,9 @@ class OilfastConnector(BaseConnector):
     """
     
     def __init__(self) -> None:
-        # Shared client: timeouts, browser headers and transport-level retries
-        # (see oilwatch/http.py, which also owns the default User-Agent).
-        self.client = build_client(
-            headers={
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-GB,en;q=0.5",
-            }
-        )
+        # Manual contact only: there is no price page to fetch, so no HTTP client
+        # is built. An unused one here would just leak a connection pool, since
+        # the registry builds a connector per call.
         self.base_url = "https://oilfast.co.uk"
         self.enquiry_url = "https://oilfast.co.uk/depot/insch/"
         self.phone = "01464 635999"
