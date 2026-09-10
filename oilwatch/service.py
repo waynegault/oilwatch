@@ -119,6 +119,14 @@ class OilWatchApp:
             elif status != "ok":
                 log.debug("%s: %s", supplier["name"], payload.get("notes") or status)
             results.append(payload)
+
+        # Tell the owner directly rather than leaving failures to be found in a
+        # log file. Batched into one toast, and never fatal (see oilwatch.notify).
+        failed = [row["supplier_name"] for row in results if row.get("status") == "error"]
+        if failed:
+            from oilwatch.notify import notify_errors
+
+            notify_errors(failed)
         return results
 
     def _current_quotes(self) -> list[dict[str, Any]]:
