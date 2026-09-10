@@ -33,12 +33,18 @@ import time
 from typing import Any
 
 from oilwatch.connectors.base import BaseConnector
+from oilwatch.credentials import get_supplier_credentials
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import get_logger
 from oilwatch.models import OrderResult, QuoteResult
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total, pence_to_pounds
 
-# Substrings that mean "we were bounced to the sign-in screen".
-LOGIN_PAGE_MARKERS = ("/customer/account", "/customer/account/login")
+log = get_logger("connectors.scottish_fuels")
+
+# Substrings that mean "we were bounced to the sign-in screen". Deliberately
+# narrow: the signed-in account dashboard also lives under /customer/account/,
+# so a bare "/customer/account" test would call a working session a failure.
+LOGIN_PAGE_MARKERS = ("/customer/account/login", "/login")
 
 # Labels that identify a kerosene-type product when the configured SKU is gone.
 KEROSENE_LABELS = ("kerosene", "heating oil", "premium")
@@ -46,6 +52,7 @@ KEROSENE_LABELS = ("kerosene", "heating oil", "premium")
 
 class ScottishFuelsBrowserConnector(BaseConnector):
     quote_url = "https://quote.scottishfuels.co.uk/quote/"
+    login_url = "https://quote.scottishfuels.co.uk/customer/account/login/"
     product_sku = "451"  # Premium Kerosene
 
     def quote(
@@ -70,13 +77,46 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                 time.sleep(6)
 
                 if self.is_login_page(driver.current_url):
-                    return self._manual(
-                        supplier,
-                        quantity_liters,
-                        "Not signed in: the quote page redirected to "
-                        "/customer/account/. Run `oilwatch login scottish_fuels` "
-                        "once to re-establish the session, then retry.",
-                    )
+                    # The session cookie lasts only ~15 minutes, so an expired
+                    # session is routine rather than exceptional: sign in again
+                    # with the stored credentials instead of sending the owner
+                    # off to run the login command by hand.
+                    creds = get_supplier_credentials("scottish_fuels") or {}
+                    email = creds.get("email") or load_contact().email
+                    password = creds.get("password") or ""
+                    if not (email and password):
+                        return self._manual(
+                            supplier,
+                            quantity_liters,
+                            "Not signed in and no stored credentials for "
+                            "scottish_fuels. Run `oilwatch register` first.",
+                        )
+                    log.info("Scottish Fuels session expired; signing in again")
+                    try:
+                        signed_in = auth.sign_in(driver, self.login_url, email, password)
+                    except Exception as exc:  # noqa: BLE001
+                        return self._manual(
+                            supplier,
+                            quantity_liters,
+                            f"Session expired and automatic sign-in failed: {exc}. "
+                            "Run `oilwatch login scottish_fuels` by hand.",
+                        )
+                    if not signed_in:
+                        return self._manual(
+                            supplier,
+                            quantity_liters,
+                            "Session expired and the automatic sign-in did not take "
+                            "(likely a CAPTCHA challenge). Run `oilwatch login "
+                            "scottish_fuels` by hand.",
+                        )
+                    driver.get(self.quote_url)
+                    time.sleep(6)
+                    if self.is_login_page(driver.current_url):
+                        return self._manual(
+                            supplier,
+                            quantity_liters,
+                            "Signed in but /quote/ still redirects to the account page.",
+                        )
 
                 # select fuel type, tolerating a changed/renumbered option list
                 options = self.product_options(driver)

@@ -15,9 +15,20 @@ class LoginPageDetectionTests(unittest.TestCase):
     like the supplier had redesigned their form.
     """
 
-    def test_account_redirect_is_detected(self) -> None:
-        self.assertTrue(Connector.is_login_page("https://quote.scottishfuels.co.uk/customer/account/"))
+    def test_login_redirect_is_detected(self) -> None:
         self.assertTrue(Connector.is_login_page("https://quote.scottishfuels.co.uk/customer/account/login/"))
+        self.assertTrue(
+            Connector.is_login_page(
+                "https://quote.scottishfuels.co.uk/customer/account/login/referer/aHR0cHM6"
+            )
+        )
+
+    def test_the_signed_in_account_page_is_not_a_login_page(self) -> None:
+        """Both the login screen and the dashboard live under /customer/account/.
+
+        Matching that bare prefix reported a working session as unauthenticated.
+        """
+        self.assertFalse(Connector.is_login_page("https://quote.scottishfuels.co.uk/customer/account/"))
 
     def test_quote_page_is_not_treated_as_login(self) -> None:
         self.assertFalse(Connector.is_login_page("https://quote.scottishfuels.co.uk/quote/"))

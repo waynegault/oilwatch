@@ -132,34 +132,33 @@ class BrowserAuth:
         finally:
             self.close()
 
-    DEFINITION_MARKERS = ("logout", "sign out", "my account")
-
-    def automated_login(
+    def sign_in(
         self,
+        driver,
         url: str,
         email: str,
         password: str,
         *,
         wait_before_submit: float = 5.0,
         wait_after_submit: float = 10.0,
-        headless: bool = False,
     ) -> bool:
-        """Sign in with stored credentials, without a human.
+        """Sign in on an already-open driver. Returns True when authenticated.
 
         The form is guarded by *invisible* reCAPTCHA v3: a hidden ``token`` field
         is populated by its JavaScript a moment after load. Clicking Sign In
         before that fires silently reloads the login page — indistinguishable
         from wrong credentials — so the wait below is load-bearing.
 
-        Returns True when the page then shows authenticated markers.
+        Split out from :meth:`automated_login` so a connector that finds its
+        session expired can re-use the browser it already has open: the session
+        cookie here lasts only ~15 minutes, so re-authenticating mid-run is
+        routine rather than exceptional.
         """
-        driver = self.launch(headless=headless)
         driver.get(url)
 
         email_field = self._find_first(driver, EMAIL_SELECTORS)
         password_field = self._find_first(driver, PASSWORD_SELECTORS)
         if email_field is None or password_field is None:
-            self.close()
             raise RuntimeError(f"Could not find the login fields on {url}")
 
         email_field.clear()
@@ -171,16 +170,41 @@ class BrowserAuth:
 
         submit = self._find_first(driver, SUBMIT_SELECTORS)
         if submit is None:
-            self.close()
             raise RuntimeError(f"Could not find the Sign In button on {url}")
         driver.execute_script("arguments[0].click();", submit)
 
         time.sleep(wait_after_submit)
-        logged_in = self.is_authenticated(driver)
-        if logged_in:
-            self.save_cookies()
-        self.close()
-        return logged_in
+        return self.is_authenticated(driver)
+
+    def automated_login(
+        self,
+        url: str,
+        email: str,
+        password: str,
+        *,
+        wait_before_submit: float = 5.0,
+        wait_after_submit: float = 10.0,
+        headless: bool = False,
+    ) -> bool:
+        """Launch a browser, sign in with stored credentials, save the session.
+
+        Convenience wrapper around :meth:`sign_in` for one-shot use.
+        """
+        driver = self.launch(headless=headless)
+        try:
+            logged_in = self.sign_in(
+                driver,
+                url,
+                email,
+                password,
+                wait_before_submit=wait_before_submit,
+                wait_after_submit=wait_after_submit,
+            )
+            if logged_in:
+                self.save_cookies()
+            return logged_in
+        finally:
+            self.close()
 
     @staticmethod
     def _find_first(driver, selectors: tuple[str, ...]):
@@ -195,17 +219,22 @@ class BrowserAuth:
 
     @classmethod
     def is_authenticated(cls, driver) -> bool:
-        """True when the page renders signed-in markers.
+        """True when a sign-out link is present, which only exists when signed in.
 
-        Checked against page content rather than the URL: Magento redirects a
-        successful login to ``/customer/account/``, whose path also contains the
-        word "account", so a URL test would be ambiguous either way.
+        Text markers were tried first and they lie: the sign-in page itself
+        contains "My Account" in its breadcrumb, so matching on page text
+        reported a successful sign-in when no session had been established.
+        A logout link is the unambiguous signal.
         """
-        try:
-            source = (driver.page_source or "").lower()
-        except Exception:  # noqa: BLE001 - a dead browser is simply "not signed in"
-            return False
-        return any(marker in source for marker in cls.DEFINITION_MARKERS)
+        from selenium.webdriver.common.by import By
+
+        for selector in ("a[href*='logout']", "a[href*='account/logout']"):
+            try:
+                if driver.find_elements(By.CSS_SELECTOR, selector):
+                    return True
+            except Exception:  # noqa: BLE001 - a dead browser is simply "not signed in"
+                return False
+        return False
 
     def save_cookies(self, path: Path | None = None) -> Path:
         path = path or self.cookies_path()
