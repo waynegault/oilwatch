@@ -80,7 +80,7 @@ class FuelsoftConnector(SyncBrowserConnector):
         self._dismiss_cookie_dialog(page)
         self._fill_form(page, postcode, address_line1, email, quantity_liters, product_value)
         self._get_quote(page)
-        page.wait_for_timeout(8000)  # wait for the quote API response
+        self._wait_for_quote_body(page, captured)
 
         ex_vat_price = self.parse_quote_response(captured.get("body"))
         raw_payload = {"quote_url": quote_url, "postcode": postcode, "price_ex_vat": ex_vat_price}
@@ -165,6 +165,23 @@ class FuelsoftConnector(SyncBrowserConnector):
             page.click("#btnGetQuote", timeout=5000)
         except Exception as exc:  # noqa: BLE001
             log.debug("could not click Get Quote: %s", exc)
+
+    @staticmethod
+    def _wait_for_quote_body(page, captured: dict[str, Any], timeout_ms: int = 20000) -> None:
+        """Wait until the quote API response has been captured, bounded.
+
+        The response is captured by the ``on_response`` handler registered before
+        navigation (so it cannot be missed), and this replaces a flat 8s sleep
+        with a poll that returns as soon as the body arrives. Absence is not
+        fatal — the caller falls back to a manual quote — so the wait is simply
+        given up on when it elapses.
+        """
+        waited = 0
+        while "body" not in captured and waited < timeout_ms:
+            page.wait_for_timeout(250)
+            waited += 250
+        if "body" not in captured:
+            log.debug("no Fuelsoft quote response after %d ms", timeout_ms)
 
     @staticmethod
     def parse_quote_response(body: Any) -> float | None:

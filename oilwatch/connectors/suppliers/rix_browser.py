@@ -17,7 +17,10 @@ from typing import Any
 
 from oilwatch.connectors.sync_browser import SyncBrowserConnector
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import get_logger
 from oilwatch.pricing import pence_to_pounds
+
+log = get_logger("connectors.rix")
 
 
 class RixBrowserConnector(SyncBrowserConnector):
@@ -45,7 +48,7 @@ class RixBrowserConnector(SyncBrowserConnector):
         page.wait_for_timeout(4000)
         self._fill_form(page, quantity_liters, postcode, email, phone)
         page.click("button[type='submit']", timeout=5000)
-        page.wait_for_timeout(15000)
+        self._wait_for_results(page)
         results_text = page.eval_on_selector("body", "el => el.innerText")
         results_url = page.url
 
@@ -57,6 +60,22 @@ class RixBrowserConnector(SyncBrowserConnector):
             "price_ex_vat": ex_vat_price,
         }
         return ex_vat_price, raw_payload
+
+    @staticmethod
+    def _wait_for_results(page, timeout_ms: int = 20000) -> None:
+        """Wait for the results page to show a PPL figure, bounded.
+
+        Replaces a flat 15s sleep: this returns as soon as the price text appears.
+        A page that never shows one is not fatal — the caller reports a manual
+        quote — so a timeout is logged rather than raised.
+        """
+        try:
+            page.wait_for_function(
+                r"() => /PPL\s*\(ex\.?\s*VAT\)/i.test(document.body.innerText)",
+                timeout=timeout_ms,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Rix results did not show a PPL within %d ms: %s", timeout_ms, exc)
 
     @staticmethod
     def _fill_form(page, quantity_liters: int, postcode: str, email: str, phone: str) -> None:

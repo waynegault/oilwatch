@@ -75,6 +75,9 @@ class FakePage:
             self._on_wait_response = None
             self.handlers["response"](FakeResponse(url, body))
 
+    def wait_for_function(self, script: str, timeout: int | None = None) -> None:
+        self.calls.append(("wait_for_function",))
+
     def query_selector(self, selector: str):
         return None
 
