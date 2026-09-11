@@ -13,7 +13,7 @@ import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from oilwatch.cli import build_parser, main
+from oilwatch.cli import HANDLERS, build_parser, main
 
 COMMANDS = [
     ["init"],
@@ -58,10 +58,20 @@ class ParserTests(unittest.TestCase):
     def test_browser_quoting_is_opt_in(self) -> None:
         self.assertFalse(self.parser.parse_args(["quote-all"]).browser)
 
+    def test_the_dispatch_table_covers_every_documented_command(self) -> None:
+        """The parser and the handler table are two lists that must agree.
+
+        A command with no handler is a KeyError at the owner's terminal, and a
+        handler with no command is unreachable code the suite would otherwise
+        pass over.
+        """
+        self.assertEqual(set(HANDLERS), {argv[0] for argv in COMMANDS})
+
 
 class DispatchTests(unittest.TestCase):
     def _run(self, argv: list[str]):
         app = MagicMock()
+        app.suppliers.return_value = []
         out = io.StringIO()
         with (
             patch("oilwatch.cli.OilWatchApp", return_value=app),
@@ -70,6 +80,53 @@ class DispatchTests(unittest.TestCase):
         ):
             main()
         return app, out.getvalue()
+
+    def test_every_read_only_command_reaches_the_app(self) -> None:
+        """One pass over the commands that only talk to the service.
+
+        What each one calls is pinned by the tests below; this is the sweep that
+        catches a handler that has been left pointing at nothing.
+        """
+        for argv in (
+            ["init"],
+            ["discover"],
+            ["suppliers", "--include-inactive"],
+            ["cheapest"],
+            ["status"],
+            ["chart"],
+            ["time-series"],
+            ["quote", "2", "--postcode", "AB1 1AA"],
+            ["quote-all"],
+            ["purchases"],
+            ["update-brent"],
+            ["monitor-email"],
+            ["import-spreadsheet", "--path", "P:/Oil Prices.xls"],
+            ["phone-script"],
+        ):
+            with self.subTest(argv=argv):
+                app, _ = self._run(argv)
+                self.assertTrue(app.mock_calls, f"{argv[0]} reached nothing on the app")
+
+    def test_quote_forwards_its_positional_id_and_both_options(self) -> None:
+        app, _ = self._run(["quote", "2", "--postcode", "AB1 1AA", "--browser"])
+        app.quote_supplier.assert_called_once_with(2, postcode="AB1 1AA", prefer_browser=True)
+
+    def test_import_spreadsheet_passes_the_path_through(self) -> None:
+        app, _ = self._run(["import-spreadsheet", "--path", "P:/Oil Prices.xls"])
+        app.import_spreadsheet.assert_called_once_with("P:/Oil Prices.xls")
+
+    def test_api_discover_prints_what_the_tool_found(self) -> None:
+        run = AsyncMock(return_value={"total_requests": 3})
+        out = io.StringIO()
+        with (
+            patch("oilwatch.cli.discover_supplier_api", new=run),
+            patch.object(sys, "argv", ["oilwatch", "api-discover", "--url", "https://example.co.uk"]),
+            contextlib.redirect_stdout(out),
+        ):
+            main()
+
+        self.assertEqual(run.await_args.args[0], "https://example.co.uk")
+        self.assertIn("total_requests", out.getvalue())
 
     def test_quote_all_forwards_the_postcode_and_the_browser_flag(self) -> None:
         app, _ = self._run(["quote-all", "--postcode", "AB21 0YA", "--browser"])
