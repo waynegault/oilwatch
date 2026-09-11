@@ -74,6 +74,9 @@ class HTTPFormConnectorTests(unittest.TestCase):
             },
         }
 
+    def _supplier(self, **config) -> dict:
+        return {**self.supplier, "connector_config": {**self.supplier["connector_config"], **config}}
+
     def test_quote_via_form(self) -> None:
         with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
             Client.return_value.request.return_value = fake_response('{"price_per_liter": 1.42}')
@@ -81,6 +84,96 @@ class HTTPFormConnectorTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.price_per_liter, 1.42)
         self.assertEqual(result.total_price, 1420.0)
+
+    def test_quote_raises_when_no_price_matches(self) -> None:
+        """A redesigned response must fail loudly, not be read as a price."""
+        with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
+            Client.return_value.request.return_value = fake_response("<html>No prices today</html>")
+            with self.assertRaises(ValueError) as caught:
+                HTTPFormConnector().quote(self.supplier, 1000, {"postcode": "AB21 0YA"})
+
+        self.assertIn("No price matched", str(caught.exception))
+
+    def test_quote_raises_when_the_matched_text_is_not_a_price(self) -> None:
+        supplier = self._supplier(price_regex=r'"price_per_liter"\s*:\s*([^,}]+)')
+        with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
+            Client.return_value.request.return_value = fake_response('{"price_per_liter": "POA"}')
+            with self.assertRaises(ValueError) as caught:
+                HTTPFormConnector().quote(supplier, 1000, {})
+
+        self.assertIn("Could not parse price", str(caught.exception))
+
+    def test_quote_applies_a_configured_ex_vat_rate(self) -> None:
+        supplier = self._supplier(vat_rate=0.05)
+        with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
+            Client.return_value.request.return_value = fake_response('{"price_per_liter": 1.42}')
+            result = HTTPFormConnector().quote(supplier, 1000, {"postcode": "AB21 0YA"})
+
+        self.assertAlmostEqual(result.price_per_liter, 1.491, places=4)
+
+    def test_fields_render_the_templates_and_leave_the_rest_alone(self) -> None:
+        """quote_fields holds templates and literal values; only strings are formatted."""
+        supplier = self._supplier(
+            quote_fields={"postcode": "{postcode}", "litres": "{quantity_liters}", "fixed": 1000}
+        )
+        with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
+            Client.return_value.request.return_value = fake_response('{"price_per_liter": 1.42}')
+            HTTPFormConnector().quote(supplier, 1000, {"postcode": "AB21 0YA"})
+
+        data = Client.return_value.request.call_args.kwargs["data"]
+        self.assertEqual(data, {"postcode": "AB21 0YA", "litres": "1000", "fixed": 1000})
+
+    def test_place_order_posts_the_fields_and_reads_the_reference(self) -> None:
+        supplier = self._supplier(
+            order_url="https://a.example.com/api/order",
+            order_fields={
+                "postcode": "{postcode}",
+                "litres": "{quantity_liters}",
+                "price": "{agreed_price_per_liter}",
+                "site": "{supplier_name}",
+                "area": "{home_label}",
+            },
+            reference_regex=r'"reference"\s*:\s*"([^"]+)"',
+        )
+        with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
+            Client.return_value.request.return_value = fake_response('{"reference": "AB-1234"}')
+            result = HTTPFormConnector().place_order(
+                supplier, 1000, 1.42, {"postcode": "AB21 0YA", "home_label": "Hatton of Fintray"}
+            )
+
+        self.assertEqual(result.status, "submitted")
+        self.assertEqual(result.reference, "AB-1234")
+        data = Client.return_value.request.call_args.kwargs["data"]
+        self.assertEqual(
+            data,
+            {
+                "postcode": "AB21 0YA",
+                "litres": "1000",
+                "price": "1.42",
+                "site": "A",
+                "area": "Hatton of Fintray",
+            },
+        )
+
+    def test_place_order_without_a_reference_in_the_response(self) -> None:
+        """A reference is a bonus: an order that goes through without one still counts."""
+        cases = {
+            "no reference_regex configured": {},
+            "a reference_regex that does not match": {
+                "reference_regex": r'"reference"\s*:\s*"([^"]+)"'
+            },
+        }
+        for label, config in cases.items():
+            with self.subTest(case=label):
+                supplier = self._supplier(order_url="https://a.example.com/api/order", **config)
+                with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
+                    Client.return_value.request.return_value = fake_response(
+                        "<html>Order received</html>"
+                    )
+                    result = HTTPFormConnector().place_order(supplier, 1000, 1.42, {})
+
+                self.assertEqual(result.status, "submitted")
+                self.assertIsNone(result.reference)
 
     def test_place_order_without_order_url(self) -> None:
         result = HTTPFormConnector().place_order(self.supplier, 1000, 1.42, {})
