@@ -23,6 +23,7 @@ dependencies = [
   "playwright>=1.40",
   "selenium>=4.20",
   "undetected-chromedriver>=3.5",
+  "xlrd>=2.0",
   "setuptools>=68"
 ]
 

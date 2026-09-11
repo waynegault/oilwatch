@@ -56,11 +56,15 @@ monitor-email` records the price and removes the message from the inbox.
 # From the repository root (the folder containing pyproject.toml)
 cd <path-to-oilwatch>
 
-# Activate virtual environment
+# Create and activate the virtual environment (Python 3.12+)
+python -m venv .venv
 .venv\Scripts\activate
 
-# Install package (if needed)
-pip install -e .
+# Install the package with its dev extras
+pip install -e .[dev]
+
+# Download the Chromium build the browser connectors use
+python -m playwright install chromium
 ```
 
 ### First Run

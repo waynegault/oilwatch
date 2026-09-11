@@ -240,3 +240,16 @@ runs `start_mcp_server.bat` (binds `0.0.0.0:8000`).
    `schtasks /Create /TN "OilWatch MCP Server" /TR "\"C:\Users\wayne\GitHub\Python\Projects\Oil Price Webscraper\start_mcp_server.bat\"" /SC ONLOGON /F`
    The server takes ~15 s after logon before it answers, so an early probe
    getting "connection refused" is normal, not a fault.
+5. **DONE 2026-09-11 — one virtualenv: `.venv`.** The working copy had
+   accumulated a second environment (`.venv-1`) built from the current
+   `pyproject.toml`, while `.venv` — the one every script and doc references —
+   still held an older dependency set (fastmcp 3.1.1 against 3.4.7) and older
+   editable-install metadata. `.venv` was rebuilt from the current
+   `pyproject.toml` and the stray removed. Rebuilding surfaced a real gap: `xlrd`
+   is imported at module level by `oilwatch/brent.py` and `oilwatch/import_xls.py`
+   and by their tests, but was never declared, so a fresh `pip install -e .`
+   yielded an environment that failed `update-brent` and those tests. It is now a
+   declared dependency. Two environment steps are easy to miss on a rebuild: the
+   dev extras (`pip install -e .[dev]`, for `coverage`) and Playwright's browser
+   download, which is version-pinned — a playwright upgrade needs a fresh
+   `playwright install chromium` and prunes the superseded build.
