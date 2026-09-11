@@ -42,9 +42,9 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
-# Measured at 95.26pc. The floor is the largest whole point that leaves a
-# comfortable margin below the measurement: rounding up to 95 would leave only a
-# quarter point, which a Python or platform difference can move, so it would cry
+# Measured at 95.44pc. The floor is the largest whole point that leaves a
+# comfortable margin below the measurement: rounding up to 95 would leave under
+# half a point, which a Python or platform difference can move, so it would cry
 # wolf instead of catching a slide. A slide of a point still fails.
 fail_under = 94
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]

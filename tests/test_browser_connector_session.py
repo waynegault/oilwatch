@@ -68,6 +68,14 @@ class LoginTests(unittest.TestCase):
             with self.subTest(connector=connector_cls.__name__):
                 self.assertTrue(asyncio.run(connector_cls().login(BoomPage(), "a@b.c", "pw")))
 
+    def test_a_navigation_failure_is_logged_not_swallowed(self) -> None:
+        """Optional login may fail, but it must be visible — not silently hidden."""
+        for connector_cls in CONNECTORS:
+            with self.subTest(connector=connector_cls.__name__):
+                with self.assertLogs("oilwatch.connectors.browser", level="WARNING") as logs:
+                    self.assertTrue(asyncio.run(connector_cls().login(BoomPage(), "a@b.c", "pw")))
+                self.assertTrue(any("optional login failed" in line for line in logs.output))
+
 
 class FallbackTests(unittest.TestCase):
     def _fallback(self, connector, client):

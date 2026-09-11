@@ -23,7 +23,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (served over streamable HTTP) |
-| Tests | 545, all passing offline |
+| Tests | 547, all passing offline |
 | Database | 26 suppliers, 244 quotes, 0 orders |
 
 ---
@@ -95,7 +95,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 545 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 547 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -196,10 +196,12 @@ runs `start_mcp_server.bat` (binds `0.0.0.0:8000`).
   would have failed. Replaced with the tools the server actually serves, and a
   note that there is no ordering tool.
 - **Resolved 2026-09-11:** the location literals that the identity pass above
-  left behind are gone: `mcp_server.py` repeated the home postcode in its
-  instructions and in `refresh_prices`, and `cli.py` and `auto_register.py`
-  repeated the address as `--address`/parameter defaults. All of them now
-  resolve through `oilwatch.identity` or `settings.home.label`.
+  left behind are gone: `mcp_server.py` no longer repeats the home postcode in
+  `refresh_prices`, and `cli.py` and `auto_register.py` no longer repeat the
+  address as `--address`/parameter defaults. Those now resolve through
+  `oilwatch.identity` or `settings.home.label`. The MCP server's instructions no
+  longer embed the location either — they needed config at import to do so — so
+  importing `mcp_server` now reads no settings at all.
   `tests/test_docs.py` derives the tool, command and test counts stated in this
   file from the code, so the numbers above fail the suite when they go stale
   rather than sitting here misleading — which is what the 216-vs-88 test count

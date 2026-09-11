@@ -39,35 +39,8 @@ class ValueOilsBrowserConnector(BrowserConnector):
         self._requires_login = False
     
     async def login(self, page: Page, email: str, password: str) -> bool:
-        """
-        Log in to ValueOils (optional - quotes work without login).
-        
-        Returns True as login is not required for quotes.
-        """
-        try:
-            await page.goto(self.login_url, wait_until="domcontentloaded")
-            await page.wait_for_timeout(2000)
-            
-            # Check if already logged in
-            if await page.query_selector("a.logout"):
-                return True
-            
-            # Try to find login form
-            email_field = await page.query_selector('input[name="email"], input[type="email"]')
-            password_field = await page.query_selector('input[name="password"], input[type="password"]')
-            login_button = await page.query_selector('button:has-text("Login"), input[value*="Login"]')
-            
-            if email_field and password_field and login_button:
-                await email_field.fill(email)
-                await password_field.fill(password)
-                await login_button.click()
-                await page.wait_for_timeout(3000)
-                return True
-            
-            return True  # Login not required for quotes
-            
-        except Exception:
-            return True  # Login not required for quotes
+        """Optional sign-in; ValueOils quotes work signed-out (see the base)."""
+        return await self._optional_login(page, email, password)
     
     async def get_quote_with_browser(
         self,

@@ -23,7 +23,7 @@ class BaseConnector(ABC):
         quantity_liters: int,
         context: dict[str, Any],
     ) -> QuoteResult:
-        raise NotImplementedError
+        """Return this connector's quote for a supplier. Implemented by subclasses."""
 
     @staticmethod
     def now() -> datetime:

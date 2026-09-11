@@ -14,16 +14,15 @@ GENERIC_CONNECTOR_TYPES = ("manual", "price_page", "http_form")
 
 
 def get_connector(name: str) -> BaseConnector:
-    """Get a connector by type name."""
-    connectors = {
-        "manual": ManualConnector(),
-        "price_page": PricePageConnector(),
-        "http_form": HTTPFormConnector(),
+    """Get a connector by type name, or raise for a type it does not know."""
+    factories = {
+        "manual": ManualConnector,
+        "price_page": PricePageConnector,
+        "http_form": HTTPFormConnector,
     }
-    try:
-        return connectors[name]
-    except KeyError as exc:
-        raise ValueError(f"Unknown connector type: {name}") from exc
+    if name not in factories:
+        raise ValueError(f"Unknown connector type: {name}")
+    return factories[name]()
 
 
 def get_connector_for_supplier(supplier: dict, prefer_browser: bool = False) -> BaseConnector:

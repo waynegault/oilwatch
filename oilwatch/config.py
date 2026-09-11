@@ -26,6 +26,8 @@ class Settings:
     chart_path: Path
     time_series_chart_path: Path
     home: HomeConfig
+    #: Delivery postcode; identity falls back to this when contact.json has none.
+    default_postcode: str = ""
     radius_miles: int = 50
     quote_quantity_liters: int = 1000
     # A supplier with no successful quote inside this window counts as having no
@@ -57,6 +59,7 @@ def load_settings(root: Path | None = None) -> Settings:
         chart_path=base / data["chart_path"],
         time_series_chart_path=base / data.get("time_series_chart_path", "data/oilwatch-time-series.png"),
         home=HomeConfig(**data["home"]),
+        default_postcode=data.get("default_postcode", ""),
         radius_miles=data.get("radius_miles", 50),
         quote_quantity_liters=data.get("quote_quantity_liters", 1000),
         max_quote_age_days=data.get("max_quote_age_days", 30),

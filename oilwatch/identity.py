@@ -21,6 +21,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from oilwatch.config import load_settings
+
 ENV_KEYS = {
     "name": "OILWATCH_NAME",
     "email": "OILWATCH_EMAIL",
@@ -47,15 +49,13 @@ class Contact:
 def _settings_postcode(base: Path) -> str:
     """The delivery postcode from ``config/settings.json``.
 
-    The home postcode is configuration, not identity, and already lives there —
-    so use it rather than repeating a literal in every connector.
+    Resolved through the same parser as the rest of the settings rather than a
+    second read of the file; absent or malformed settings simply mean there is
+    no fallback postcode.
     """
-    path = base / "config" / "settings.json"
-    if not path.exists():
-        return ""
     try:
-        return str(json.loads(path.read_text(encoding="utf-8")).get("default_postcode", "")).strip()
-    except (json.JSONDecodeError, OSError):
+        return load_settings(base).default_postcode.strip()
+    except (OSError, ValueError, KeyError, TypeError):
         return ""
 
 

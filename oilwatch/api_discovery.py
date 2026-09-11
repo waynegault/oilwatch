@@ -110,7 +110,8 @@ class APIDiscoveryTool:
                     log.debug("could not record intercepted response: %s", exc)
             
             await route.fulfill(response=response)
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 - aborting the route must not raise here
+            log.debug("aborting unfulfillable route: %s", exc)
             await route.abort()
     
     def _is_api_request(self, url: str) -> bool:

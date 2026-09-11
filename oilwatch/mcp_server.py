@@ -35,17 +35,25 @@ ROOT = Path(__file__).resolve().parents[1]
 HOST = os.environ.get("MCP_HOST", "127.0.0.1").strip()
 PORT = int(os.environ.get("MCP_PORT", "8000").strip())
 
-_app = OilWatchApp(ROOT)
-_contact = load_contact()
-
 mcp = FastMCP(
     "oilwatch",
     version=__version__,
     instructions=(
-        f"OilWatch tracks domestic heating-oil prices around {_app.settings.home.label} "
-        f"({_contact.postcode}). Prices are GBP per litre inclusive of 5% VAT."
+        "OilWatch tracks domestic heating-oil prices for the owner's configured "
+        "delivery postcode. Prices are GBP per litre inclusive of 5% VAT."
     ),
 )
+
+#: Built on first use. Importing this module must not read config or open a
+#: database, so a tool registry (or a test) can import it freely.
+_app: OilWatchApp | None = None
+
+
+def _get_app() -> OilWatchApp:
+    global _app
+    if _app is None:
+        _app = OilWatchApp(ROOT)
+    return _app
 
 # Tool annotations. MCP defaults are the pessimistic ones (destructiveHint=True,
 # openWorldHint=True), so a client that gates on annotations - OpenClaw prompts
@@ -67,7 +75,7 @@ _EXTERNAL_SLOW = ToolAnnotations(
 @mcp.tool(title="List suppliers", annotations=_READ_ONLY)
 def list_suppliers() -> list[dict[str, Any]]:
     """List all known heating-oil suppliers."""
-    return _app.suppliers(include_inactive=False)
+    return _get_app().suppliers(include_inactive=False)
 
 
 @mcp.tool(title="Current prices", annotations=_READ_ONLY)
@@ -78,13 +86,13 @@ def current_prices() -> list[dict[str, Any]]:
     are omitted, so historical spreadsheet rows cannot masquerade as today's
     prices.
     """
-    return _app.current_prices()
+    return _get_app().current_prices()
 
 
 @mcp.tool(title="Cheapest supplier", annotations=_READ_ONLY)
 def cheapest() -> dict[str, Any]:
     """Return the cheapest supplier plus market average and variance."""
-    return _app.cheapest()
+    return _get_app().cheapest()
 
 
 @mcp.tool(title="Recorded purchases", annotations=_READ_ONLY)
@@ -94,25 +102,25 @@ def purchases() -> list[dict[str, Any]]:
     Recording happens through the CLI (``oilwatch record-purchase``), which is a
     deliberate act by the owner; this tool only reads them back.
     """
-    return _app.purchases()
+    return _get_app().purchases()
 
 
 @mcp.tool(title="Market status", annotations=_READ_ONLY)
 def status() -> dict[str, Any]:
     """Return the market snapshot, price trend, and a buy/hold recommendation."""
-    return _app.status()
+    return _get_app().status()
 
 
 @mcp.tool(title="Build market chart", annotations=_LOCAL_ARTIFACT)
 def chart() -> str:
     """Generate the market summary chart and return its file path."""
-    return _app.chart()
+    return _get_app().chart()
 
 
 @mcp.tool(title="Build time-series chart", annotations=_LOCAL_ARTIFACT)
 def time_series_chart() -> str:
     """Generate the per-supplier + Brent crude time-series chart and return its path."""
-    return _app.time_series_chart()
+    return _get_app().time_series_chart()
 
 
 @mcp.tool(title="Refresh prices (slow)", annotations=_EXTERNAL_SLOW)
@@ -122,13 +130,13 @@ def refresh_prices(postcode: str | None = None) -> list[dict[str, Any]]:
     Takes minutes and may fail per-supplier (CAPTCHA, blocked, site down);
     partial results are normal. Do not call it in a loop.
     """
-    return _app.quote_all(postcode=postcode or load_contact().postcode, prefer_browser=True)
+    return _get_app().quote_all(postcode=postcode or load_contact().postcode, prefer_browser=True)
 
 
 @mcp.tool(title="Update Brent crude", annotations=_EXTERNAL_FETCH)
 def update_brent() -> dict[str, Any]:
     """Fetch the latest Brent crude daily series from the EIA."""
-    return _app.update_brent()
+    return _get_app().update_brent()
 
 
 def main() -> None:

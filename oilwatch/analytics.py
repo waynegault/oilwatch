@@ -86,25 +86,39 @@ class AnalyticsService:
         }
 
     @staticmethod
+    def _ok_priced(quotes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Successful quotes carrying a price — the only ones that compare.
+
+        Every market/statistic view filters on exactly this, so it lives in one
+        place rather than being restated in each grouping loop below.
+        """
+        return [
+            quote
+            for quote in quotes
+            if quote["status"] == "ok" and quote["price_per_liter"] is not None
+        ]
+
+    @staticmethod
+    def _day_of(quote: dict[str, Any]) -> str:
+        """The ``YYYY-MM-DD`` a quote belongs to."""
+        return datetime.fromisoformat(quote["observed_at"]).date().isoformat()
+
+    @staticmethod
     def _daily_cheapest(quotes: list[dict[str, Any]]) -> dict[str, float]:
         """Map ``YYYY-MM-DD`` -> cheapest successful price that day."""
         grouped: dict[str, list[float]] = defaultdict(list)
-        for quote in quotes:
-            if quote["status"] != "ok" or quote["price_per_liter"] is None:
-                continue
-            day = datetime.fromisoformat(quote["observed_at"]).date().isoformat()
-            grouped[day].append(float(quote["price_per_liter"]))
+        for quote in AnalyticsService._ok_priced(quotes):
+            grouped[AnalyticsService._day_of(quote)].append(float(quote["price_per_liter"]))
         return {day: min(prices) for day, prices in grouped.items()}
 
     @staticmethod
     def _daily_by_supplier(quotes: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
         """Map supplier name -> ``YYYY-MM-DD`` -> cheapest price that supplier gave."""
         grouped: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-        for quote in quotes:
-            if quote["status"] != "ok" or quote["price_per_liter"] is None:
-                continue
-            day = datetime.fromisoformat(quote["observed_at"]).date().isoformat()
-            grouped[quote["supplier_name"]][day].append(float(quote["price_per_liter"]))
+        for quote in AnalyticsService._ok_priced(quotes):
+            grouped[quote["supplier_name"]][AnalyticsService._day_of(quote)].append(
+                float(quote["price_per_liter"])
+            )
         return {
             name: {day: min(prices) for day, prices in days.items()}
             for name, days in grouped.items()
@@ -217,11 +231,8 @@ class AnalyticsService:
     @staticmethod
     def build_chart(quotes: list[dict[str, Any]], output_path: Path) -> Path:
         grouped: dict[str, list[float]] = defaultdict(list)
-        for quote in quotes:
-            if quote["status"] != "ok" or quote["price_per_liter"] is None:
-                continue
-            day = datetime.fromisoformat(quote["observed_at"]).date().isoformat()
-            grouped[day].append(float(quote["price_per_liter"]))
+        for quote in AnalyticsService._ok_priced(quotes):
+            grouped[AnalyticsService._day_of(quote)].append(float(quote["price_per_liter"]))
         if not grouped:
             raise ValueError("No successful quotes available for charting.")
 
@@ -264,9 +275,7 @@ class AnalyticsService:
         is supplied, a Brent crude line is drawn on a secondary $/barrel axis.
         """
         series: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
-        for quote in quotes:
-            if quote["status"] != "ok" or quote["price_per_liter"] is None:
-                continue
+        for quote in AnalyticsService._ok_priced(quotes):
             try:
                 observed = datetime.fromisoformat(quote["observed_at"])
             except (TypeError, ValueError):

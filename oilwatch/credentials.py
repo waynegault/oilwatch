@@ -28,10 +28,9 @@ def generate_supplier_password(supplier_name: str) -> str:
 
     Example: ScottishFuels!aB3xK9mQ
     """
-    # Clean supplier name - remove spaces and special chars
-    clean_name = "".join(c for c in supplier_name if c.isalnum())
-    # Capitalize first letter of each word
-    clean_name = clean_name.title().replace(" ", "")
+    # Keep letters and digits only, then title-case. The join already dropped
+    # any spaces, so there is nothing left to strip.
+    clean_name = "".join(c for c in supplier_name if c.isalnum()).title()
     # Generate 8 random characters
     random_part = generate_password(8)
     return f"{clean_name}!{random_part}"

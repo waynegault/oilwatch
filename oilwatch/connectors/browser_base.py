@@ -60,14 +60,43 @@ class BrowserConnector(BaseConnector, ABC):
     async def login(self, page: Page, email: str, password: str) -> bool:
         """
         Log in to the supplier website.
-        
+
         Override this method to implement supplier-specific login logic.
-        
+
         Returns:
             True if login successful, False otherwise
         """
         # Default implementation - override in subclasses
         raise NotImplementedError
+
+    async def _optional_login(self, page: Page, email: str, password: str) -> bool:
+        """Best-effort sign-in for a supplier whose quotes work signed-out.
+
+        Returns True regardless — these suppliers do not need a session to quote
+        — but a failure is logged rather than swallowed, so a broken login
+        surfaces here instead of later as an unexplained missing price.
+        """
+        try:
+            await page.goto(self.login_url, wait_until="domcontentloaded")
+            await page.wait_for_timeout(2000)
+
+            if await page.query_selector("a.logout"):
+                return True  # already signed in
+
+            email_field = await page.query_selector('input[name="email"], input[type="email"]')
+            password_field = await page.query_selector('input[name="password"], input[type="password"]')
+            login_button = await page.query_selector('button:has-text("Login"), input[value*="Login"]')
+
+            if email_field and password_field and login_button:
+                await email_field.fill(email)
+                await password_field.fill(password)
+                await login_button.click()
+                await page.wait_for_timeout(3000)
+
+            return True  # no login form: quoting works signed-out
+        except Exception as exc:  # noqa: BLE001 - login is optional; never block the quote
+            log.warning("%s optional login failed: %s", self.supplier_name, exc)
+            return True
     
     async def _setup_browser(self, headless: bool = True) -> Page:
         """Set up browser and return a new page."""

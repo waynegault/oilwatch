@@ -24,6 +24,16 @@ class LoadContactTests(unittest.TestCase):
     def _write(self, name: str, payload: dict) -> None:
         (self.root / "config" / name).write_text(json.dumps(payload), encoding="utf-8")
 
+    def _write_settings(self, **extra: object) -> None:
+        """A complete settings.json, since identity now resolves it via Settings."""
+        payload: dict[str, object] = {
+            "database_path": "data/oilwatch.sqlite",
+            "chart_path": "data/oilwatch-market.png",
+            "home": {"label": "Home", "latitude": 57.2, "longitude": -2.2},
+        }
+        payload.update(extra)
+        self._write("settings.json", payload)
+
     def test_empty_when_nothing_configured(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             contact = load_contact(self.root)
@@ -45,13 +55,13 @@ class LoadContactTests(unittest.TestCase):
         self.assertEqual(contact.email, "env@example.com")
 
     def test_postcode_falls_back_to_settings(self) -> None:
-        self._write("settings.json", {"default_postcode": "ZZ99 9ZZ"})
+        self._write_settings(default_postcode="ZZ99 9ZZ")
         with patch.dict(os.environ, {}, clear=True):
             contact = load_contact(self.root)
         self.assertEqual(contact.postcode, "ZZ99 9ZZ")
 
     def test_contact_json_postcode_wins_over_settings(self) -> None:
-        self._write("settings.json", {"default_postcode": "ZZ99 9ZZ"})
+        self._write_settings(default_postcode="ZZ99 9ZZ")
         self._write("contact.json", {"postcode": "AA11 1AA"})
         with patch.dict(os.environ, {}, clear=True):
             contact = load_contact(self.root)
