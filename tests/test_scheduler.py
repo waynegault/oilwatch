@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from oilwatch.scheduler import OilWatchScheduler
 
@@ -141,6 +142,24 @@ class StartTests(unittest.TestCase):
         self.assertEqual(intervals["discover_suppliers"], 168)
         self.assertEqual(intervals["quote_all"], 24)
         self.assertEqual(intervals["monitor_email"], 12)
+
+
+class RunForeverTests(unittest.TestCase):
+    def test_run_forever_starts_the_jobs_and_stops_on_interrupt(self) -> None:
+        """The loop only ends on Ctrl-C, and the scheduler has to come down with it."""
+        app = _StubApp()
+        scheduler = OilWatchScheduler(app)
+        stub = _StubScheduler()
+        scheduler.scheduler = stub
+
+        with patch("oilwatch.scheduler.time.sleep", side_effect=KeyboardInterrupt):
+            scheduler.run_forever()  # must not raise
+
+        self.assertEqual(
+            sorted(job["id"] for job in stub.jobs),
+            ["discover_suppliers", "monitor_email", "quote_all"],
+        )
+        self.assertFalse(stub.started, "the scheduler should be shut down on the way out")
 
 
 if __name__ == "__main__":
