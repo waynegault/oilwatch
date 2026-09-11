@@ -133,11 +133,16 @@ class HomeFuelsDirectConnector(BaseConnector):
         # pounds-per-litre patterns, e.g. "£1.32 per litre"
         pound_patterns = [r"£?(\d\.\d{2})\s*(?:per\s*litre|/l)"]
 
+        # A transport failure on one page is worth retrying on the other, but if
+        # neither answers the caller has to hear about it: reporting a dead site
+        # as "no price on the page" is a different, and misleading, problem.
+        transport_error: httpx.HTTPError | None = None
         for url in (self.aberdeenshire_url, self.price_url):
             try:
                 response = self.client.get(url)
                 response.raise_for_status()
-            except httpx.HTTPError:
+            except httpx.HTTPError as exc:
+                transport_error = exc
                 continue
 
             for pattern in price_patterns:
@@ -153,6 +158,9 @@ class HomeFuelsDirectConnector(BaseConnector):
                     price = normalise_price_per_litre(match.group(1))
                     if price is not None:
                         return price, url
+
+        if transport_error is not None:
+            raise transport_error
 
         return None, self.price_url
     

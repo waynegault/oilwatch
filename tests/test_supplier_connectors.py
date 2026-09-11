@@ -3,6 +3,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock, patch
 
+import httpx
+
 from oilwatch.connectors.suppliers import get_supplier_connector
 from oilwatch.connectors.suppliers.fuelsoft import FuelsoftConnector
 from oilwatch.connectors.suppliers.homefuels_direct import HomeFuelsDirectConnector
@@ -59,6 +61,24 @@ class ValueOilsConnectorTests(unittest.TestCase):
             result = ValueOilsConnector().quote(self.supplier, 1000, {})
         self.assertEqual(result.status, "manual_action_required")
 
+    def test_a_transport_failure_is_reported_as_an_error(self) -> None:
+        """A site that will not answer is an error, not a missing price."""
+        with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as Client:
+            Client.return_value.get.side_effect = httpx.ConnectError("connection reset")
+            result = ValueOilsConnector().quote(self.supplier, 1000, {})
+
+        self.assertEqual(result.status, "error")
+        self.assertIn("HTTP error fetching quote", result.notes)
+        self.assertIn("connection reset", result.notes)
+
+    def test_an_unexpected_failure_is_reported_as_an_error(self) -> None:
+        with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as Client:
+            Client.return_value.get.side_effect = RuntimeError("parser blew up")
+            result = ValueOilsConnector().quote(self.supplier, 1000, {})
+
+        self.assertEqual(result.status, "error")
+        self.assertIn("Error fetching quote", result.notes)
+
 
 class HomeFuelsDirectConnectorTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -80,6 +100,35 @@ class HomeFuelsDirectConnectorTests(unittest.TestCase):
             result = HomeFuelsDirectConnector().quote(self.supplier, 1000, {})
         self.assertEqual(result.status, "manual_action_required")
         self.assertIsNone(result.price_per_liter)
+
+    def test_a_transport_failure_is_reported_as_an_error(self) -> None:
+        with patch("oilwatch.connectors.suppliers.homefuels_direct.httpx.Client") as Client:
+            Client.return_value.get.side_effect = httpx.ConnectError("connection reset")
+            result = HomeFuelsDirectConnector().quote(self.supplier, 1000, {})
+
+        self.assertEqual(result.status, "error")
+        self.assertIn("HTTP error fetching quote", result.notes)
+        self.assertIn("connection reset", result.notes)
+
+    def test_a_failed_first_page_still_tries_the_second(self) -> None:
+        """A hiccup on the regional page must not cost the quote."""
+        with patch("oilwatch.connectors.suppliers.homefuels_direct.httpx.Client") as Client:
+            Client.return_value.get.side_effect = [
+                httpx.ConnectError("regional page down"),
+                fake_response(HOMEFUELS_PAGE),
+            ]
+            result = HomeFuelsDirectConnector().quote(self.supplier, 1000, {})
+
+        self.assertEqual(result.status, "ok")
+        self.assertAlmostEqual(result.price_per_liter, 1.0411, places=4)
+
+    def test_an_unexpected_failure_is_reported_as_an_error(self) -> None:
+        with patch("oilwatch.connectors.suppliers.homefuels_direct.httpx.Client") as Client:
+            Client.return_value.get.side_effect = RuntimeError("parser blew up")
+            result = HomeFuelsDirectConnector().quote(self.supplier, 1000, {})
+
+        self.assertEqual(result.status, "error")
+        self.assertIn("Error fetching quote", result.notes)
 
 
 class SupplierConnectorRoutingTests(unittest.TestCase):

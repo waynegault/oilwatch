@@ -13,10 +13,49 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from oilwatch.connectors.browser_base import BrowserConnector
+from oilwatch.identity import Contact
 from oilwatch.models import QuoteResult
 from tests.fake_async_page import FakeAsyncPage
 
 SUPPLIER = {"id": 1, "name": "Test Supplier", "website": "https://example.test"}
+
+
+class CredentialFallbackTests(unittest.TestCase):
+    """A supplier with no stored account gets one generated rather than skipped.
+
+    The orchestration tests stub this method out, so its body had never run: it
+    is what turns "no credentials" into a password the owner can use.
+    """
+
+    def setUp(self) -> None:
+        self.connector = StubConnector()
+
+    def test_stored_credentials_are_used_as_they_are(self) -> None:
+        stored = {"email": "owner@example.test", "password": "hunter2"}
+        with patch(
+            "oilwatch.connectors.browser_base.get_supplier_credentials", return_value=stored
+        ) as get_credentials:
+            self.assertIs(self.connector._get_or_create_credentials(SUPPLIER), stored)
+
+        get_credentials.assert_called_once_with("stub")
+
+    def test_missing_credentials_are_generated_and_stored(self) -> None:
+        with (
+            patch("oilwatch.connectors.browser_base.get_supplier_credentials", return_value=None),
+            patch("oilwatch.connectors.browser_base.store_supplier_credentials") as store,
+            patch(
+                "oilwatch.connectors.browser_base.load_contact",
+                return_value=Contact(email="owner@example.test"),
+            ),
+        ):
+            creds = self.connector._get_or_create_credentials(SUPPLIER)
+
+        self.assertEqual(creds["email"], "owner@example.test")
+        self.assertTrue(creds["password"])
+        # The generated password is what gets stored, so a manual sign-in works.
+        self.assertEqual(store.call_args.kwargs["password"], creds["password"])
+        self.assertEqual(store.call_args.kwargs["supplier_key"], "stub")
+        self.assertEqual(store.call_args.kwargs["supplier_name"], "Stub Fuels")
 
 
 class FakeRequest:
