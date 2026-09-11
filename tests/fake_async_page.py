@@ -19,19 +19,29 @@ class FakeElement:
         text: str = "",
         attributes: dict[str, str] | None = None,
         options: list[Any] | None = None,
+        click_raises: bool = False,
+        fill_raises: bool = False,
     ) -> None:
         self.tag = tag
         self.text = text
         self.attributes = attributes or {}
         self.options = options or []
+        self.click_raises = click_raises
+        self.fill_raises = fill_raises
         self.filled: list[str] = []
         self.clicked = 0
         self.selected: list[Any] = []
 
     async def fill(self, value: str) -> None:
+        if self.fill_raises:
+            raise RuntimeError("element is not editable")
         self.filled.append(value)
 
     async def click(self, **kwargs: Any) -> None:
+        # A click that raises is not a click: a banner that will not take the
+        # click, or a submit that navigates the page out from under Playwright.
+        if self.click_raises:
+            raise RuntimeError("element is not clickable at point (1, 2)")
         self.clicked += 1
 
     async def text_content(self) -> str:

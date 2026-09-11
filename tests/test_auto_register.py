@@ -42,6 +42,19 @@ class FillFieldsTests(unittest.TestCase):
         )
         self.assertEqual(filled, 0)
 
+    def test_a_field_that_will_not_accept_a_value_is_skipped(self) -> None:
+        refuse, later = FakeElement(fill_raises=True), FakeElement()
+        page = FakeAsyncPage(elements=[("email", refuse), ("password", later)])
+
+        filled = asyncio.run(
+            self.registrar._fill_fields(
+                page, {'input[name="email"]': "owner@example.test", 'input[name="password"]': "pw"}
+            )
+        )
+
+        self.assertEqual(filled, 1)  # the remaining field still went in
+        self.assertEqual(later.filled, ["pw"])
+
 
 class RunAllSuppliersTests(unittest.TestCase):
     def test_collects_each_registration_result_in_order(self) -> None:

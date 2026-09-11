@@ -76,6 +76,99 @@ class RegistrarFlowTests(unittest.TestCase):
         )
         self.assertEqual(self._register("register_scottish_fuels", page)["status"], "registered")
 
+    def test_a_register_click_that_raises_ends_in_the_same_place(self) -> None:
+        """A click that navigates away raises here; it is not a failure."""
+        for flow in FLOWS:
+            with self.subTest(flow=flow):
+                button = FakeElement(tag="BUTTON", click_raises=True)
+                page = FakeAsyncPage(elements=[('name="register"', button)])
+
+                self.assertEqual(self._register(flow, page)["status"], "manual_review")
+
+    def test_an_error_banner_that_says_neither_exists_nor_success_needs_review(self) -> None:
+        for flow in FLOWS:
+            with self.subTest(flow=flow):
+                error = FakeElement(text="Please enter a valid postcode")
+                page = FakeAsyncPage(elements=[REGISTER_BUTTON, (".error", error)])
+
+                self.assertEqual(self._register(flow, page)["status"], "manual_review")
+
+    def test_scottish_fuels_follows_the_register_link_when_one_is_offered(self) -> None:
+        link, button = FakeElement(), FakeElement(tag="BUTTON")
+        page = FakeAsyncPage(elements=[('a:has-text("Sign Up")', link), ('name="register"', button)])
+
+        self._register("register_scottish_fuels", page)
+
+        self.assertEqual(link.clicked, 1)
+        self.assertEqual(button.clicked, 1)  # the flow carried on to the submit
+
+    def test_scottish_fuels_survives_a_register_link_that_will_not_click(self) -> None:
+        link, button = FakeElement(click_raises=True), FakeElement(tag="BUTTON")
+        page = FakeAsyncPage(elements=[('a:has-text("Sign Up")', link), ('name="register"', button)])
+
+        self.assertEqual(self._register("register_scottish_fuels", page)["status"], "manual_review")
+
+        self.assertEqual(button.clicked, 1)  # a dead link does not stop the registration
+
+    def test_scottish_fuels_fills_the_first_selector_set_without_falling_back(self) -> None:
+        username = FakeElement()
+        page = FakeAsyncPage(elements=[('input[name="username"]', username), REGISTER_BUTTON])
+
+        self._register("register_scottish_fuels", page)
+
+        self.assertEqual(username.filled, ["wayne"])
+
+    def test_a_banner_with_no_text_leaves_the_status_pending(self) -> None:
+        """A banner that renders empty matches nothing, so nothing is decided.
+
+        The status stays at its initial value rather than being called a review,
+        which is what the branches for a banner that does have text all do.
+        """
+        for flow in FLOWS:
+            with self.subTest(flow=flow):
+                page = FakeAsyncPage(
+                    elements=[REGISTER_BUTTON, (".woocommerce-error", FakeElement(text=""))]
+                )
+
+                self.assertEqual(self._register(flow, page)["status"], "pending")
+
+
+class CookieBannerTests(unittest.TestCase):
+    """Consent banners are dismissed, and one that will not click is not fatal."""
+
+    def setUp(self) -> None:
+        self.registrar = AccountRegistrar()
+
+    def _accept(self, page: FakeAsyncPage) -> None:
+        asyncio.run(self.registrar._accept_cookies(page))
+
+    def test_a_banner_that_will_not_click_falls_through_to_the_next_selector(self) -> None:
+        stubborn = FakeElement(tag="BUTTON", click_raises=True)
+        later = FakeElement(tag="BUTTON")
+        page = FakeAsyncPage(
+            elements=[
+                ('button:has-text("Accept All")', stubborn),
+                (".iubenda-cs-accept-btn", later),
+            ]
+        )
+
+        self._accept(page)
+
+        self.assertEqual(later.clicked, 1)
+
+    def test_the_close_button_is_used_when_there_is_no_accept_button(self) -> None:
+        close_btn = FakeElement(tag="BUTTON")
+        page = FakeAsyncPage(elements=[(".iubenda-cs-close", close_btn)])
+
+        self._accept(page)
+
+        self.assertEqual(close_btn.clicked, 1)
+
+    def test_a_close_button_that_will_not_click_is_not_fatal(self) -> None:
+        page = FakeAsyncPage(elements=[(".iubenda-cs-close", FakeElement(tag="BUTTON", click_raises=True))])
+
+        self._accept(page)  # must not raise
+
 
 if __name__ == "__main__":
     unittest.main()
