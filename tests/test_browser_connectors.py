@@ -30,6 +30,28 @@ def _quote(connector, page, quantity: int = 1000):
     )
 
 
+class LoginPage(FakeAsyncPage):
+    """A login page that only shows the logout link once the form has been sent.
+
+    The connector checks for an existing session *before* it fills anything, so a
+    page offering that link from the start would never reach the submit at all.
+    The wait for ``networkidle`` is allowed to time out, which is routine.
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.session_checks = 0
+
+    async def query_selector(self, selector: str):
+        if "logout" in selector:
+            self.session_checks += 1
+            return FakeElement() if self.session_checks > 1 else None
+        return await super().query_selector(selector)
+
+    async def wait_for_load_state(self, *args, **kwargs) -> None:
+        raise RuntimeError("networkidle never arrived")
+
+
 class BoilerJuiceConnectorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.connector = BoilerJuiceBrowserConnector()
@@ -69,6 +91,119 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         order = self.connector.place_order(SUPPLIER, 1000, 1.05, {})
         self.assertEqual(order.status, "manual_action_required")
         self.assertIn(self.connector.quote_url, order.notes)
+
+    def test_login_succeeds_even_when_networkidle_times_out(self) -> None:
+        email, password, button = FakeElement(), FakeElement(), FakeElement(tag="BUTTON")
+        page = LoginPage(
+            elements=[("email", email), ("password", password), ('has-text("Login")', button)]
+        )
+
+        self.assertTrue(asyncio.run(self.connector.login(page, "owner@example.test", "hunter2")))
+
+        self.assertEqual(email.filled, ["owner@example.test"])
+        self.assertEqual(button.clicked, 1)
+        self.assertEqual(page.session_checks, 2)  # once before the form, once after
+
+    def test_login_reports_an_invalid_credentials_message_as_failure(self) -> None:
+        page = FakeAsyncPage(
+            elements=[
+                ("email", FakeElement()),
+                ("password", FakeElement()),
+                ('has-text("Login")', FakeElement(tag="BUTTON")),
+                ("alert-danger", FakeElement(text="Sorry, that email or password is incorrect")),
+            ]
+        )
+
+        self.assertFalse(asyncio.run(self.connector.login(page, "owner@example.test", "wrong")))
+
+    def test_an_unrelated_error_banner_still_means_the_login_failed(self) -> None:
+        """Any error element means the sign-in did not take, whatever it says."""
+        page = FakeAsyncPage(
+            elements=[
+                ("email", FakeElement()),
+                ("password", FakeElement()),
+                ('has-text("Login")', FakeElement(tag="BUTTON")),
+                ("alert-danger", FakeElement(text="Please try again later")),
+            ]
+        )
+
+        self.assertFalse(asyncio.run(self.connector.login(page, "owner@example.test", "pw")))
+
+    def test_a_login_that_breaks_does_not_escape(self) -> None:
+        page = FakeAsyncPage()
+
+        async def boom(url: str, **kwargs) -> None:
+            raise RuntimeError("no such window")
+
+        page.goto = boom
+
+        self.assertFalse(asyncio.run(self.connector.login(page, "owner@example.test", "pw")))
+
+    def test_the_quantity_dropdown_is_searched_for_the_right_option(self) -> None:
+        cases = {
+            "an option list that has to be searched": [
+                FakeElement(attributes={"value": "500"}),
+                FakeElement(attributes={"value": "litres_1000"}),
+            ],
+            "an empty option list": [],
+        }
+        for label, options in cases.items():
+            with self.subTest(case=label):
+                quantity = FakeElement(tag="SELECT", options=options)
+                page = FakeAsyncPage(
+                    content="Heating oil today: £0.85 per litre", elements=[("quantity", quantity)]
+                )
+
+                result = _quote(self.connector, page)
+
+                self.assertEqual(result.status, "ok")
+                self.assertEqual(quantity.selected, ["litres_1000"] if options else [])
+
+    def test_the_price_element_scan_skips_what_carries_no_price(self) -> None:
+        page = FakeAsyncPage(
+            content="<html>Call us for today's price</html>",
+            selector_all=[
+                (
+                    "price",
+                    [
+                        FakeElement(text=""),
+                        FakeElement(text="POA"),
+                        FakeElement(text="£0.85 per litre"),
+                    ],
+                )
+            ],
+        )
+
+        result = _quote(self.connector, page)
+
+        self.assertEqual(result.status, "ok")
+        self.assertAlmostEqual(result.price_per_liter, 0.85, places=4)
+
+    def test_an_extraction_error_leaves_the_quote_for_manual_action(self) -> None:
+        page = FakeAsyncPage(content="whatever")
+
+        async def boom() -> str:
+            raise RuntimeError("page detached")
+
+        page.content = boom
+
+        result = _quote(self.connector, page)
+
+        self.assertEqual(result.status, "manual_action_required")
+        self.assertIn("could not extract", result.notes)
+
+    def test_a_broken_browser_is_recorded_as_an_error_quote(self) -> None:
+        page = FakeAsyncPage()
+
+        async def boom(url: str, **kwargs) -> None:
+            raise RuntimeError("browser died")
+
+        page.goto = boom
+
+        result = _quote(self.connector, page)
+
+        self.assertEqual(result.status, "error")
+        self.assertIn("browser died", result.notes)
 
 
 class ValueOilsBrowserConnectorTests(unittest.TestCase):
