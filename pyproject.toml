@@ -42,9 +42,9 @@ branch = true
 
 [tool.coverage.report]
 show_missing = true
-# Measured at 89.53pc when this floor was set. It sits a little below that so a
+# Measured at 91.68pc when this floor was set. It sits a little below that so a
 # real slide fails the report while fraction-of-a-point drift (a Python or
-# platform difference) does not.
-fail_under = 89
+# platform difference) does not. Raise it whenever a pass moves the suite up.
+fail_under = 91
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 
