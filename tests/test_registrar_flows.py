@@ -118,11 +118,11 @@ class RegistrarFlowTests(unittest.TestCase):
 
         self.assertEqual(username.filled, ["wayne"])
 
-    def test_a_banner_with_no_text_leaves_the_status_pending(self) -> None:
-        """A banner that renders empty matches nothing, so nothing is decided.
+    def test_a_banner_with_no_text_asks_for_a_review(self) -> None:
+        """A banner that renders empty says nothing either way.
 
-        The status stays at its initial value rather than being called a review,
-        which is what the branches for a banner that does have text all do.
+        It used to fall through and leave the status at its initial pending,
+        which is neither a success nor a flagged review.
         """
         for flow in FLOWS:
             with self.subTest(flow=flow):
@@ -130,7 +130,10 @@ class RegistrarFlowTests(unittest.TestCase):
                     elements=[REGISTER_BUTTON, (".woocommerce-error", FakeElement(text=""))]
                 )
 
-                self.assertEqual(self._register(flow, page)["status"], "pending")
+                result = self._register(flow, page)
+
+                self.assertEqual(result["status"], "manual_review")
+                self.assertIn("no message", result["message"])
 
 
 class CookieBannerTests(unittest.TestCase):
