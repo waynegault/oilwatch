@@ -93,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     auto_register.add_argument("--name", default=contact.name, help="Full name")
     auto_register.add_argument("--email", default=contact.email, help="Email address")
     auto_register.add_argument("--phone", default=contact.phone, help="Phone number")
-    auto_register.add_argument("--address", default="Hatton of Fintray, Aberdeenshire", help="Address")
+    auto_register.add_argument("--address", default=None, help="Address (defaults to the configured home)")
     auto_register.add_argument("--postcode", default=contact.postcode, help="Postcode")
     auto_register.add_argument("--visible", action="store_true", help="Show browser (non-headless)")
     auto_register.add_argument("--output", default="", help="Save results to file")
@@ -109,7 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument("--email", default=contact.email, help="Email address")
     submit.add_argument("--phone", default=contact.phone, help="Phone number")
     submit.add_argument("--postcode", default=contact.postcode, help="Delivery postcode")
-    submit.add_argument("--address", default="Hatton of Fintray, Aberdeenshire", help="Delivery address")
+    submit.add_argument("--address", default=None, help="Delivery address (defaults to the configured home)")
     submit.add_argument("--quantity-liters", type=int, default=1000, help="Quantity in litres")
     submit.add_argument("--suppliers", default="gleaner_oils,oilfast", help="Comma-separated supplier keys")
 
@@ -219,18 +219,19 @@ def main() -> None:
         _print(results)
     elif args.command == "register":
         import asyncio
-        
+
+        address = args.address or app.settings.home.label
         print(f"Registering accounts on supplier websites...")
         print(f"  Name: {args.name}")
         print(f"  Email: {args.email}")
-        print(f"  Address: {args.address}, {args.postcode}")
+        print(f"  Address: {address}, {args.postcode}")
         print()
-        
+
         results = asyncio.run(register_all(
             name=args.name,
             email=args.email,
             phone=args.phone,
-            address=args.address,
+            address=address,
             postcode=args.postcode,
             headless=not args.visible,
         ))
@@ -281,7 +282,7 @@ def main() -> None:
                 email=args.email,
                 phone=args.phone,
                 postcode=args.postcode,
-                address=args.address,
+                address=args.address or app.settings.home.label,
                 quantity_liters=args.quantity_liters,
             )
         finally:

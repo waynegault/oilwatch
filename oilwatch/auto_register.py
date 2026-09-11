@@ -389,7 +389,7 @@ async def register_all(
     name: str | None = None,
     email: str | None = None,
     phone: str | None = None,
-    address: str = "Hatton of Fintray, Aberdeenshire",
+    address: str | None = None,
     postcode: str | None = None,
     headless: bool = True,
 ) -> list[dict[str, Any]]:
@@ -400,7 +400,8 @@ async def register_all(
         name: Full name for registration (defaults to the configured contact)
         email: Email address (defaults to the configured contact email)
         phone: Phone number (defaults to the configured contact phone)
-        address: Delivery address
+        address: Passed through for the caller's sake; the supplier registration
+            forms ask for a name, an email and a password and nothing else
         postcode: Postcode (defaults to the configured delivery postcode)
         headless: Run browser in headless mode
 
@@ -413,6 +414,6 @@ async def register_all(
         name or contact.name,
         email or contact.email,
         phone if phone is not None else contact.phone,
-        address,
+        address or "",
         postcode or contact.postcode,
     )

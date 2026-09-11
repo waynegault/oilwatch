@@ -138,7 +138,14 @@ class EntryPointTests(unittest.TestCase):
         self.assertEqual(results, [{"supplier": "ValueOils"}])
         registrar_cls.assert_called_once_with(headless=True)
         registrar.register_all_suppliers.assert_awaited_once_with(
-            "Wayne", "owner@example.test", "01224", "Hatton of Fintray, Aberdeenshire", "AB21 0YA"
+            # The address is the caller's, not the contact's: the registration
+            # forms ask for a name, an email and a password, so nothing supplies
+            # one and the literal that used to sit here was doing no work.
+            "Wayne",
+            "owner@example.test",
+            "01224",
+            "",
+            "AB21 0YA",
         )
 
     def test_an_explicit_phone_is_kept_even_when_empty(self) -> None:
