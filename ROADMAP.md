@@ -184,8 +184,10 @@ The orders table is unchanged and still the record of what was bought.
     - Add price prediction based on historical patterns
 
 11. **Deployment hardening**
-    - Run the MCP server as a scheduled task/logon service rather than a
-      foreground `start_mcp_server.bat`
+    - ✅ **DONE 2026-09-11** — the MCP server starts at logon via a per-user
+      Startup entry that runs `start_mcp_server.bat`, rather than being left
+      foreground. A real Task Scheduler task needs elevation (see `PROGRESS.md`
+      next action 4 for the command)
     - Add health check endpoints
     - Document deployment to always-on host (VM, Raspberry Pi, etc.)
 

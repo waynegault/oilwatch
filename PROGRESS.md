@@ -168,7 +168,8 @@ WSL returns `serverInfo: {"name":"oilwatch","version":"0.1.0"}`. That version
 used to read `3.1.1` — the MCP framework's own, because the server declared no
 version of its own; it now reports the package's.
 
-Start it with `start_mcp_server.bat` (binds `0.0.0.0:8000`).
+It is started at logon by a per-user Startup entry (see next action 4), which
+runs `start_mcp_server.bat` (binds `0.0.0.0:8000`).
 
 ---
 
@@ -217,5 +218,15 @@ Start it with `start_mcp_server.bat` (binds `0.0.0.0:8000`).
 3. **Tune `max_quote_age_days`** — set to 1 in `config/settings.json` here, while
    the code default is 30 — if it proves too tight for suppliers that are only
    quoted monthly.
-4. **Run the MCP server as a scheduled task / logon service** rather than
-   leaving it foreground under `start_mcp_server.bat`.
+4. **DONE 2026-09-11 — the MCP server starts at logon.** It no longer has to be
+   started by hand: a per-user Startup entry
+   (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\OilWatch MCP
+   Server.bat`) runs `start_mcp_server.bat` minimised at every logon, so the
+   repo launcher stays the single place host/port live. It is a Startup entry
+   rather than a Task Scheduler task because creating a task needs elevation —
+   `schtasks /Create /SC ONLOGON` returned Access denied. For a true task
+   (hidden, restart-on-failure, starts before logon) run this once from an
+   elevated prompt, then delete the Startup entry:
+   `schtasks /Create /TN "OilWatch MCP Server" /TR "\"C:\Users\wayne\GitHub\Python\Projects\Oil Price Webscraper\start_mcp_server.bat\"" /SC ONLOGON /F`
+   The server takes ~15 s after logon before it answers, so an early probe
+   getting "connection refused" is normal, not a fault.

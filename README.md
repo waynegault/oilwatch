@@ -155,7 +155,7 @@ purchase cannot be filed against the wrong one.
 # Run continuous scheduler (daily quotes, weekly discovery)
 python -m oilwatch.cli schedule --postcode "AB21 0YA"
 
-# Start MCP server for AI agent integration
+# Start MCP server for AI agent integration (it also starts automatically at logon)
 python -m oilwatch.mcp_server
 ```
 
@@ -226,8 +226,11 @@ return f"{cheapest['name']} at £{cheapest['price_per_liter']}/L (observed {chea
 
 ### Starting the MCP Server
 
+The server starts automatically at logon (a per-user Startup entry that runs
+`start_mcp_server.bat`, binding `0.0.0.0:8000`). To run it by hand instead:
+
 ```powershell
-# Start MCP server (runs continuously)
+# Start MCP server in the foreground (runs continuously)
 python -m oilwatch.mcp_server
 ```
 
