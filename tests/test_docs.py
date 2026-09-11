@@ -55,6 +55,11 @@ def _discovered_tests() -> int:
     return loader.discover(str(ROOT / "tests"), top_level_dir=str(ROOT)).countTestCases()
 
 
+def _package_modules() -> int:
+    """How many Python files the package holds."""
+    return len(list((ROOT / "oilwatch").rglob("*.py")))
+
+
 def _stated(pattern: str, *, what: str) -> int:
     match = re.search(pattern, PROGRESS, re.MULTILINE)
     if match is None:
@@ -92,6 +97,12 @@ class CountTests(unittest.TestCase):
             _stated(r"— (\d+) tests, all offline", what="the Tests section count"),
             expected,
             "PROGRESS.md's test count is stale; run the suite and update it",
+        )
+
+    def test_the_module_count_matches_the_package(self) -> None:
+        self.assertEqual(
+            _stated(r"^\| Modules under `oilwatch/` \| (\d+)", what="the modules row"),
+            _package_modules(),
         )
 
 
