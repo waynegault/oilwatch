@@ -183,6 +183,17 @@ class PurchaseRecordingTests(unittest.TestCase):
         self.assertEqual(last["supplier_name"], "Scottish Fuels")
         self.assertEqual(last["discount_code"], "autumn25")
 
+    def test_a_machine_placed_order_shows_what_it_cost(self) -> None:
+        """place_order stores no total in the payload; the columns still know it."""
+        self.app.place_order(
+            self.ids["Scottish Fuels"], agreed_price_per_liter=1.05, quantity_liters=900
+        )
+
+        purchase = self.app.purchases()[0]
+
+        self.assertEqual(purchase["total_price"], 945.0)
+        self.assertIsNone(purchase["discount_code"])
+
 
 if __name__ == "__main__":
     unittest.main()

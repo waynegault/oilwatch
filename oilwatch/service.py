@@ -344,8 +344,16 @@ class OilWatchApp:
         rows = self.db.list_orders(limit=limit)
         for row in rows:
             payload = json.loads(row.pop("raw_payload_json") or "{}")
-            row["total_price"] = payload.get("total_price")
             row["discount_code"] = payload.get("discount_code")
+            row["total_price"] = payload.get("total_price")
+            if row["total_price"] is None:
+                # place_order stores whatever payload the connector produced, and
+                # none of them carries a total, so an order the machine placed
+                # used to read back as "total unknown". The columns always hold
+                # what it cost; a discount code it genuinely does not have.
+                row["total_price"] = round(
+                    row["agreed_price_per_liter"] * row["quantity_liters"], 2
+                )
         return rows
 
     def place_order(
