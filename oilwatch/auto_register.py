@@ -377,11 +377,18 @@ class AccountRegistrar:
 
         return self._results
 
-    def save_results(self, output_path: Path | str) -> Path:
-        """Save registration results to JSON file."""
+    def save_results(
+        self, output_path: Path | str, results: list[dict[str, Any]] | None = None
+    ) -> Path:
+        """Save registration results to JSON file.
+
+        Pass ``results`` to write a run's results without having pushed them
+        through this instance first; the default is the last run's.
+        """
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(self._results, indent=2), encoding="utf-8")
+        payload = self._results if results is None else results
+        output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return output_path
 
 

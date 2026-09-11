@@ -170,15 +170,15 @@ def main() -> None:
             contact_name=args.name,
         )
         suppliers = app.suppliers(include_inactive=False)
-        
+
         # Print quick reference
         print(script.get_quick_reference(suppliers))
         print()
-        
+
         # Print individual scripts
         for supplier in suppliers:
             print(script.generate_script(supplier))
-        
+
         # Export to JSON if output path specified
         if args.output:
             output_path = Path(args.output)
@@ -186,19 +186,19 @@ def main() -> None:
             print(f"\nCall sheet exported to: {output_path}")
     elif args.command == "api-discover":
         import asyncio
-        
+
         url = args.url
         if args.supplier_id:
             supplier = app.db.get_supplier(args.supplier_id)
             if supplier:
                 url = supplier.get("website", "")
-        
+
         if not url:
             print("Error: Please provide --url or --supplier-id")
             return
-        
+
         output_file = args.output or f"api_discovery_{url.replace('https://', '').replace('/', '_')}.json"
-        
+
         print(f"Discovering APIs on: {url}")
         results = asyncio.run(discover_supplier_api(url, output_file))
         _print(results)
@@ -206,7 +206,7 @@ def main() -> None:
         import asyncio
 
         address = args.address or app.settings.home.label
-        print(f"Registering accounts on supplier websites...")
+        print("Registering accounts on supplier websites...")
         print(f"  Name: {args.name}")
         print(f"  Email: {args.email}")
         print(f"  Address: {address}, {args.postcode}")
@@ -220,24 +220,25 @@ def main() -> None:
             postcode=args.postcode,
             headless=not args.visible,
         ))
-        
+
         print()
         print("=" * 60)
         print("REGISTRATION SUMMARY")
         print("=" * 60)
         for result in results:
-            status_icon = "✅" if result["status"] == "registered" else "⚠️" if result["status"] == "already_registered" else "❌"
-            print(f"{status_icon} {result['supplier']}: {result['status']}")
+            print(f"{result['supplier']}: {result['status']}")
             print(f"   Email: {result['email']}")
-            print(f"   Password: {result['password']}")
             print(f"   Message: {result['message']}")
             print()
-        
+
+        # The generated passwords are deliberately not echoed: they are in the
+        # encrypted credential store, and in the saved run when --output is given.
+        print("Credentials were stored for automated sign-in. Use --output to keep")
+        print("this run, generated passwords included, as a file.")
+
         if args.output:
             from oilwatch.auto_register import AccountRegistrar
-            registrar = AccountRegistrar()
-            registrar._results = results
-            output_path = registrar.save_results(args.output)
+            output_path = AccountRegistrar().save_results(args.output, results)
             print(f"Results saved to: {output_path}")
     elif args.command == "login":
         from oilwatch.browser_auth import BrowserAuth
