@@ -137,6 +137,72 @@ class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
         fallback.assert_awaited_once()
         self.assertIs(result, sentinel)
 
+    def test_login_fills_and_submits_the_form_when_one_is_offered(self) -> None:
+        email, password, button = FakeElement(), FakeElement(), FakeElement(tag="BUTTON")
+        page = FakeAsyncPage(
+            elements=[("email", email), ("password", password), ('has-text("Login")', button)]
+        )
+
+        self.assertTrue(asyncio.run(self.connector.login(page, "owner@example.test", "hunter2")))
+
+        self.assertEqual(email.filled, ["owner@example.test"])
+        self.assertEqual(password.filled, ["hunter2"])
+        self.assertEqual(button.clicked, 1)
+        self.assertEqual(page.goto_urls, [self.connector.login_url])
+
+    def test_a_broken_browser_falls_back_to_http_with_the_error(self) -> None:
+        sentinel = object()
+        page = FakeAsyncPage(content="<html>no price</html>")
+
+        async def boom(url: str, **kwargs) -> None:
+            raise RuntimeError("browser died")
+
+        page.goto = boom
+        with patch.object(
+            HomeFuelsDirectBrowserConnector, "_fallback_to_http", new=AsyncMock(return_value=sentinel)
+        ) as fallback:
+            result = _quote(self.connector, page)
+
+        self.assertIs(result, sentinel)
+        self.assertEqual(fallback.await_args.args[3], "browser died")
+
+    def test_the_price_can_come_from_a_price_element(self) -> None:
+        """The page text often carries no price; the price elements do."""
+        page = FakeAsyncPage(
+            content="<html>Call us for today's price</html>",
+            selector_all=[
+                (
+                    "price",
+                    [
+                        FakeElement(text=""),  # an empty container
+                        FakeElement(text="POA"),  # a container with no price in it
+                        FakeElement(text="£1.23 per litre"),
+                    ],
+                )
+            ],
+        )
+
+        result = _quote(self.connector, page)
+
+        self.assertEqual(result.status, "ok")
+        self.assertAlmostEqual(result.price_per_liter, 1.23, places=4)
+
+    def test_an_extraction_error_falls_back_without_blaming_the_browser(self) -> None:
+        sentinel = object()
+        page = FakeAsyncPage(content="whatever")
+
+        async def boom() -> str:
+            raise RuntimeError("page detached")
+
+        page.content = boom
+        with patch.object(
+            HomeFuelsDirectBrowserConnector, "_fallback_to_http", new=AsyncMock(return_value=sentinel)
+        ) as fallback:
+            result = _quote(self.connector, page)
+
+        self.assertIs(result, sentinel)
+        self.assertEqual(len(fallback.await_args.args), 3)  # no browser error to report
+
 
 if __name__ == "__main__":
     unittest.main()
