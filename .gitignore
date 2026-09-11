@@ -47,6 +47,9 @@ htmlcov/
 # graphify code graph (generated locally; the persistent graph lives in ~/.graphify)
 graphify-out/
 
+# Qwen Code local state (scratch, caches)
+.qwen/
+
 # Distribution
 dist/
 build/
