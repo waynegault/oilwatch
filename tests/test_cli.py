@@ -119,7 +119,7 @@ class DispatchTests(unittest.TestCase):
         run = AsyncMock(return_value={"total_requests": 3})
         out = io.StringIO()
         with (
-            patch("oilwatch.cli.discover_supplier_api", new=run),
+            patch("oilwatch.cli_handlers.discover_supplier_api", new=run),
             patch.object(sys, "argv", ["oilwatch", "api-discover", "--url", "https://example.co.uk"]),
             contextlib.redirect_stdout(out),
         ):
@@ -238,7 +238,7 @@ class DispatchTests(unittest.TestCase):
             with self.subTest(argv=argv):
                 with (
                     patch("oilwatch.cli.OilWatchApp"),
-                    patch("oilwatch.cli.register_all", new=register),
+                    patch("oilwatch.cli_handlers.register_all", new=register),
                     patch.object(sys, "argv", ["oilwatch", *argv]),
                     contextlib.redirect_stdout(io.StringIO()),
                 ):
@@ -249,7 +249,7 @@ class DispatchTests(unittest.TestCase):
         app = MagicMock()
         with (
             patch("oilwatch.cli.OilWatchApp", return_value=app),
-            patch("oilwatch.cli.OilWatchScheduler") as scheduler,
+            patch("oilwatch.cli_handlers.OilWatchScheduler") as scheduler,
             patch.object(sys, "argv", ["oilwatch", "schedule", "--postcode", "AB21 0YA"]),
             contextlib.redirect_stdout(io.StringIO()),
         ):

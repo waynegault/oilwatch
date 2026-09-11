@@ -19,7 +19,7 @@ It is a working system, not a prototype:
 
 | Area | State |
 |------|-------|
-| Modules under `oilwatch/` | 52 Python files |
+| Modules under `oilwatch/` | 53 Python files |
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (served over streamable HTTP) |
@@ -35,6 +35,7 @@ It is a working system, not a prototype:
 | File | Purpose |
 |------|---------|
 | `cli.py` | CLI entry point (21 commands) |
+| `cli_handlers.py` | One handler per CLI command; the browser/Graph ones live here |
 | `service.py` | `OilWatchApp` — orchestration used by both CLI and MCP |
 | `mcp_server.py` | FastMCP server, 9 tools, streamable HTTP on `/mcp` |
 | `scheduler.py` | APScheduler jobs for recurring discovery / quotes |
