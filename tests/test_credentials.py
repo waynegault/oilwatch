@@ -59,7 +59,9 @@ class EncryptionAtRestTests(unittest.TestCase):
     def test_round_trip_through_the_file(self) -> None:
         CredentialManager(self.path).set_credentials("scottish_fuels", "hunter2")
         reopened = CredentialManager(self.path)
-        self.assertEqual(reopened.get_credentials("scottish_fuels")["password"], "hunter2")
+        creds = reopened.get_credentials("scottish_fuels")
+        assert creds is not None
+        self.assertEqual(creds["password"], "hunter2")
         self.assertTrue(reopened.is_encrypted)
 
     def test_legacy_plaintext_still_loads(self) -> None:
@@ -73,7 +75,9 @@ class EncryptionAtRestTests(unittest.TestCase):
             encoding="utf-8",
         )
         manager = CredentialManager(self.path)
-        self.assertEqual(manager.get_credentials("valueoils")["password"], "plain")
+        creds = manager.get_credentials("valueoils")
+        assert creds is not None
+        self.assertEqual(creds["password"], "plain")
         self.assertFalse(manager.is_encrypted)
 
     def test_resave_upgrades_a_legacy_file(self) -> None:
@@ -85,7 +89,9 @@ class EncryptionAtRestTests(unittest.TestCase):
 
         reopened = CredentialManager(self.path)
         self.assertTrue(reopened.is_encrypted)
-        self.assertEqual(reopened.get_credentials("valueoils")["password"], "plain")
+        creds = reopened.get_credentials("valueoils")
+        assert creds is not None
+        self.assertEqual(creds["password"], "plain")
 
     def test_undecryptable_blob_reports_instead_of_crashing(self) -> None:
         """A file from another machine or Windows account must not crash the CLI."""
@@ -129,8 +135,9 @@ class LoadFailureTests(unittest.TestCase):
 
         manager = CredentialManager(self.path, encrypt=False)
 
-        self.assertIsNotNone(manager.load_error)
-        self.assertIn("could not read", manager.load_error)
+        error = manager.load_error
+        assert error is not None, "an unreadable file should be reported"
+        self.assertIn("could not read", error)
         self.assertEqual(manager.list_suppliers(), [])
 
     def test_a_corrupt_file_is_treated_as_no_credentials(self) -> None:
@@ -157,7 +164,9 @@ class ManagerApiTests(unittest.TestCase):
         prefix, _, random_part = password.partition("!")
         self.assertEqual(prefix.lower(), "scottishfuels")
         self.assertEqual(len(random_part), 8)
-        self.assertEqual(self.manager.get_credentials("scottish_fuels")["password"], password)
+        stored = self.manager.get_credentials("scottish_fuels")
+        assert stored is not None
+        self.assertEqual(stored["password"], password)
 
     def test_list_and_has_credentials(self) -> None:
         self.assertFalse(self.manager.has_credentials("valueoils"))
@@ -184,6 +193,7 @@ class ManagerApiTests(unittest.TestCase):
             plain = get_supplier_credentials("oilfast")
 
         self.assertEqual(stored, {"email": "owner@example.test", "password": "hunter2"})
+        assert plain is not None
         self.assertEqual(plain["password"], "hunter3")
         # The supplier name is the only difference between the two calls; it is
         # kept as a note on the account.
