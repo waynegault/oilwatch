@@ -118,3 +118,93 @@ class FakeAsyncPage:
             if needle in selector:
                 return elements
         return []
+
+
+class FakeRequest:
+    def __init__(self, url: str = "https://example.test/api/quote") -> None:
+        self.url = url
+        self.method = "GET"
+        self.headers: dict[str, str] = {}
+        self.post_data = None
+
+
+class FakeResponse:
+    def __init__(self, text: str = '{"PPL": 1.05}', content_type: str = "application/json") -> None:
+        self._text = text
+        self.status = 200
+        self.headers = {"content-type": content_type}
+
+    async def text(self) -> str:
+        return self._text
+
+
+class FakeRoute:
+    """A request the tool intercepted, and the response it can be given."""
+
+    def __init__(self, request: FakeRequest) -> None:
+        self.request = request
+        self._response = FakeResponse()
+        self.fulfilled = False
+
+    async def fetch(self) -> FakeResponse:
+        return self._response
+
+    async def fulfill(self, response: Any = None) -> None:
+        self.fulfilled = True
+
+
+class FakeContext:
+    """The browser context: it records the route handler and hands out the page."""
+
+    def __init__(self, page: Any) -> None:
+        self._page = page
+        self.route_handler = None
+        self.closed = False
+
+    async def route(self, pattern: str, handler) -> None:
+        self.route_handler = handler
+
+    async def new_page(self) -> Any:
+        return self._page
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class FakeBrowser:
+    def __init__(self, context: FakeContext) -> None:
+        self._context = context
+        self.closed = False
+
+    async def new_context(self, **kwargs: Any) -> FakeContext:
+        return self._context
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class FakeChromium:
+    def __init__(self, browser: FakeBrowser) -> None:
+        self._browser = browser
+
+    async def launch(self, **kwargs: Any) -> FakeBrowser:
+        return self._browser
+
+
+class FakeAsyncPlaywright:
+    """Stands in for ``async_playwright`` — patch the module's name with it.
+
+    Shared by the connector that launches its own browser (``browser_base``) and
+    by the API-discovery tool, which does the same playwright sequence; one fake
+    serves both rather than each test file growing its own.
+    """
+
+    def __init__(self, browser: FakeBrowser) -> None:
+        self.chromium = FakeChromium(browser)
+        self.stopped = False
+
+    async def start(self) -> "FakeAsyncPlaywright":
+        return self
+
+    async def stop(self) -> None:
+        self.stopped = True

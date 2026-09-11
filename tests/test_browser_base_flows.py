@@ -15,7 +15,15 @@ from unittest.mock import AsyncMock, patch
 from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import Contact
 from oilwatch.models import QuoteResult
-from tests.fake_async_page import FakeAsyncPage
+from tests.fake_async_page import (
+    FakeAsyncPage,
+    FakeAsyncPlaywright,
+    FakeBrowser,
+    FakeContext,
+    FakeRequest,
+    FakeResponse,
+    FakeRoute,
+)
 
 SUPPLIER = {"id": 1, "name": "Test Supplier", "website": "https://example.test"}
 
@@ -56,85 +64,6 @@ class CredentialFallbackTests(unittest.TestCase):
         self.assertEqual(store.call_args.kwargs["password"], creds["password"])
         self.assertEqual(store.call_args.kwargs["supplier_key"], "stub")
         self.assertEqual(store.call_args.kwargs["supplier_name"], "Stub Fuels")
-
-
-class FakeRequest:
-    def __init__(self, url: str = "https://example.test/api/quote") -> None:
-        self.url = url
-        self.method = "GET"
-        self.headers: dict[str, str] = {}
-        self.post_data = None
-
-
-class FakeResponse:
-    def __init__(self, text: str = '{"PPL": 1.05}', content_type: str = "application/json") -> None:
-        self._text = text
-        self.status = 200
-        self.headers = {"content-type": content_type}
-
-    async def text(self) -> str:
-        return self._text
-
-
-class FakeRoute:
-    def __init__(self, request: FakeRequest) -> None:
-        self.request = request
-        self._response = FakeResponse()
-        self.fulfilled = False
-
-    async def fetch(self) -> FakeResponse:
-        return self._response
-
-    async def fulfill(self, response: Any = None) -> None:
-        self.fulfilled = True
-
-
-class FakeContext:
-    def __init__(self, page: Any) -> None:
-        self._page = page
-        self.route_handler = None
-        self.closed = False
-
-    async def route(self, pattern: str, handler) -> None:
-        self.route_handler = handler
-
-    async def new_page(self) -> Any:
-        return self._page
-
-    async def close(self) -> None:
-        self.closed = True
-
-
-class FakeBrowser:
-    def __init__(self, context: FakeContext) -> None:
-        self._context = context
-        self.closed = False
-
-    async def new_context(self, **kwargs: Any) -> FakeContext:
-        return self._context
-
-    async def close(self) -> None:
-        self.closed = True
-
-
-class FakeChromium:
-    def __init__(self, browser: FakeBrowser) -> None:
-        self._browser = browser
-
-    async def launch(self, **kwargs: Any) -> FakeBrowser:
-        return self._browser
-
-
-class FakeAsyncPlaywright:
-    def __init__(self, browser: FakeBrowser) -> None:
-        self.chromium = FakeChromium(browser)
-        self.stopped = False
-
-    async def start(self) -> "FakeAsyncPlaywright":
-        return self
-
-    async def stop(self) -> None:
-        self.stopped = True
 
 
 class StubConnector(BrowserConnector):

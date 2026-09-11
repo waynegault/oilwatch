@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from oilwatch.api_discovery import APIDiscoveryTool, discover_supplier_api
-from tests.fake_async_page import FakeAsyncPage
+from tests.fake_async_page import FakeAsyncPage, FakeAsyncPlaywright, FakeBrowser, FakeContext
 
 URL = "https://example.co.uk"
 
@@ -112,6 +112,31 @@ class ConvenienceFunctionTests(unittest.TestCase):
             asyncio.run(discover_supplier_api(URL, output_file="x.json"))
 
         save.assert_called_once_with("x.json")
+
+
+class SetupTests(unittest.TestCase):
+    """The browser launch itself, which the flow tests patch out.
+
+    That patch is exactly why this test exists: ``_setup`` is the playwright
+    sequence every discovery run begins with, and stubbing it meant nothing ever
+    ran it.
+    """
+
+    def test_setup_launches_a_browser_and_intercepts_every_request(self) -> None:
+        page = FakeAsyncPage()
+        context = FakeContext(page)
+        playwright = FakeAsyncPlaywright(FakeBrowser(context))
+
+        with patch("oilwatch.api_discovery.async_playwright", return_value=playwright):
+            tool = APIDiscoveryTool()
+            returned = asyncio.run(tool._setup(headless=False))
+
+        self.assertIs(returned, page)
+        self.assertIs(tool._page, page)
+        # Everything is routed through the interceptor, which is the point of it.
+        # (assertEqual, not assertIs: a bound method is a new object each time.)
+        self.assertEqual(context.route_handler, tool._intercept)
+        self.assertIs(context.route_handler.__self__, tool)
 
 
 if __name__ == "__main__":
