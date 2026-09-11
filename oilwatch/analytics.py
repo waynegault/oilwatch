@@ -12,36 +12,51 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
+#: Sources whose price is market context rather than an offer from a supplier.
+#: Fueltool publishes a UK average, so it must not win "cheapest" and must not
+#: drag the average or the variance around; it is reported separately instead.
+BENCHMARK_SOURCES = frozenset({"fueltool"})
+
+
 class AnalyticsService:
     @staticmethod
     def latest_market_snapshot(latest_quotes: list[dict[str, Any]]) -> dict[str, Any]:
-        if not latest_quotes:
-            return {
-                "cheapest_supplier": None,
-                "average_price_per_liter": None,
-                "variance": None,
-                "quotes_considered": 0,
-            }
+        """The market as the owner would compare it: suppliers, plus the benchmark.
+
+        Prices are the effective ones (after any usable discount code), so the
+        ranking, the average and the variance all describe the same thing — what
+        an order would actually cost.
+        """
         priced = [row for row in latest_quotes if row["price_per_liter"] is not None]
-        if not priced:
+
+        # A comparison site publishing a UK average is not a supplier asking for
+        # the order, so it is held apart from the market it describes.
+        offers = [row for row in priced if row.get("source") not in BENCHMARK_SOURCES]
+        benchmark = None
+        for row in priced:
+            if row.get("source") in BENCHMARK_SOURCES:
+                benchmark = {
+                    "name": row["supplier_name"],
+                    "price_per_liter": row["price_per_liter"],
+                }
+                break
+
+        if not offers:
             return {
                 "cheapest_supplier": None,
                 "average_price_per_liter": None,
                 "variance": None,
                 "quotes_considered": 0,
+                "benchmark": benchmark,
             }
 
         def effective_of(row: dict[str, Any]) -> float:
-            """What the order would cost: the posted price less any useful code.
-
-            Drives the ranking, the average and the variance alike, so the whole
-            snapshot describes the same thing — the price actually available.
-            """
+            """What the order would cost: the posted price less any useful code."""
             effective = row.get("effective_price_per_liter")
             return float(effective if effective is not None else row["price_per_liter"])
 
-        prices = [effective_of(row) for row in priced]
-        cheapest = min(priced, key=effective_of)
+        prices = [effective_of(row) for row in offers]
+        cheapest = min(offers, key=effective_of)
         return {
             "cheapest_supplier": {
                 "supplier_id": cheapest["supplier_id"],
@@ -62,6 +77,8 @@ class AnalyticsService:
             "average_price_per_liter": round(mean(prices), 4),
             "variance": round(pvariance(prices), 6) if len(prices) > 1 else 0.0,
             "quotes_considered": len(prices),
+            # The excluded figure, so it is visible rather than silently dropped.
+            "benchmark": benchmark,
         }
 
     @staticmethod

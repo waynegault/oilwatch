@@ -42,6 +42,38 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(result["average_price_per_liter"], 0.725)
         self.assertEqual(result["quotes_considered"], 2)
 
+    def test_the_benchmark_is_reported_but_not_counted(self) -> None:
+        """Fueltool publishes a UK average: context, not a supplier's offer.
+
+        It used to sit in the average and the variance, and would have been
+        named the cheapest supplier whenever the UK average dipped below every
+        local quote.
+        """
+        quotes = [
+            make_quote(1, "A", "2026-03-20T10:00:00", 0.71),
+            make_quote(2, "B", "2026-03-20T11:00:00", 0.74),
+            {**make_quote(3, "Fueltool", "2026-03-20T12:00:00", 0.50), "source": "fueltool"},
+        ]
+
+        result = AnalyticsService.latest_market_snapshot(quotes)
+
+        self.assertEqual(result["cheapest_supplier"]["name"], "A")  # not the benchmark
+        self.assertEqual(result["average_price_per_liter"], 0.725)  # suppliers only
+        self.assertEqual(result["quotes_considered"], 2)
+        self.assertEqual(result["benchmark"], {"name": "Fueltool", "price_per_liter": 0.5})
+
+    def test_a_benchmark_alone_leaves_no_supplier_to_compare(self) -> None:
+        quotes = [
+            {**make_quote(3, "Fueltool", "2026-03-20T12:00:00", 0.50), "source": "fueltool"}
+        ]
+
+        result = AnalyticsService.latest_market_snapshot(quotes)
+
+        self.assertIsNone(result["cheapest_supplier"])
+        self.assertIsNone(result["average_price_per_liter"])
+        self.assertEqual(result["quotes_considered"], 0)
+        self.assertEqual(result["benchmark"]["name"], "Fueltool")
+
 
 class TrendTests(unittest.TestCase):
     def test_insufficient_data(self) -> None:
