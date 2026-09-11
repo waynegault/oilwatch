@@ -218,7 +218,7 @@ class ValueOilsBrowserConnector(BrowserConnector):
             return None
             
         except Exception as e:
-            print(f"Price extraction error: {e}")
+            log.debug("price extraction failed: %s", e)
             return None
     
     async def _fallback_to_http(

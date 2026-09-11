@@ -84,7 +84,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             return False
             
         except Exception as e:
-            print(f"Login error: {e}")
+            log.debug("login error: %s", e)
             return False
     
     async def get_quote_with_browser(
@@ -242,7 +242,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             return None
             
         except Exception as e:
-            print(f"Price extraction error: {e}")
+            log.debug("price extraction failed: %s", e)
             return None
     
     def place_order(

@@ -9,8 +9,11 @@ from playwright.async_api import Page
 
 from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import load_contact
+from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
 from oilwatch.pricing import normalise_price_per_litre
+
+log = get_logger("connectors.homefuels_direct")
 
 
 class HomeFuelsDirectBrowserConnector(BrowserConnector):
@@ -197,7 +200,7 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
             return None
             
         except Exception as e:
-            print(f"Price extraction error: {e}")
+            log.debug("price extraction failed: %s", e)
             return None
     
     async def _fallback_to_http(
