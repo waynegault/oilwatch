@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, patch
 from oilwatch.connectors.suppliers.boilerjuice import BoilerJuiceBrowserConnector
 from oilwatch.connectors.suppliers.homefuels_direct_browser import HomeFuelsDirectBrowserConnector
 from oilwatch.connectors.suppliers.valueoils_browser import ValueOilsBrowserConnector
+from oilwatch.identity import Contact
 from tests.fake_async_page import FakeAsyncPage, FakeElement
 
 SUPPLIER = {
@@ -243,6 +244,90 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
             result = _quote(self.connector, FakeAsyncPage(content="<html>no price</html>"))
         fallback.assert_awaited_once()
         self.assertIs(result, sentinel)
+
+    def test_login_fills_and_submits_the_form_when_one_is_offered(self) -> None:
+        email, password, button = FakeElement(), FakeElement(), FakeElement(tag="BUTTON")
+        page = FakeAsyncPage(
+            elements=[("email", email), ("password", password), ('has-text("Login")', button)]
+        )
+
+        self.assertTrue(asyncio.run(self.connector.login(page, "owner@example.test", "hunter2")))
+
+        self.assertEqual(email.filled, ["owner@example.test"])
+        self.assertEqual(password.filled, ["hunter2"])
+        self.assertEqual(button.clicked, 1)
+        self.assertEqual(page.goto_urls, [self.connector.login_url])
+
+    def test_the_quote_form_email_comes_from_the_contact(self) -> None:
+        """The form asks for an address to quote to; it is the configured one."""
+        email = FakeElement()
+        page = FakeAsyncPage(
+            content="Heating Oil Kerosene 103.90p per litre", elements=[("email", email)]
+        )
+
+        with patch(
+            "oilwatch.connectors.suppliers.valueoils_browser.load_contact",
+            return_value=Contact(email="owner@example.test"),
+        ):
+            result = _quote(self.connector, page)
+
+        self.assertEqual(email.filled, ["owner@example.test"])
+        self.assertEqual(result.status, "ok")
+
+    def test_a_dropdown_that_will_not_take_a_value_does_not_lose_the_quote(self) -> None:
+        usage = FakeElement(tag="SELECT", select_raises=True)
+        fuel = FakeElement(tag="SELECT", select_raises=True)
+        page = FakeAsyncPage(
+            content="Heating Oil Kerosene 103.90p per litre",
+            elements=[("usage_type", usage), ("fuel_type", fuel)],
+        )
+
+        result = _quote(self.connector, page)
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(usage.selected, [])
+        self.assertEqual(fuel.selected, [])
+
+    def test_a_broken_browser_falls_back_to_http_with_the_error(self) -> None:
+        sentinel = object()
+        page = FakeAsyncPage()
+
+        async def boom(url: str, **kwargs) -> None:
+            raise RuntimeError("browser died")
+
+        page.goto = boom
+        with patch.object(
+            ValueOilsBrowserConnector, "_fallback_to_http", new=AsyncMock(return_value=sentinel)
+        ) as fallback:
+            result = _quote(self.connector, page)
+
+        self.assertIs(result, sentinel)
+        self.assertEqual(fallback.await_args.args[3], "browser died")
+
+    def test_an_extraction_error_falls_back_without_blaming_the_browser(self) -> None:
+        sentinel = object()
+        page = FakeAsyncPage(content="whatever")
+
+        async def boom() -> str:
+            raise RuntimeError("page detached")
+
+        page.content = boom
+        with patch.object(
+            ValueOilsBrowserConnector, "_fallback_to_http", new=AsyncMock(return_value=sentinel)
+        ) as fallback:
+            result = _quote(self.connector, page)
+
+        self.assertIs(result, sentinel)
+        self.assertEqual(len(fallback.await_args.args), 3)  # no browser error to report
+
+    def test_a_price_already_in_pounds_is_not_converted_again(self) -> None:
+        """The >100 rule is a heuristic, so a pounds price has to pass through."""
+        page = FakeAsyncPage(content="Our price today: £1.55 per litre")
+
+        result = _quote(self.connector, page)
+
+        self.assertEqual(result.status, "ok")
+        self.assertAlmostEqual(result.price_per_liter, 1.55, places=4)
 
 
 class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):

@@ -21,6 +21,7 @@ class FakeElement:
         options: list[Any] | None = None,
         click_raises: bool = False,
         fill_raises: bool = False,
+        select_raises: bool = False,
     ) -> None:
         self.tag = tag
         self.text = text
@@ -28,6 +29,7 @@ class FakeElement:
         self.options = options or []
         self.click_raises = click_raises
         self.fill_raises = fill_raises
+        self.select_raises = select_raises
         self.filled: list[str] = []
         self.clicked = 0
         self.selected: list[Any] = []
@@ -57,6 +59,8 @@ class FakeElement:
         return self.options
 
     async def select_option(self, value: Any = None, **kwargs: Any) -> None:
+        if self.select_raises:
+            raise RuntimeError("element is not selectable")
         self.selected.append(value)
 
 
