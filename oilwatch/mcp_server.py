@@ -23,6 +23,8 @@ from typing import Any
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from oilwatch import __version__
+from oilwatch.identity import load_contact
 from oilwatch.logging_setup import configure_logging
 from oilwatch.service import OilWatchApp
 
@@ -33,15 +35,17 @@ ROOT = Path(__file__).resolve().parents[1]
 HOST = os.environ.get("MCP_HOST", "127.0.0.1").strip()
 PORT = int(os.environ.get("MCP_PORT", "8000").strip())
 
+_app = OilWatchApp(ROOT)
+_contact = load_contact()
+
 mcp = FastMCP(
     "oilwatch",
+    version=__version__,
     instructions=(
-        "OilWatch tracks domestic heating-oil prices for Hatton of Fintray, "
-        "Aberdeenshire (AB21 0YA). Prices are GBP per litre inclusive of 5% VAT."
+        f"OilWatch tracks domestic heating-oil prices around {_app.settings.home.label} "
+        f"({_contact.postcode}). Prices are GBP per litre inclusive of 5% VAT."
     ),
 )
-
-_app = OilWatchApp(ROOT)
 
 # Tool annotations. MCP defaults are the pessimistic ones (destructiveHint=True,
 # openWorldHint=True), so a client that gates on annotations - OpenClaw prompts
@@ -112,13 +116,13 @@ def time_series_chart() -> str:
 
 
 @mcp.tool(title="Refresh prices (slow)", annotations=_EXTERNAL_SLOW)
-def refresh_prices(postcode: str = "AB21 0YA") -> list[dict[str, Any]]:
+def refresh_prices(postcode: str | None = None) -> list[dict[str, Any]]:
     """Scrape fresh quotes from all suppliers (slow: uses browser automation).
 
     Takes minutes and may fail per-supplier (CAPTCHA, blocked, site down);
     partial results are normal. Do not call it in a loop.
     """
-    return _app.quote_all(postcode=postcode, prefer_browser=True)
+    return _app.quote_all(postcode=postcode or load_contact().postcode, prefer_browser=True)
 
 
 @mcp.tool(title="Update Brent crude", annotations=_EXTERNAL_FETCH)

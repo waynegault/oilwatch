@@ -3,9 +3,24 @@ from __future__ import annotations
 import importlib
 import tomllib
 import unittest
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
+from unittest.mock import patch
+
+import oilwatch
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class VersionTests(unittest.TestCase):
+    def test_the_package_version_matches_pyproject(self) -> None:
+        """Two copies of a version drift apart, and a third made the handshake lie."""
+        config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(oilwatch.__version__, config["project"]["version"])
+
+    def test_running_from_source_is_reported_rather_than_crashing(self) -> None:
+        with patch("oilwatch.version", side_effect=PackageNotFoundError("oilwatch")):
+            self.assertEqual(oilwatch.package_version(), "0.0.0+source")
 
 
 class EntryPointTests(unittest.TestCase):
