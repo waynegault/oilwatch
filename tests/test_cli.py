@@ -193,6 +193,39 @@ class DispatchTests(unittest.TestCase):
         auth.launch.assert_called_once_with(headless=True)
         auth.close.assert_called_once()
 
+    def test_submit_requests_defaults_to_the_configured_supplier_list(self) -> None:
+        """No --suppliers falls back to config, not to a literal in the CLI."""
+        auth = MagicMock()
+        submit = MagicMock(return_value=[])
+        app = MagicMock()
+        app.settings.submit_request_suppliers = ["gleaner_oils", "oilfast"]
+        with (
+            patch("oilwatch.cli.OilWatchApp", return_value=app),
+            patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
+            patch("oilwatch.form_submit.submit_all", new=submit),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            main()
+
+        self.assertEqual(submit.call_args.args[1], ["gleaner_oils", "oilfast"])
+
+    def test_submit_requests_reports_when_there_is_nothing_to_submit(self) -> None:
+        auth = MagicMock()
+        app = MagicMock()
+        app.settings.submit_request_suppliers = []
+        out = io.StringIO()
+        with (
+            patch("oilwatch.cli.OilWatchApp", return_value=app),
+            patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
+            contextlib.redirect_stdout(out),
+        ):
+            main()
+
+        auth.launch.assert_not_called()
+        self.assertIn("Error", out.getvalue())
+
     @staticmethod
     def _expected_postcode() -> str:
         from oilwatch.identity import load_contact

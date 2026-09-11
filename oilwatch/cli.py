@@ -107,7 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument("--postcode", default=contact.postcode, help="Delivery postcode")
     submit.add_argument("--address", default=None, help="Delivery address (defaults to the configured home)")
     submit.add_argument("--quantity-liters", type=int, default=1000, help="Quantity in litres")
-    submit.add_argument("--suppliers", default="gleaner_oils,oilfast", help="Comma-separated supplier keys")
+    submit.add_argument(
+        "--suppliers",
+        default="",
+        help="Comma-separated supplier keys (defaults to the configured list)",
+    )
 
     # Monitor email for supplier replies (Microsoft Graph / OAuth2)
     subparsers.add_parser("monitor-email")
@@ -277,10 +281,7 @@ def _cmd_register(app: OilWatchApp, args: argparse.Namespace) -> None:
 def _cmd_login(app: OilWatchApp, args: argparse.Namespace) -> None:
     from oilwatch.browser_auth import BrowserAuth
 
-    login_urls = {
-        "scottish_fuels": "https://quote.scottishfuels.co.uk/quote/",
-    }
-    url = args.url or login_urls.get(args.supplier)
+    url = args.url or app.settings.login_urls.get(args.supplier)
     if not url:
         print(f"Error: no login URL for '{args.supplier}'. Pass --url to override.")
         return
@@ -293,7 +294,14 @@ def _cmd_submit_requests(app: OilWatchApp, args: argparse.Namespace) -> None:
     from oilwatch.browser_auth import BrowserAuth
     from oilwatch.form_submit import submit_all
 
-    supplier_keys = [s.strip() for s in args.suppliers.split(",") if s.strip()]
+    supplier_keys = [
+        s.strip()
+        for s in (args.suppliers or ",".join(app.settings.submit_request_suppliers)).split(",")
+        if s.strip()
+    ]
+    if not supplier_keys:
+        print("Error: no suppliers given and none configured. Pass --suppliers.")
+        return
     auth = BrowserAuth("form_submit")
     driver = auth.launch(headless=True)
     try:

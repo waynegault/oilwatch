@@ -41,6 +41,30 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.search_queries, ["heating oil Aberdeenshire"])
         self.assertEqual(settings.scheduler.quote_interval_hours, 24)
 
+    def test_load_settings_reads_the_supplier_config(self) -> None:
+        settings = {
+            "database_path": "data/test.sqlite",
+            "chart_path": "data/test.png",
+            "home": {"label": "Home", "latitude": 57.2, "longitude": -2.2},
+            "login_urls": {"scottish_fuels": "https://quote.scottishfuels.co.uk/quote/"},
+            "submit_request_suppliers": ["gleaner_oils", "oilfast"],
+        }
+        (self.root / "config" / "settings.json").write_text(
+            json.dumps(settings), encoding="utf-8"
+        )
+        loaded = load_settings(self.root)
+        self.assertEqual(
+            loaded.login_urls, {"scottish_fuels": "https://quote.scottishfuels.co.uk/quote/"}
+        )
+        self.assertEqual(loaded.submit_request_suppliers, ["gleaner_oils", "oilfast"])
+
+    def test_the_supplier_config_defaults_to_empty(self) -> None:
+        """Absent config means no default supplier list, not a code-baked one."""
+        self._write_settings()
+        loaded = load_settings(self.root)
+        self.assertEqual(loaded.login_urls, {})
+        self.assertEqual(loaded.submit_request_suppliers, [])
+
     def test_load_supplier_overrides_missing_file(self) -> None:
         self.assertEqual(load_supplier_overrides(self.root), [])
 

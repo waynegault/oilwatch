@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from statistics import mean, pvariance
+from statistics import mean, median, pvariance
 from typing import Any
 
 import matplotlib
@@ -16,6 +16,10 @@ import matplotlib.pyplot as plt
 #: Fueltool publishes a UK average, so it must not win "cheapest" and must not
 #: drag the average or the variance around; it is reported separately instead.
 BENCHMARK_SOURCES = frozenset({"fueltool"})
+
+#: The smallest market move worth reporting. Supplier quotes resolve to a penny
+#: per litre, so anything below this is rounding, not a price movement.
+TREND_THRESHOLD = 0.01
 
 
 class AnalyticsService:
@@ -93,13 +97,38 @@ class AnalyticsService:
         return {day: min(prices) for day, prices in grouped.items()}
 
     @staticmethod
-    def price_trend(quotes: list[dict[str, Any]]) -> dict[str, Any]:
-        """Compute the direction of the cheapest daily price.
+    def _daily_by_supplier(quotes: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
+        """Map supplier name -> ``YYYY-MM-DD`` -> cheapest price that supplier gave."""
+        grouped: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+        for quote in quotes:
+            if quote["status"] != "ok" or quote["price_per_liter"] is None:
+                continue
+            day = datetime.fromisoformat(quote["observed_at"]).date().isoformat()
+            grouped[quote["supplier_name"]][day].append(float(quote["price_per_liter"]))
+        return {
+            name: {day: min(prices) for day, prices in days.items()}
+            for name, days in grouped.items()
+        }
 
-        Returns a 7-day moving average and the day-over-day change, so the user
-        can judge whether to buy now or wait for a better price.
+    @staticmethod
+    def price_trend(quotes: list[dict[str, Any]]) -> dict[str, Any]:
+        """The direction of the market, as the typical supplier's move.
+
+        Per *supplier*, not per daily cheapest. The daily minimum is whoever
+        happened to quote lowest, so one supplier re-pricing — or one supplier
+        dropping out of the comparison — used to flip the whole market's
+        direction. The signal here is the median change across the suppliers who
+        quoted on both of the two most recent days, which a single move cannot
+        swing, and it only counts once it clears the quote's own resolution.
+
+        Benchmark sources are held out here exactly as they are from the
+        snapshot: Fueltool's UK average is context for the market, not a
+        participant in it.
         """
-        daily = AnalyticsService._daily_cheapest(quotes)
+        market_quotes = [
+            quote for quote in quotes if quote.get("source") not in BENCHMARK_SOURCES
+        ]
+        daily = AnalyticsService._daily_cheapest(market_quotes)
         if not daily:
             return {
                 "direction": "insufficient_data",
@@ -107,18 +136,33 @@ class AnalyticsService:
                 "cheapest_per_day": [],
                 "latest_change": None,
                 "moving_average_7d": None,
+                "suppliers_compared": 0,
+                "change_by_supplier": {},
+                "latest_day": None,
+                "previous_day": None,
             }
 
         days = sorted(daily)
         cheapest_per_day = [round(daily[day], 4) for day in days]
 
+        latest_day = days[-1]
+        previous_day = days[-2] if len(days) >= 2 else None
+
+        change_by_supplier: dict[str, float] = {}
+        if previous_day is not None:
+            for name, series in AnalyticsService._daily_by_supplier(market_quotes).items():
+                if latest_day in series and previous_day in series:
+                    change_by_supplier[name] = round(
+                        series[latest_day] - series[previous_day], 4
+                    )
+
         latest_change: float | None = None
         direction = "stable"
-        if len(cheapest_per_day) >= 2:
-            latest_change = round(cheapest_per_day[-1] - cheapest_per_day[-2], 4)
-            if latest_change > 0.0001:
+        if change_by_supplier:
+            latest_change = round(median(change_by_supplier.values()), 4)
+            if latest_change >= TREND_THRESHOLD:
                 direction = "rising"
-            elif latest_change < -0.0001:
+            elif latest_change <= -TREND_THRESHOLD:
                 direction = "falling"
 
         moving_average_7d = round(mean(cheapest_per_day[-7:]), 4) if cheapest_per_day else None
@@ -129,23 +173,46 @@ class AnalyticsService:
             "cheapest_per_day": cheapest_per_day,
             "latest_change": latest_change,
             "moving_average_7d": moving_average_7d,
+            # The basis behind the verdict, so it can be audited rather than
+            # taken on trust.
+            "suppliers_compared": len(change_by_supplier),
+            "change_by_supplier": change_by_supplier,
+            "latest_day": latest_day,
+            "previous_day": previous_day,
         }
 
     @staticmethod
     def recommendation(snapshot: dict[str, Any], trend: dict[str, Any]) -> str:
-        """Produce a short human-readable buy/hold recommendation."""
+        """State the cheapest offer, and how the market moved if it did.
+
+        Deliberately not "prices are rising, buy soon": the move is the typical
+        change across the suppliers who quoted on both days, reported with that
+        basis rather than asserted as a market-wide direction the data cannot
+        support.
+        """
         cheapest = snapshot.get("cheapest_supplier")
         if not cheapest:
             return "No successful quotes yet - run `oilwatch quote-all` to collect prices."
         name = cheapest["name"]
         price = cheapest["price_per_liter"]
+        cheapest_bit = f"{name} is cheapest at £{price:.4f}/L"
         direction = trend.get("direction")
+        change = trend.get("latest_change")
+        compared = trend.get("suppliers_compared") or 0
+        suppliers = f"{compared} supplier" + ("" if compared == 1 else "s")
 
-        if direction == "falling":
-            return f"Prices are falling - {name} is cheapest at £{price:.4f}/L. Consider waiting for a lower price."
-        if direction == "rising":
-            return f"Prices are rising - {name} is cheapest at £{price:.4f}/L. Consider buying soon to lock in the price."
-        return f"Prices are stable - {name} is cheapest at £{price:.4f}/L."
+        if direction in {"rising", "falling"} and change is not None:
+            verb = "rose" if direction == "rising" else "fell"
+            return (
+                f"{cheapest_bit}. The typical quote {verb} {abs(change) * 100:.1f}p/L "
+                f"across {suppliers} quoting both days."
+            )
+        if compared:
+            return (
+                f"{cheapest_bit}. Quotes are little changed across {suppliers} "
+                f"quoting both days."
+            )
+        return f"{cheapest_bit}. Not enough quotes to call a direction."
 
     @staticmethod
     def build_chart(quotes: list[dict[str, Any]], output_path: Path) -> Path:

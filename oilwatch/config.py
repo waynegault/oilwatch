@@ -34,6 +34,10 @@ class Settings:
     currency: str = "GBP"
     search_queries: list[str] = field(default_factory=list)
     excluded_domains: list[str] = field(default_factory=list)
+    # Supplier keys the CLI signs in to, and the enquiry forms `submit-requests`
+    # defaults to, kept here rather than as literals in the CLI.
+    login_urls: dict[str, str] = field(default_factory=dict)
+    submit_request_suppliers: list[str] = field(default_factory=list)
     # Public OAuth client id for the mailbox grant (not a secret — it already
     # appears in monitor_email.bat). Kept here so the CLI works without needing
     # that script purely to set one environment variable.
@@ -59,6 +63,8 @@ def load_settings(root: Path | None = None) -> Settings:
         currency=data.get("currency", "GBP"),
         search_queries=data.get("search_queries", []),
         excluded_domains=data.get("excluded_domains", []),
+        login_urls=data.get("login_urls", {}),
+        submit_request_suppliers=data.get("submit_request_suppliers", []),
         microsoft_client_id=data.get("microsoft_client_id", ""),
         scheduler=SchedulerConfig(**data.get("scheduler", {})),
     )

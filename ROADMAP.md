@@ -100,7 +100,7 @@ The orders table is unchanged and still the record of what was bought.
 |-----------|--------|-------|
 | Package structure | ✅ Complete | Hatchling build, editable install |
 | Configuration | ✅ Complete | JSON-based config in `config/settings.json` + `supplier_overrides.json` |
-| Database | ✅ Complete | SQLite; currently 26 suppliers, 185 quotes, 0 orders |
+| Database | ✅ Complete | SQLite; supplier registry and quote history (live counts via `oilwatch status`) |
 | Supplier discovery | ✅ Complete | DuckDuckGo search, geocoding, 50-mile filter |
 | Connectors | ✅ Complete | 4 generic + 16 supplier-specific (HTTP, Playwright browser, telephone) |
 | Quote collection | ✅ Complete | Pluggable; live browser + HTTP collection working |
@@ -109,7 +109,7 @@ The orders table is unchanged and still the record of what was bought.
 | MCP server | ✅ Complete | 9 tools over streamable HTTP; registered in OpenClaw as `oilwatch` |
 | Scheduler | ✅ Complete | Background jobs for discovery and quotes |
 | CLI | ✅ Complete | 21 commands |
-| Tests | ✅ Complete | 534 tests, all offline |
+| Tests | ✅ Complete | 545 tests, all offline |
 | Email intake | ✅ Complete | Microsoft Graph monitor: extract reply price, record, delete mail |
 | Market context | ✅ Complete | Brent crude daily series from the EIA |
 
@@ -138,13 +138,13 @@ The orders table is unchanged and still the record of what was bought.
      `wsl -e ip route` (`default via …`) after a mode change or reboot
 
 3. **DONE — supplier connectors, discovery, baseline quotes**
-   - 26 suppliers registered, 185 quotes stored (17 active suppliers)
+   - 26 suppliers registered (17 active); quote history stored
    - 16 supplier-specific connectors under `oilwatch/connectors/suppliers/`
    - Working: ValueOils, HomeFuels Direct, Fueltool (HTTP); Rix, Regency Oils,
      Connon Bros/Fuelsoft, Scottish Fuels (browser); phone scripts elsewhere
 
 4. **DONE — gateway confirmed connected to `oilwatch`**
-   - `openclaw mcp probe oilwatch` (OpenClaw 2026.9.x) reports **8 tools,
+   - `openclaw mcp probe oilwatch` (OpenClaw 2026.9.x) reports **9 tools,
      resources, prompts**
    - Tool annotations were added on 2026-09-10 (`readOnlyHint` /
      `destructiveHint` / `idempotentHint` / `openWorldHint`, plus titles), so
@@ -158,7 +158,8 @@ The orders table is unchanged and still the record of what was bought.
 
 ### Short-term (Medium Priority)
 
-6. **Deepen test coverage** — 88 tests exist and pass, but gaps remain
+6. **Deepen test coverage** — the suite is green (see PROGRESS.md for the
+   current count), but gaps remain
    - Add integration tests for each connector type
    - Add tests for discovery service (mock HTTP)
    - Add tests for analytics edge cases, especially the recency window above

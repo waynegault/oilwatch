@@ -80,6 +80,8 @@ class TrendTests(unittest.TestCase):
         result = AnalyticsService.price_trend([])
         self.assertEqual(result["direction"], "insufficient_data")
         self.assertIsNone(result["moving_average_7d"])
+        self.assertEqual(result["suppliers_compared"], 0)
+        self.assertEqual(result["change_by_supplier"], {})
 
     def test_single_day_is_stable(self) -> None:
         quotes = [make_quote(1, "A", "2026-03-20T10:00:00", 0.71)]
@@ -87,6 +89,7 @@ class TrendTests(unittest.TestCase):
         self.assertEqual(result["direction"], "stable")
         self.assertIsNone(result["latest_change"])
         self.assertEqual(result["moving_average_7d"], 0.71)
+        self.assertEqual(result["suppliers_compared"], 0)
 
     def test_rising(self) -> None:
         quotes = [
@@ -97,6 +100,8 @@ class TrendTests(unittest.TestCase):
         self.assertEqual(result["direction"], "rising")
         self.assertEqual(result["latest_change"], 0.02)
         self.assertEqual(result["moving_average_7d"], 0.71)
+        self.assertEqual(result["suppliers_compared"], 1)
+        self.assertEqual(result["change_by_supplier"], {"A": 0.02})
 
     def test_falling(self) -> None:
         quotes = [
@@ -107,8 +112,13 @@ class TrendTests(unittest.TestCase):
         self.assertEqual(result["direction"], "falling")
         self.assertEqual(result["latest_change"], -0.02)
 
-    def test_uses_daily_cheapest(self) -> None:
-        # Two suppliers on the same day: only the cheapest drives the trend.
+    def test_a_departing_supplier_does_not_manufacture_a_rise(self) -> None:
+        """B was the daily cheapest, then stopped quoting.
+
+        The daily minimum rises from 0.70 to 0.71 — yet A, the only supplier to
+        quote both days, actually *fell* from 0.75. Judging the market by the
+        daily minimum reported a rise the market did not have.
+        """
         quotes = [
             make_quote(1, "A", "2026-03-20T10:00:00", 0.75),
             make_quote(2, "B", "2026-03-20T11:00:00", 0.70),
@@ -116,6 +126,69 @@ class TrendTests(unittest.TestCase):
         ]
         result = AnalyticsService.price_trend(quotes)
         self.assertEqual(result["cheapest_per_day"], [0.70, 0.71])
+        self.assertEqual(result["direction"], "falling")
+        self.assertEqual(result["change_by_supplier"], {"A": -0.04})
+        self.assertEqual(result["suppliers_compared"], 1)
+
+    def test_one_supplier_reprice_does_not_swing_the_market(self) -> None:
+        """The headline regression: one mover among three still is not a market move."""
+        quotes = []
+        for i, (name, price) in enumerate(
+            [("A", 0.70), ("B", 0.74), ("C", 0.78), ("D", 0.80)], start=1
+        ):
+            quotes.append(make_quote(i, name, "2026-03-20T10:00:00", price))
+        quotes += [
+            make_quote(1, "A", "2026-03-21T10:00:00", 0.75),  # +0.05, and now the cheapest
+            make_quote(2, "B", "2026-03-21T10:00:00", 0.74),
+            make_quote(3, "C", "2026-03-21T10:00:00", 0.78),
+            make_quote(4, "D", "2026-03-21T10:00:00", 0.80),
+        ]
+        result = AnalyticsService.price_trend(quotes)
+        self.assertEqual(result["direction"], "stable")
+        self.assertEqual(result["latest_change"], 0.0)
+        self.assertEqual(result["suppliers_compared"], 4)
+
+    def test_a_common_penny_move_is_the_signal(self) -> None:
+        """When the suppliers move together, that is the market."""
+        quotes = []
+        for i, (name, before, after) in enumerate(
+            [("A", 0.70, 0.71), ("B", 0.74, 0.75), ("C", 0.78, 0.79)], start=1
+        ):
+            quotes.append(make_quote(i, name, "2026-03-20T10:00:00", before))
+            quotes.append(make_quote(i, name, "2026-03-21T10:00:00", after))
+        result = AnalyticsService.price_trend(quotes)
+        self.assertEqual(result["direction"], "rising")
+        self.assertEqual(result["latest_change"], 0.01)
+
+    def test_a_sub_penny_move_is_noise(self) -> None:
+        """Below the quote's own resolution, this is rounding, not a movement."""
+        quotes = []
+        for i, (name, before, after) in enumerate(
+            [("A", 0.700, 0.705), ("B", 0.740, 0.745), ("C", 0.780, 0.785)], start=1
+        ):
+            quotes.append(make_quote(i, name, "2026-03-20T10:00:00", before))
+            quotes.append(make_quote(i, name, "2026-03-21T10:00:00", after))
+        result = AnalyticsService.price_trend(quotes)
+        self.assertEqual(result["direction"], "stable")
+        self.assertEqual(result["latest_change"], 0.005)
+
+    def test_the_benchmark_is_not_part_of_the_market_trend(self) -> None:
+        """Fueltool's UK average is context, not a participant — here too.
+
+        It is already held out of the snapshot's cheapest/average/variance; the
+        trend is the same kind of market statistic, so its UK-average row must
+        not count as a supplier that moved, nor set the daily cheapest.
+        """
+        quotes = [
+            make_quote(1, "A", "2026-03-20T10:00:00", 0.70),
+            make_quote(1, "A", "2026-03-21T10:00:00", 0.72),
+            {**make_quote(9, "Fueltool", "2026-03-20T10:00:00", 0.10), "source": "fueltool"},
+            {**make_quote(9, "Fueltool", "2026-03-21T10:00:00", 0.90), "source": "fueltool"},
+        ]
+        result = AnalyticsService.price_trend(quotes)
+        self.assertNotIn("Fueltool", result["change_by_supplier"])
+        self.assertEqual(result["suppliers_compared"], 1)
+        self.assertEqual(result["cheapest_per_day"], [0.70, 0.72])  # not the UK average
         self.assertEqual(result["direction"], "rising")
 
 
@@ -126,27 +199,66 @@ class RecommendationTests(unittest.TestCase):
         text = AnalyticsService.recommendation(snapshot, trend)
         self.assertIn("No successful quotes", text)
 
-    def test_falling_recommends_waiting(self) -> None:
-        quotes = [
-            make_quote(1, "A", "2026-03-20T10:00:00", 0.72),
-            make_quote(1, "A", "2026-03-21T10:00:00", 0.70),
-        ]
+    def test_a_fall_is_reported_with_its_basis(self) -> None:
+        quotes = []
+        for i, (name, before, after) in enumerate(
+            [("A", 0.72, 0.70), ("B", 0.76, 0.74)], start=1
+        ):
+            quotes.append(make_quote(i, name, "2026-03-20T10:00:00", before))
+            quotes.append(make_quote(i, name, "2026-03-21T10:00:00", after))
         snapshot = AnalyticsService.latest_market_snapshot(quotes)
         trend = AnalyticsService.price_trend(quotes)
         text = AnalyticsService.recommendation(snapshot, trend)
-        self.assertIn("falling", text)
-        self.assertIn("A", text)
+        self.assertIn("fell 2.0p/L", text)
+        self.assertIn("2 suppliers", text)
 
-    def test_rising_recommends_buying(self) -> None:
+    def test_a_rise_is_reported_with_its_basis(self) -> None:
+        quotes = []
+        for i, (name, before, after) in enumerate(
+            [("A", 0.70, 0.72), ("B", 0.74, 0.76)], start=1
+        ):
+            quotes.append(make_quote(i, name, "2026-03-20T10:00:00", before))
+            quotes.append(make_quote(i, name, "2026-03-21T10:00:00", after))
+        snapshot = AnalyticsService.latest_market_snapshot(quotes)
+        trend = AnalyticsService.price_trend(quotes)
+        text = AnalyticsService.recommendation(snapshot, trend)
+        self.assertIn("rose 2.0p/L", text)
+
+    def test_a_lone_supplier_move_is_attributed_to_that_supplier(self) -> None:
         quotes = [
             make_quote(1, "A", "2026-03-20T10:00:00", 0.70),
-            make_quote(1, "A", "2026-03-21T10:00:00", 0.72),
+            make_quote(1, "A", "2026-03-21T10:00:00", 0.75),
         ]
         snapshot = AnalyticsService.latest_market_snapshot(quotes)
         trend = AnalyticsService.price_trend(quotes)
         text = AnalyticsService.recommendation(snapshot, trend)
-        self.assertIn("rising", text)
-        self.assertIn("A", text)
+        self.assertIn("1 supplier ", text)  # singular: one supplier is the whole basis
+        self.assertNotIn("suppliers", text)
+
+    def test_one_supplier_move_does_not_claim_a_market_direction(self) -> None:
+        """The wording half of the regression: three still, one moved."""
+        quotes = [
+            make_quote(1, "A", "2026-03-20T10:00:00", 0.70),
+            make_quote(2, "B", "2026-03-20T10:00:00", 0.74),
+            make_quote(3, "C", "2026-03-20T10:00:00", 0.78),
+            make_quote(1, "A", "2026-03-21T10:00:00", 0.75),
+            make_quote(2, "B", "2026-03-21T10:00:00", 0.74),
+            make_quote(3, "C", "2026-03-21T10:00:00", 0.78),
+        ]
+        snapshot = AnalyticsService.latest_market_snapshot(quotes)
+        trend = AnalyticsService.price_trend(quotes)
+        self.assertEqual(trend["direction"], "stable")
+        text = AnalyticsService.recommendation(snapshot, trend)
+        self.assertIn("little changed", text)
+        self.assertNotIn("rose", text)
+        self.assertNotIn("fell", text)
+
+    def test_no_direction_without_a_comparison(self) -> None:
+        quotes = [make_quote(1, "A", "2026-03-20T10:00:00", 0.71)]
+        snapshot = AnalyticsService.latest_market_snapshot(quotes)
+        trend = AnalyticsService.price_trend(quotes)
+        text = AnalyticsService.recommendation(snapshot, trend)
+        self.assertIn("Not enough quotes", text)
 
 
 class TimeSeriesChartTests(unittest.TestCase):

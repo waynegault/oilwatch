@@ -1,11 +1,11 @@
 # OilWatch Progress Summary
 
-**Date:** 10 September 2026
+**Date:** 11 September 2026
 **Package version:** 0.1.0 (unchanged since the prototype — see `pyproject.toml`)
 
 > This file supersedes a stale March-2026 version that described an empty
 > database and a single test file. None of that is true any more. Figures below
-> were verified on 2026-09-10.
+> were verified on 2026-09-11.
 
 ---
 
@@ -23,8 +23,8 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (served over streamable HTTP) |
-| Tests | 534, all passing offline |
-| Database | 26 suppliers, 224 quotes, 0 orders |
+| Tests | 545, all passing offline |
+| Database | 26 suppliers, 244 quotes, 0 orders |
 
 ---
 
@@ -95,7 +95,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 534 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 545 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -104,11 +104,11 @@ monitoring, and end-to-end app wiring.
 
 ---
 
-## Database (as of 2026-09-10)
+## Database (as of 2026-09-11)
 
 - **Path:** `data/oilwatch.sqlite`
 - **Suppliers:** 26 (17 `active`, the rest historical)
-- **Quotes:** 224
+- **Quotes:** 244
 - **Orders:** 0
 
 **Added 2026-09-10 — purchases can be recorded.** The `orders` table was
@@ -121,7 +121,7 @@ than guessed. `oilwatch purchases` and the read-only MCP `purchases` tool read
 them back, and `status` carries the last one. Nothing in this path drives a
 browser or contacts a supplier — recording is kept separate from buying.
 
-Quote timestamps span **2007-01-26 → 2026-09-10**, because
+Quote timestamps span **2007-01-26 → 2026-09-11**, because
 `import-spreadsheet` loaded the historical workbook. Recent automated runs
 (2026-09-09 22:19–22:40 and 2026-09-10 00:13) produced priced `ok` quotes for
 Scottish Fuels, Rix, Regency Oils, Connon Bros, Johnson Oils, HomeFuels Direct,

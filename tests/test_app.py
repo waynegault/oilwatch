@@ -146,7 +146,8 @@ class OilWatchAppTests(unittest.TestCase):
         status = self.app.status()
         self.assertEqual(status["market_snapshot"]["cheapest_supplier"]["name"], "A")
         self.assertEqual(status["trend"]["direction"], "falling")
-        self.assertIn("falling", status["recommendation"])
+        self.assertIn("fell 2.0p/L", status["recommendation"])
+        self.assertIn("1 supplier", status["recommendation"])
 
     def test_cheapest_ignores_history_outside_the_age_window(self) -> None:
         stale_id = self.app.db.upsert_supplier(
