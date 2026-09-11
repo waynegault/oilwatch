@@ -7,33 +7,22 @@ that "who did I buy from last time, and what did I pay" has an answer.
 
 from __future__ import annotations
 
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
-from oilwatch.service import OilWatchApp
+from tests.app_fixture import AppTestCase
 
 
-class PurchaseRecordingTests(unittest.TestCase):
+class PurchaseRecordingTests(AppTestCase):
+    """Two suppliers, inserted here rather than imported from an overrides file.
+
+    Their websites are what these tests resolve a supplier by, so they are part
+    of the fixture rather than incidental configuration.
+    """
+
+    overrides = None
+
     def setUp(self) -> None:
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp_dir.name)
-        (self.root / "config").mkdir(parents=True, exist_ok=True)
-        (self.root / "data").mkdir(parents=True, exist_ok=True)
-        settings = {
-            "database_path": "data/test.sqlite",
-            "chart_path": "data/test-chart.png",
-            "home": {"label": "Hatton of Fintray", "latitude": 57.251, "longitude": -2.242},
-            "radius_miles": 50,
-            "quote_quantity_liters": 1000,
-            "currency": "GBP",
-            "search_queries": [],
-            "excluded_domains": [],
-            "scheduler": {"discovery_interval_hours": 168, "quote_interval_hours": 24},
-        }
-        (self.root / "config" / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
-        self.app = OilWatchApp(self.root)
+        super().setUp()
         self.app.init()
         for name, website in (
             ("Scottish Fuels", "https://quote.scottishfuels.co.uk/quote/"),
@@ -54,9 +43,6 @@ class PurchaseRecordingTests(unittest.TestCase):
                 "connector_config": {},
             }
         )
-
-    def tearDown(self) -> None:
-        self.temp_dir.cleanup()
 
     def test_records_by_name_and_reads_it_back(self) -> None:
         recorded = self.app.record_purchase(

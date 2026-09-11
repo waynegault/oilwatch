@@ -1,51 +1,17 @@
 """OilWatchApp over a throwaway install root.
 
 The app is built against a temporary config + database, so the service methods
-run for real without touching the repo's data.
+run for real without touching the repo's data. The root itself lives in
+``tests/app_fixture.py``, shared with the purchase-recording suite.
 """
 
 from __future__ import annotations
 
-import json
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from oilwatch.models import QuoteResult, SupplierCandidate, utcnow_naive
-from oilwatch.service import OilWatchApp
-
-SETTINGS = {
-    "database_path": "data/oilwatch.sqlite",
-    "chart_path": "data/chart.png",
-    "time_series_chart_path": "data/ts.png",
-    "home": {"label": "Hatton of Fintry, Aberdeenshire", "latitude": 57.2, "longitude": -2.2},
-    "quote_quantity_liters": 1000,
-    "currency": "GBP",
-    "max_quote_age_days": 30,
-}
-
-OVERRIDES = [
-    {"name": "ValueOils", "website": "https://www.valueoils.com", "connector_type": "manual"},
-    {"name": "Scottish Fuels", "website": "https://scottishfuels.co.uk", "connector_type": "manual"},
-    {"name": "Scottish Fuels Depot", "website": "https://scottishfuels.co.uk/depot", "connector_type": "manual"},
-]
-
-
-class AppTestCase(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        (self.root / "config").mkdir()
-        (self.root / "data").mkdir()
-        (self.root / "config" / "settings.json").write_text(json.dumps(SETTINGS), encoding="utf-8")
-        (self.root / "config" / "supplier_overrides.json").write_text(json.dumps(OVERRIDES), encoding="utf-8")
-        self.app = OilWatchApp(self.root)
-
-    def _init(self):
-        self.app.init()
-        return {s["name"]: s["id"] for s in self.app.suppliers()}
+from tests.app_fixture import OVERRIDES, AppTestCase
 
 
 class SetupTests(AppTestCase):
