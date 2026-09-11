@@ -30,6 +30,9 @@ class SnapshotTests(unittest.TestCase):
         self.assertIsNone(result["cheapest_supplier"])
         self.assertIsNone(result["average_price_per_liter"])
         self.assertEqual(result["quotes_considered"], 0)
+        # Always present, even with no market to describe, so a client can rely
+        # on the key rather than treating its absence as an older server.
+        self.assertEqual(result["excluded_suppliers"], [])
 
     def test_cheapest_and_average(self) -> None:
         quotes = [

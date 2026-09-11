@@ -309,6 +309,37 @@ class Database:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def stale_quotes(self, max_age_days: int | None = None) -> list[dict[str, Any]]:
+        """The newest successful quote for each supplier *outside* the window.
+
+        The mirror of :meth:`latest_quotes`: it names the suppliers a recency
+        window silently drops, with the last price each did give. Unbounded
+        (``max_age_days`` unset) there is nothing being excluded, so it returns
+        an empty list rather than every row.
+        """
+        if max_age_days is None:
+            return []
+        cutoff = (utcnow_naive() - timedelta(days=max_age_days)).date().isoformat()
+        with closing(self.connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT q.*, s.name AS supplier_name, s.website
+                FROM quotes q
+                JOIN suppliers s ON s.id = q.supplier_id
+                JOIN (
+                    SELECT supplier_id, MAX(observed_at) AS max_observed_at
+                    FROM quotes
+                    WHERE status = 'ok'
+                    GROUP BY supplier_id
+                    HAVING MAX(observed_at) < ?
+                ) latest
+                ON latest.supplier_id = q.supplier_id AND latest.max_observed_at = q.observed_at
+                ORDER BY q.observed_at ASC
+                """,
+                (cutoff,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def record_discount(self, record: dict[str, Any]) -> int:
         """Store one discount offer captured from a supplier email.
 

@@ -188,8 +188,8 @@ Recording a purchase is a deliberate CLI act by the owner
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `list_suppliers` | Suppliers on record | None |
-| `current_prices` | Latest price per supplier (£/L inc. VAT) with `valid_until`; ignores quotes older than `max_quote_age_days` | None |
-| `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`) | None |
+| `current_prices` | Latest price per supplier (£/L inc. VAT) with `valid_until`; ignores quotes older than `max_quote_age_days` (`cheapest`/`status` name those it drops) | None |
+| `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`) and any `excluded_suppliers` the age window dropped | None |
 | `purchases` | Purchases already recorded, newest first, with totals and discount codes | None |
 | `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase | None |
 | `chart` | Market summary chart; returns a file path | None |
@@ -427,7 +427,7 @@ envelope looks like this (`blob` is base64-encoded binary ciphertext):
 | **Selector drift** | A supplier redesign silently breaks a scraper | Connectors fall back to `manual_action_required` and report what they saw; update the connector |
 | **CAPTCHA on registration** | Accounts can't be fully auto-created | One-off manual sign-in |
 | **Phone-only suppliers** | Oilfast, Turriff and Carnegie cannot be quoted automatically | `oilwatch phone-script` |
-| **Price freshness** | Stored prices age | `oilwatch quote-all`, or the daily scheduler; `cheapest` ignores quotes older than `max_quote_age_days` (default 30) |
+| **Price freshness** | Stored prices age | `oilwatch quote-all`, or the daily scheduler; `cheapest` ignores quotes older than `max_quote_age_days` (code default 30; this install sets 1, because a quote stands at most a day) and lists them as `excluded_suppliers` |
 
 ### Technical Debt
 

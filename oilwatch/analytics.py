@@ -24,12 +24,18 @@ TREND_THRESHOLD = 0.01
 
 class AnalyticsService:
     @staticmethod
-    def latest_market_snapshot(latest_quotes: list[dict[str, Any]]) -> dict[str, Any]:
+    def latest_market_snapshot(
+        latest_quotes: list[dict[str, Any]],
+        excluded_suppliers: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """The market as the owner would compare it: suppliers, plus the benchmark.
 
         Prices are the effective ones (after any usable discount code), so the
         ranking, the average and the variance all describe the same thing — what
         an order would actually cost.
+
+        ``excluded_suppliers`` names the suppliers a recency window dropped, so
+        a thin market reads as "not re-quoted yet" rather than looking empty.
         """
         priced = [row for row in latest_quotes if row["price_per_liter"] is not None]
 
@@ -52,6 +58,7 @@ class AnalyticsService:
                 "variance": None,
                 "quotes_considered": 0,
                 "benchmark": benchmark,
+                "excluded_suppliers": list(excluded_suppliers or []),
             }
 
         def effective_of(row: dict[str, Any]) -> float:
@@ -83,6 +90,8 @@ class AnalyticsService:
             "quotes_considered": len(prices),
             # The excluded figure, so it is visible rather than silently dropped.
             "benchmark": benchmark,
+            # And the suppliers the recency window held back, by name.
+            "excluded_suppliers": list(excluded_suppliers or []),
         }
 
     @staticmethod

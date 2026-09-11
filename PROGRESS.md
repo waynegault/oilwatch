@@ -218,9 +218,16 @@ runs `start_mcp_server.bat` (binds `0.0.0.0:8000`).
 2. **Keep the OpenClaw `oilwatch` URL valid** — it points at the WSL NAT gateway
    (`172.28.144.1`), which changes if the WSL vEthernet is recreated; re-check
    with `wsl -e ip route` after a mode change or reboot.
-3. **Tune `max_quote_age_days`** — set to 1 in `config/settings.json` here, while
-   the code default is 30 — if it proves too tight for suppliers that are only
-   quoted monthly.
+3. **DONE 2026-09-11 — `max_quote_age_days: 1` is deliberate, not a knob to
+   loosen.** Heating-oil quotes stand for at most a day — 24h is the ceiling,
+   not an average — which the code already assumes elsewhere (`models.py`
+   defaults `valid_until` to `observed_at + 24h`, and the schema migration
+   backfills the same), so the 1-day window here matches reality. The `30` in
+   `oilwatch/config.py` is only the un-configured fallback (and keeps historical
+   spreadsheet rows out of the comparison). Instead of widening the window,
+   `cheapest` and `status` now list `excluded_suppliers` — the suppliers it held
+   back and the last price each gave — so a thin snapshot reads as "not
+   re-quoted yet" rather than looking like a scrape failure.
 4. **DONE 2026-09-11 — the MCP server starts at logon.** It no longer has to be
    started by hand: a per-user Startup entry
    (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\OilWatch MCP

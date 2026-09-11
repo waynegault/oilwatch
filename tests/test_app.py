@@ -202,6 +202,15 @@ class OilWatchAppTests(unittest.TestCase):
         self.assertEqual(snapshot["cheapest_supplier"]["name"], "Fresh")
         self.assertEqual(snapshot["quotes_considered"], 1)
 
+        # Nor may it simply vanish: the supplier the window held back is named,
+        # with the last price it gave, so a thin market is explicable.
+        self.assertEqual([row["name"] for row in snapshot["excluded_suppliers"]], ["Stale"])
+        self.assertEqual(snapshot["excluded_suppliers"][0]["last_quote_at"], "2007-01-26")
+
+        # ``status`` builds its own snapshot, so it must carry the same field.
+        status_snapshot = self.app.status()["market_snapshot"]
+        self.assertEqual([row["name"] for row in status_snapshot["excluded_suppliers"]], ["Stale"])
+
 
 class QuoteFailureLoggingTests(unittest.TestCase):
     """A connector blowing up must be logged, not only stored in a quote's notes."""

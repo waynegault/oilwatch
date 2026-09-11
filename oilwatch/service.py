@@ -136,6 +136,22 @@ class OilWatchApp:
         """
         return self.db.latest_quotes(max_age_days=self.settings.max_quote_age_days)
 
+    def _excluded_suppliers(self) -> list[dict[str, Any]]:
+        """Suppliers the age window drops, with the last price each gave.
+
+        Quotes last about a day, so the window is deliberately tight; naming the
+        suppliers it holds back keeps a thin snapshot legible as "not re-quoted
+        yet" rather than looking like a scrape that failed.
+        """
+        return [
+            {
+                "name": row["supplier_name"],
+                "last_quote_at": row["observed_at"],
+                "last_price_per_liter": row["price_per_liter"],
+            }
+            for row in self.db.stale_quotes(max_age_days=self.settings.max_quote_age_days)
+        ]
+
     def _with_effective_prices(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Attach the best applicable discount code and the resulting price.
 
@@ -178,7 +194,10 @@ class OilWatchApp:
 
     def cheapest(self) -> dict[str, Any]:
         self.db.init_schema()
-        return self.analytics.latest_market_snapshot(self._with_effective_prices(self._current_quotes()))
+        return self.analytics.latest_market_snapshot(
+            self._with_effective_prices(self._current_quotes()),
+            excluded_suppliers=self._excluded_suppliers(),
+        )
 
     def current_prices(self) -> list[dict[str, Any]]:
         self.db.init_schema()
@@ -186,7 +205,10 @@ class OilWatchApp:
 
     def status(self) -> dict[str, Any]:
         self.db.init_schema()
-        snapshot = self.analytics.latest_market_snapshot(self._with_effective_prices(self._current_quotes()))
+        snapshot = self.analytics.latest_market_snapshot(
+            self._with_effective_prices(self._current_quotes()),
+            excluded_suppliers=self._excluded_suppliers(),
+        )
         trend = self.analytics.price_trend(self.db.all_quotes())
         return {
             "market_snapshot": snapshot,

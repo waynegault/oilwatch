@@ -84,14 +84,18 @@ def current_prices() -> list[dict[str, Any]]:
 
     Suppliers with no quote inside the configured ``max_quote_age_days`` window
     are omitted, so historical spreadsheet rows cannot masquerade as today's
-    prices.
+    prices. ``cheapest`` and ``status`` name the suppliers it omits.
     """
     return _get_app().current_prices()
 
 
 @mcp.tool(title="Cheapest supplier", annotations=_READ_ONLY)
 def cheapest() -> dict[str, Any]:
-    """Return the cheapest supplier plus market average and variance."""
+    """Return the cheapest supplier plus market average and variance.
+
+    ``excluded_suppliers`` lists any supplier whose newest quote fell outside
+    ``max_quote_age_days``, so a thin market is visible as "not re-quoted yet".
+    """
     return _get_app().cheapest()
 
 

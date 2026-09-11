@@ -110,7 +110,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(len(latest), 1)
         self.assertEqual(latest[0]["price_per_liter"], 0.71)
 
-    def test_latest_quotes_max_age_excludes_stale_rows(self) -> None:
+    def test_max_age_window_excludes_stale_rows_and_names_them(self) -> None:
         stale_id = self.db.upsert_supplier(self._supplier("Stale", "https://stale.example.com"))
         fresh_id = self.db.upsert_supplier(self._supplier("Fresh", "https://fresh.example.com"))
         self.db.record_quote(
@@ -150,6 +150,16 @@ class DatabaseTests(unittest.TestCase):
         # With a recency window, the stale supplier drops out entirely.
         windowed = self.db.latest_quotes(max_age_days=30)
         self.assertEqual([q["supplier_name"] for q in windowed], ["Fresh"])
+
+        # Its mirror names what the window dropped, with the last price it gave,
+        # so a thin result can be explained instead of looking like a failure.
+        excluded = self.db.stale_quotes(max_age_days=30)
+        self.assertEqual([q["supplier_name"] for q in excluded], ["Stale"])
+        self.assertEqual(excluded[0]["observed_at"], "2007-01-26")
+        self.assertEqual(excluded[0]["price_per_liter"], 0.20)
+
+        # Unbounded there is no window, hence nothing excluded.
+        self.assertEqual(self.db.stale_quotes(), [])
 
     def test_mark_missing_suppliers_inactive(self) -> None:
         self.db.upsert_supplier(self._supplier("A", "https://a.example.com"))
