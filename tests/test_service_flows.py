@@ -151,20 +151,5 @@ class MaintenanceTests(AppTestCase):
             self.app.import_spreadsheet()
 
 
-class PlaceOrderTests(AppTestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.ids = self._init()
-
-    def test_an_unknown_supplier_raises(self) -> None:
-        with self.assertRaises(ValueError):
-            self.app.place_order(999, agreed_price_per_liter=1.05)
-
-    def test_an_order_is_recorded(self) -> None:
-        result = self.app.place_order(self.ids["ValueOils"], agreed_price_per_liter=1.05, quantity_liters=900)
-        self.assertEqual(result["status"], "manual_action_required")
-        self.assertEqual(result["quantity_liters"], 900)
-
-
 if __name__ == "__main__":
     unittest.main()

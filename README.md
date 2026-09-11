@@ -463,7 +463,6 @@ Oil Price Webscraper/
 │   ├── discovery.py             # Supplier discovery
 │   ├── geo.py                   # Geocoding
 │   ├── quotes.py                # Quote collection
-│   ├── ordering.py              # Order placement
 │   ├── analytics.py             # Charts and analytics
 │   ├── db.py                    # Database layer
 │   ├── scheduler.py             # Job scheduling
@@ -543,8 +542,9 @@ Test files:
 # 1. Check cheapest supplier
 python -m oilwatch.cli cheapest
 
-# 2. If price is good, order!
-#    Call supplier or use automated ordering
+# 2. If the price is good, order by phone or on the supplier's own site,
+#    then write down what you bought, from whom and for how much:
+python -m oilwatch.cli record-purchase "HomeFuels Direct" --price-per-liter 1.0982
 ```
 
 ### Weekly Deep Dive (10 minutes)

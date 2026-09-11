@@ -59,31 +59,34 @@
 
 ---
 
-## Phase 5: Ordering
+## Phase 5: Ordering — dropped
 
 - Add supplier-specific order placement hooks using the same connector architecture.
 - Record attempted and successful orders in the database.
 
-**Status:** ✅ Complete (platform ready)
+**Status:** ❌ Dropped 2026-09-11, by decision.
 
-**Implementation:**
-- `ordering.py` - Order service delegating to connectors
-- `connectors/http_form.py` - Order placement with configurable fields and reference extraction
-- `connectors/manual.py` - Manual order placeholder
-- `db.py` - Orders table with status tracking, reference storage
+**Why:** the owner buys by phone or on the supplier's own site. The ordering
+platform that was built for this — `ordering.py`, `OilWatchApp.place_order`, the
+`place-order` command, `OrderResult` and a `place_order` on every connector —
+never had a supplier configured to accept an automated order, so every call
+returned a manual placeholder. It was machinery for a workflow that does not
+exist, and it implied the tool could order.
 
-**Note:** Platform is complete but requires supplier-specific configuration in `config/supplier_overrides.json` for automated ordering.
+**What replaced it:** `record-purchase`, which writes down a purchase already
+made — from whom, for how much, with what code — and `purchases` to read it back.
+The orders table is unchanged and still the record of what was bought.
 
 ---
 
 ## Phase 6: MCP Integration
 
-- Expose registry refresh, quote collection, analytics, and ordering tools through FastMCP.
+- Expose registry refresh, quote collection and analytics tools through FastMCP.
 
 **Status:** ✅ Complete
 
 **Implementation:**
-- `mcp_server.py` - 8 MCP tools exposed
+- `mcp_server.py` - 9 MCP tools exposed
 - `scheduler.py` - APScheduler background jobs for recurring discovery and quote collection
 - `cli.py` - Full CLI parity with MCP tools
 
@@ -102,11 +105,11 @@
 | Connectors | ✅ Complete | 4 generic + 16 supplier-specific (HTTP, Playwright browser, telephone) |
 | Quote collection | ✅ Complete | Pluggable; live browser + HTTP collection working |
 | Analytics | ✅ Complete | Recency window (`max_quote_age_days`, default 30d) keeps 2007–2025 spreadsheet rows out of the current comparison |
-| Ordering | ✅ Platform only | Needs supplier-specific config |
-| MCP server | ✅ Complete | 8 tools over streamable HTTP; registered in OpenClaw as `oilwatch` |
+| Ordering | ❌ Dropped | Buying is manual; `record-purchase` records what was bought |
+| MCP server | ✅ Complete | 9 tools over streamable HTTP; registered in OpenClaw as `oilwatch` |
 | Scheduler | ✅ Complete | Background jobs for discovery and quotes |
-| CLI | ✅ Complete | 19 commands |
-| Tests | ✅ Complete | 88 tests, all offline |
+| CLI | ✅ Complete | 21 commands |
+| Tests | ✅ Complete | 524 tests, all offline |
 | Email intake | ✅ Complete | Microsoft Graph monitor: extract reply price, record, delete mail |
 | Market context | ✅ Complete | Brent crude daily series from the EIA |
 

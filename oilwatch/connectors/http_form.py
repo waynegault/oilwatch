@@ -7,7 +7,7 @@ import httpx
 
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.http import build_client
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import apply_vat, inclusive_total, normalise_price_per_litre
 
 
@@ -49,49 +49,6 @@ class HTTPFormConnector(BaseConnector):
             price_per_liter=price,
             total_price=inclusive_total(price, quantity_liters),
             source="http_form",
-            raw_payload={"url": str(response.url), "status_code": response.status_code},
-        )
-
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        config = supplier.get("connector_config", {})
-        if "order_url" not in config:
-            return OrderResult(
-                supplier_id=int(supplier["id"]),
-                supplier_name=supplier["name"],
-                created_at=self.now(),
-                quantity_liters=quantity_liters,
-                agreed_price_per_liter=agreed_price_per_liter,
-                status="manual_action_required",
-                notes="No automated order_url configured for this supplier.",
-            )
-        response = self._send_request(
-            method=config.get("order_method", "POST"),
-            url=config["order_url"],
-            fields=config.get("order_fields", {}),
-            supplier=supplier,
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            context=context,
-        )
-        reference = None
-        if config.get("reference_regex"):
-            match = re.search(config["reference_regex"], response.text, re.IGNORECASE)
-            if match:
-                reference = match.group(1)
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="submitted",
-            reference=reference,
             raw_payload={"url": str(response.url), "status_code": response.status_code},
         )
 

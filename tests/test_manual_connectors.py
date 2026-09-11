@@ -56,14 +56,6 @@ class ManualQuoteTests(unittest.TestCase):
                 self.assertIn("1000", result.notes)
                 self.assertIsNone(result.price_per_liter)
 
-    def test_place_order_is_manual(self) -> None:
-        for connector_cls, _, _ in MANUAL_CONNECTORS:
-            with self.subTest(connector=connector_cls.__name__):
-                order = connector_cls().place_order(SUPPLIER, 1000, 1.05, {})
-                self.assertEqual(order.status, "manual_action_required")
-                self.assertIn("1.05", order.notes)
-
-
 class ContactDetailTests(unittest.TestCase):
     def test_oilfast_payload_carries_the_depot_email(self) -> None:
         payload = OilfastConnector().quote(SUPPLIER, 1000, {}).raw_payload

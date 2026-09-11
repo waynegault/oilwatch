@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from oilwatch.connectors.base import BaseConnector
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 
 
 class RixConnector(BaseConnector):
@@ -85,20 +85,3 @@ class RixConnector(BaseConnector):
             f"- Online quote tool: 'Get your fuel quote here'"
         )
     
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        """Rix requires manual order placement."""
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes=f"Call Aberdeen depot: {self.aberdeen_phone} or use online quote tool. Agreed price: £{agreed_price_per_liter}/L",
-        )

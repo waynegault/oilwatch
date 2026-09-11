@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from typing import Any, Iterator
 
 from oilwatch.connectors.base import BaseConnector
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
 
 
@@ -109,19 +109,3 @@ class SyncBrowserConnector(BaseConnector):
             notes=f"{notes} Contact: {contact or 'supplier website'}",
         )
 
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes=self.order_notes,
-        )

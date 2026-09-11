@@ -10,7 +10,7 @@ from playwright.async_api import Page
 from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import normalise_price_per_litre
 
 log = get_logger("connectors.boilerjuice")
@@ -245,20 +245,3 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             log.debug("price extraction failed: %s", e)
             return None
     
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        """BoilerJuice requires manual order placement via website."""
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes=f"Order via website: {self.quote_url}. Logged in as {load_contact().email}",
-        )

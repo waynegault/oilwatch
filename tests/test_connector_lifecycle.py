@@ -12,7 +12,6 @@ from unittest.mock import Mock, patch
 
 from oilwatch.connectors.manual import ManualConnector
 from oilwatch.connectors.suppliers.valueoils import ValueOilsConnector
-from oilwatch.ordering import OrderService
 from oilwatch.quotes import QuoteService
 
 SUPPLIER = {
@@ -54,11 +53,6 @@ class ConnectorClientLifecycleTests(unittest.TestCase):
         with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as client:
             client.return_value.get.return_value = _fake_response()
             QuoteService(currency="GBP", home_label="Home").quote_supplier(SUPPLIER, 1000)
-        client.return_value.close.assert_called_once()
-
-    def test_order_service_closes_the_connector(self) -> None:
-        with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as client:
-            OrderService().place_order(SUPPLIER, 1000, 1.05)
         client.return_value.close.assert_called_once()
 
 

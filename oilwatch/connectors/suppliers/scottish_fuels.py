@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from oilwatch.connectors.base import BaseConnector
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 
 
 class ScottishFuelsConnector(BaseConnector):
@@ -84,20 +84,3 @@ class ScottishFuelsConnector(BaseConnector):
             f"- Order tracking available online"
         )
     
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        """Scottish Fuels requires account for online ordering."""
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes=f"Call {self.local_phone} (Aberdeenshire) or {self.phone}. Online ordering requires account. Agreed price: £{agreed_price_per_liter}/L",
-        )

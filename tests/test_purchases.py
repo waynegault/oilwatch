@@ -183,10 +183,21 @@ class PurchaseRecordingTests(unittest.TestCase):
         self.assertEqual(last["supplier_name"], "Scottish Fuels")
         self.assertEqual(last["discount_code"], "autumn25")
 
-    def test_a_machine_placed_order_shows_what_it_cost(self) -> None:
-        """place_order stores no total in the payload; the columns still know it."""
-        self.app.place_order(
-            self.ids["Scottish Fuels"], agreed_price_per_liter=1.05, quantity_liters=900
+    def test_an_order_row_with_no_total_in_its_payload_still_shows_one(self) -> None:
+        """Rows written before the total was recorded still read back with it.
+
+        They came from the automated ordering path, which stored the connector's
+        own payload and never a total; the columns have always held what it cost.
+        """
+        self.app.db.record_order(
+            {
+                "supplier_id": self.ids["Scottish Fuels"],
+                "created_at": "2026-09-10T09:00:00",
+                "quantity_liters": 900,
+                "agreed_price_per_liter": 1.05,
+                "status": "ordered",
+                "raw_payload": {},
+            }
         )
 
         purchase = self.app.purchases()[0]

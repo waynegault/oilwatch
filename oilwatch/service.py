@@ -11,7 +11,6 @@ from oilwatch.discovery import DiscoveryService
 from oilwatch.geo import GeoService
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import utcnow_naive
-from oilwatch.ordering import OrderService
 from oilwatch.quotes import QuoteService
 
 log = get_logger("service")
@@ -26,7 +25,6 @@ class OilWatchApp:
         self.discovery = DiscoveryService(self.settings, self.geo)
         self.quotes = QuoteService(self.settings.currency, self.settings.home.label)
         self.analytics = AnalyticsService()
-        self.ordering = OrderService()
 
     def init(self) -> dict[str, Any]:
         self.db.init_schema()
@@ -347,33 +345,13 @@ class OilWatchApp:
             row["discount_code"] = payload.get("discount_code")
             row["total_price"] = payload.get("total_price")
             if row["total_price"] is None:
-                # place_order stores whatever payload the connector produced, and
-                # none of them carries a total, so an order the machine placed
-                # used to read back as "total unknown". The columns always hold
-                # what it cost; a discount code it genuinely does not have.
+                # The payload need not carry a total: the automated ordering path
+                # this repo used to have stored the connector's own payload, and
+                # none of those carried one, so its rows read back as "total
+                # unknown". The columns always hold what the order cost, so
+                # derive it; a discount code it genuinely does not have.
                 row["total_price"] = round(
                     row["agreed_price_per_liter"] * row["quantity_liters"], 2
                 )
         return rows
 
-    def place_order(
-        self,
-        supplier_id: int,
-        agreed_price_per_liter: float,
-        postcode: str | None = None,
-        quantity_liters: int | None = None,
-    ) -> dict[str, Any]:
-        self.db.init_schema()
-        supplier = self.db.get_supplier(supplier_id)
-        if not supplier:
-            raise ValueError(f"Unknown supplier id: {supplier_id}")
-        quantity = quantity_liters or self.settings.quote_quantity_liters
-        result = self.ordering.place_order(
-            supplier=supplier,
-            quantity_liters=quantity,
-            agreed_price_per_liter=agreed_price_per_liter,
-            postcode=postcode,
-            home_label=self.settings.home.label,
-        )
-        self.db.record_order(result.to_record())
-        return result.to_record()

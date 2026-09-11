@@ -195,16 +195,12 @@ To add a new supplier-specific connector:
 1. **Create connector file** in `oilwatch/connectors/suppliers/`:
    ```python
    from oilwatch.connectors.base import BaseConnector
-   from oilwatch.models import QuoteResult, OrderResult
+   from oilwatch.models import QuoteResult
 
    class NewSupplierConnector(BaseConnector):
        def quote(self, supplier, quantity_liters, context):
            # Implement quote logic
            return QuoteResult(...)
-       
-       def place_order(self, supplier, quantity_liters, agreed_price, context):
-           # Implement order logic
-           return OrderResult(...)
    ```
 
 2. **Register in `__init__.py`**:

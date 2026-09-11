@@ -276,13 +276,5 @@ class ScottishFuelsBrowserConnectorTests(unittest.TestCase):
         self.assertIn("Browser automation error", result.notes)
         self.auth.close.assert_called_once()
 
-    def test_ordering_routes_to_the_phone_and_keeps_the_agreed_price(self) -> None:
-        order = self.connector.place_order(SUPPLIER, 1000, 1.05, {})
-
-        self.assertEqual(order.status, "manual_action_required")
-        self.assertAlmostEqual(order.agreed_price_per_liter, 1.05)
-        self.assertIn("0345 300 8844", order.notes)
-
-
 if __name__ == "__main__":
     unittest.main()

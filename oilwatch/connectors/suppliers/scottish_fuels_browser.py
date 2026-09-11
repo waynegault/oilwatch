@@ -36,7 +36,7 @@ from oilwatch.connectors.base import BaseConnector
 from oilwatch.credentials import get_supplier_credentials
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total, pence_to_pounds
 
 log = get_logger("connectors.scottish_fuels")
@@ -287,19 +287,3 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             notes=f"{notes} Contact: {contact or 'supplier website'}",
         )
 
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes="Order via the Scottish Fuels quote portal or by phone (0345 300 8844).",
-        )

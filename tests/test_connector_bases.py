@@ -58,11 +58,6 @@ class SyncBrowserConnectorTests(unittest.TestCase):
         self.assertEqual(result.status, "manual_action_required")
         self.assertIn("Browser automation error: boom", result.notes)
 
-    def test_place_order_uses_the_subclass_note(self) -> None:
-        order = StubSyncConnector(1.0).place_order(SUPPLIER, 1000, 1.05, {})
-        self.assertEqual(order.status, "manual_action_required")
-        self.assertEqual(order.notes, "Order via the stub.")
-
     def test_sync_page_yields_a_page_and_closes_the_browser(self) -> None:
         closed: list[bool] = []
 
@@ -121,11 +116,6 @@ class BrowserConnectorBaseTests(unittest.TestCase):
     def setUp(self) -> None:
         self.connector = StubBrowserConnector()
         self.creds = {"email": "owner@example.test", "password": "Secret!123"}
-
-    def test_place_order_is_manual_and_names_the_site(self) -> None:
-        order = self.connector.place_order(SUPPLIER, 1000, 1.05, {})
-        self.assertEqual(order.status, "manual_action_required")
-        self.assertIn(self.connector.base_url, order.notes)
 
     def test_registration_is_offered_when_a_register_link_exists(self) -> None:
         page = FakeAsyncPage(elements=[("Register", FakeElement())])

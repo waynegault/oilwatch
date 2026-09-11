@@ -49,12 +49,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("update-brent")
 
-    order = subparsers.add_parser("place-order")
-    order.add_argument("supplier_id", type=int)
-    order.add_argument("agreed_price_per_liter", type=float)
-    order.add_argument("--postcode")
-    order.add_argument("--quantity-liters", type=int)
-
     # Record a purchase already made by phone or on a supplier's own site.
     purchase = subparsers.add_parser(
         "record-purchase", help="Record a purchase you have made (no automation)"
@@ -150,15 +144,6 @@ def main() -> None:
         _print(app.import_spreadsheet(args.path or None))
     elif args.command == "update-brent":
         _print(app.update_brent())
-    elif args.command == "place-order":
-        _print(
-            app.place_order(
-                args.supplier_id,
-                agreed_price_per_liter=args.agreed_price_per_liter,
-                postcode=args.postcode,
-                quantity_liters=args.quantity_liters,
-            )
-        )
     elif args.command == "record-purchase":
         _print(
             app.record_purchase(

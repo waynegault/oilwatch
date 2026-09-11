@@ -1,10 +1,12 @@
-"""PROGRESS.md states numbers; this checks them against the code they describe.
+"""PROGRESS.md and ROADMAP.md state numbers; this checks them against the code.
 
-Hand-maintained counts drift, and PROGRESS.md drifted twice: it claimed 216 tests
-in its summary and 88 two sections later, and two of its four mentions of the MCP
-tool count said eight when the server serves nine. The numbers that can be
-derived are read back out of the code here, so a count that goes stale fails the
-suite instead of quietly misinforming.
+Hand-maintained counts drift, and they did: PROGRESS.md claimed 216 tests in its
+summary and 88 two sections later, and two of its four mentions of the MCP tool
+count said eight when the server serves nine; ROADMAP.md claimed 8 tools, 19
+commands and 88 tests, and still listed the ordering platform as complete after
+it had been dropped. The numbers that can be derived are read back out of the
+code here, so a count that goes stale fails the suite instead of quietly
+misinforming.
 
 Deliberately not checked: counts in the narrative sections, which describe past
 states and were true when written, and prose that counts something fuzzy such as
@@ -20,6 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRESS = (ROOT / "PROGRESS.md").read_text(encoding="utf-8")
+ROADMAP = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
 
 
 def _decorated_tools() -> int:
@@ -60,10 +63,10 @@ def _package_modules() -> int:
     return len(list((ROOT / "oilwatch").rglob("*.py")))
 
 
-def _stated(pattern: str, *, what: str) -> int:
-    match = re.search(pattern, PROGRESS, re.MULTILINE)
+def _stated(pattern: str, *, what: str, document: str = PROGRESS) -> int:
+    match = re.search(pattern, document, re.MULTILINE)
     if match is None:
-        raise AssertionError(f"nothing in PROGRESS.md matches {what}")
+        raise AssertionError(f"nothing in the document matches {what}")
     return int(match.group(1))
 
 
@@ -103,6 +106,36 @@ class CountTests(unittest.TestCase):
         self.assertEqual(
             _stated(r"^\| Modules under `oilwatch/` \| (\d+)", what="the modules row"),
             _package_modules(),
+        )
+
+
+class RoadmapCountTests(unittest.TestCase):
+    """ROADMAP.md states the same three counts, and drifted the same way."""
+
+    def _roadmap(self, pattern: str, what: str) -> int:
+        return _stated(pattern, what=what, document=ROADMAP)
+
+    def test_the_mcp_tool_count_matches_the_server(self) -> None:
+        self.assertEqual(
+            self._roadmap(r"\| (\d+) tools over streamable HTTP", "the MCP row"),
+            _decorated_tools(),
+        )
+        self.assertEqual(
+            self._roadmap(r"mcp_server\.py` - (\d+) MCP tools exposed", "the phase 6 note"),
+            _decorated_tools(),
+        )
+
+    def test_the_cli_command_count_matches_the_parser(self) -> None:
+        self.assertEqual(
+            self._roadmap(r"\| CLI \| ✅ Complete \| (\d+) commands", "the CLI row"),
+            _subcommands(),
+        )
+
+    def test_the_test_count_matches_a_discovery_run(self) -> None:
+        self.assertEqual(
+            self._roadmap(r"\| Tests \| ✅ Complete \| (\d+) tests", "the Tests row"),
+            _discovered_tests(),
+            "ROADMAP.md's test count is stale; run the suite and update it",
         )
 
 

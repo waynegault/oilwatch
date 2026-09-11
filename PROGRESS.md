@@ -19,11 +19,11 @@ It is a working system, not a prototype:
 
 | Area | State |
 |------|-------|
-| Modules under `oilwatch/` | 53 Python files |
+| Modules under `oilwatch/` | 52 Python files |
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
-| CLI commands | 22 |
+| CLI commands | 21 |
 | MCP tools | 9 (served over streamable HTTP) |
-| Tests | 533, all passing offline |
+| Tests | 524, all passing offline |
 | Database | 26 suppliers, 224 quotes, 0 orders |
 
 ---
@@ -34,7 +34,7 @@ It is a working system, not a prototype:
 
 | File | Purpose |
 |------|---------|
-| `cli.py` | CLI entry point (22 commands) |
+| `cli.py` | CLI entry point (21 commands) |
 | `service.py` | `OilWatchApp` — orchestration used by both CLI and MCP |
 | `mcp_server.py` | FastMCP server, 9 tools, streamable HTTP on `/mcp` |
 | `scheduler.py` | APScheduler jobs for recurring discovery / quotes |
@@ -58,7 +58,6 @@ It is a working system, not a prototype:
 | `import_xls.py` | Import `Oil Prices.xls` history |
 | `brent.py` | Brent crude daily series from the EIA |
 | `analytics.py` | Cheapest / average / variance, trend, charts |
-| `ordering.py` | Order placement (platform only — not configured) |
 
 ### Connectors
 
@@ -78,9 +77,13 @@ and a telephone script generator for the phone-only depots.
 ### CLI commands
 
 `init`, `discover`, `suppliers`, `quote`, `quote-all`, `cheapest`, `status`,
-`chart`, `time-series`, `import-spreadsheet`, `update-brent`, `place-order`,
+`chart`, `time-series`, `import-spreadsheet`, `update-brent`,
 `record-purchase`, `purchases`, `schedule`, `phone-script`, `api-discover`,
 `register`, `login`, `submit-requests`, `monitor-email`, `login-email`.
+
+There is no `place-order`: OilWatch does not order. Buying happens by phone or on
+the supplier's own site, and `record-purchase` writes down what was bought, from
+whom and for how much.
 
 ### MCP tools
 
@@ -92,7 +95,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 533 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 524 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,

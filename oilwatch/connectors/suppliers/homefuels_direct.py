@@ -9,7 +9,7 @@ import httpx
 
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.http import build_client
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import (
     DOMESTIC_VAT_RATE,
     apply_vat,
@@ -164,20 +164,3 @@ class HomeFuelsDirectConnector(BaseConnector):
 
         return None, self.price_url
     
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        """HomeFuels Direct requires manual order placement via website or phone."""
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes="Order via website: https://homefuelsdirect.co.uk or email: enquiries@homefuelsdirect.co.uk",
-        )

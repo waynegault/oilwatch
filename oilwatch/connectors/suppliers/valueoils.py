@@ -9,7 +9,7 @@ import httpx
 
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.http import build_client
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total, pence_to_pounds
 
 
@@ -148,20 +148,3 @@ class ValueOilsConnector(BaseConnector):
 
         return None
     
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        """ValueOils requires order via Quick Quote form or phone."""
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes="Order via Quick Quote form at: https://www.valueoils.com or call: 03300 570 857 (Mon-Fri 9am-5pm)",
-        )

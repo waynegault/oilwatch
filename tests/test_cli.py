@@ -36,7 +36,6 @@ COMMANDS = [
     ["login", "scottish_fuels"],
     ["submit-requests", "--suppliers", "gleaner_oils,oilfast"],
     ["import-spreadsheet", "--path", "P:/Oil Prices.xls"],
-    ["place-order", "2", "1.05", "--quantity-liters", "900"],
     ["record-purchase", "Scottish Fuels", "--price-per-liter", "1.0894"],
 ]
 
@@ -75,12 +74,6 @@ class DispatchTests(unittest.TestCase):
     def test_quote_all_forwards_the_postcode_and_the_browser_flag(self) -> None:
         app, _ = self._run(["quote-all", "--postcode", "AB21 0YA", "--browser"])
         app.quote_all.assert_called_once_with(postcode="AB21 0YA", prefer_browser=True)
-
-    def test_place_order_keeps_the_price_and_quantity_the_right_way_round(self) -> None:
-        app, _ = self._run(["place-order", "2", "1.05", "--quantity-liters", "900"])
-        _, kwargs = app.place_order.call_args
-        self.assertEqual(kwargs["agreed_price_per_liter"], 1.05)
-        self.assertEqual(kwargs["quantity_liters"], 900)
 
     def test_record_purchase_forwards_the_price_and_the_code(self) -> None:
         app, _ = self._run(

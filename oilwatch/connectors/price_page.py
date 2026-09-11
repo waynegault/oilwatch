@@ -7,7 +7,7 @@ import httpx
 
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.http import build_client
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import apply_vat, inclusive_total, normalise_price_per_litre
 
 
@@ -47,23 +47,6 @@ class PricePageConnector(BaseConnector):
             total_price=inclusive_total(price, quantity_liters),
             source="price_page",
             raw_payload={"quote_url": quote_url},
-        )
-
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes="This supplier exposes pricing on a page but does not have automated ordering configured.",
         )
 
     @staticmethod

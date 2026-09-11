@@ -14,7 +14,7 @@ from oilwatch.connectors.base import BaseConnector
 from oilwatch.credentials import get_supplier_credentials, store_supplier_credentials
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import OrderResult, QuoteResult
+from oilwatch.models import QuoteResult
 
 log = get_logger("connectors.browser")
 
@@ -261,24 +261,6 @@ class BrowserConnector(BaseConnector, ABC):
             f"6. Verify email if required\n"
             f"7. Log in and get quote for 1000L\n\n"
             f"Note: Credentials have been saved for future automated access."
-        )
-    
-    def place_order(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        agreed_price_per_liter: float,
-        context: dict[str, Any],
-    ) -> OrderResult:
-        """Place an order - requires manual confirmation for safety."""
-        return OrderResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            created_at=self.now(),
-            quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
-            status="manual_action_required",
-            notes=f"Order placement requires manual confirmation. Log in at {self.base_url} to complete order.",
         )
     
     async def discover_api(self) -> dict[str, Any]:

@@ -86,13 +86,6 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
     def test_login_returns_false_without_a_form(self) -> None:
         self.assertFalse(asyncio.run(self.connector.login(FakeAsyncPage(), "owner@example.test", "pw")))
 
-    def test_place_order_is_manual(self) -> None:
-        # Regression: this built an OrderResult the module never imported, so it
-        # raised NameError instead of returning a manual order.
-        order = self.connector.place_order(SUPPLIER, 1000, 1.05, {})
-        self.assertEqual(order.status, "manual_action_required")
-        self.assertIn(self.connector.quote_url, order.notes)
-
     def test_login_succeeds_even_when_networkidle_times_out(self) -> None:
         email, password, button = FakeElement(), FakeElement(), FakeElement(tag="BUTTON")
         page = LoginPage(
