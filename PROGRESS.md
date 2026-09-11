@@ -23,7 +23,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 22 |
 | MCP tools | 9 (served over streamable HTTP) |
-| Tests | 216, all passing offline |
+| Tests | 519, all passing offline |
 | Database | 26 suppliers, 224 quotes, 0 orders |
 
 ---
@@ -79,12 +79,12 @@ and a telephone script generator for the phone-only depots.
 
 `init`, `discover`, `suppliers`, `quote`, `quote-all`, `cheapest`, `status`,
 `chart`, `time-series`, `import-spreadsheet`, `update-brent`, `place-order`,
-`schedule`, `phone-script`, `api-discover`, `register`, `login`,
-`submit-requests`, `monitor-email`, `login-email`.
+`record-purchase`, `purchases`, `schedule`, `phone-script`, `api-discover`,
+`register`, `login`, `submit-requests`, `monitor-email`, `login-email`.
 
 ### MCP tools
 
-`list_suppliers`, `current_prices`, `cheapest`, `status`, `chart`,
+`list_suppliers`, `current_prices`, `cheapest`, `purchases`, `status`, `chart`,
 `time_series_chart`, `refresh_prices`, `update_brent`.
 
 `refresh_prices` runs browser automation and takes minutes; OpenClaw is
@@ -92,7 +92,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 88 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 519 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -160,8 +160,10 @@ is the NAT gateway `172.28.144.1`; under mirrored it was the LAN IP
 change verify from WSL and re-read `wsl -e ip route` (the `default via` line).
 
 Verified 2026-09-10 with OpenClaw 2026.9.2: `openclaw mcp probe oilwatch`
-reports **8 tools, resources, prompts**, and an MCP `initialize` handshake from
-WSL returns `serverInfo: {"name":"oilwatch","version":"3.1.1"}`.
+reports **9 tools, resources, prompts**, and an MCP `initialize` handshake from
+WSL returns `serverInfo: {"name":"oilwatch","version":"0.1.0"}`. That version
+used to read `3.1.1` — the MCP framework's own, because the server declared no
+version of its own; it now reports the package's.
 
 Start it with `start_mcp_server.bat` (binds `0.0.0.0:8000`).
 
@@ -187,8 +189,17 @@ Start it with `start_mcp_server.bat` (binds `0.0.0.0:8000`).
   `settings.default_postcode`. The old values remain in git history.
 - The README's MCP section listed seven tools that do not exist
   (`init_database`, `collect_all_quotes`, `place_order`, …) with a workflow that
-  would have failed. Replaced with the eight tools the server actually serves,
-  and a note that there is no ordering tool.
+  would have failed. Replaced with the tools the server actually serves, and a
+  note that there is no ordering tool.
+- **Resolved 2026-09-11:** the location literals that the identity pass above
+  left behind are gone: `mcp_server.py` repeated the home postcode in its
+  instructions and in `refresh_prices`, and `cli.py` and `auto_register.py`
+  repeated the address as `--address`/parameter defaults. All of them now
+  resolve through `oilwatch.identity` or `settings.home.label`.
+  `tests/test_docs.py` derives the tool, command and test counts stated in this
+  file from the code, so the numbers above fail the suite when they go stale
+  rather than sitting here misleading — which is what the 216-vs-88 test count
+  and the 8-vs-9 tool count were doing.
 
 ---
 
@@ -200,7 +211,8 @@ Start it with `start_mcp_server.bat` (binds `0.0.0.0:8000`).
 2. **Keep the OpenClaw `oilwatch` URL valid** — it points at the WSL NAT gateway
    (`172.28.144.1`), which changes if the WSL vEthernet is recreated; re-check
    with `wsl -e ip route` after a mode change or reboot.
-3. **Tune `max_quote_age_days`** (currently 1) if it proves too tight for
-   suppliers that are only quoted monthly.
+3. **Tune `max_quote_age_days`** — set to 1 in `config/settings.json` here, while
+   the code default is 30 — if it proves too tight for suppliers that are only
+   quoted monthly.
 4. **Run the MCP server as a scheduled task / logon service** rather than
    leaving it foreground under `start_mcp_server.bat`.
