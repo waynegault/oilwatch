@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta
 
-from oilwatch.discounts import DiscountOffer, best_discount_for, parse_discounts
+from oilwatch.discounts import DiscountOffer, best_discount_for, looks_like_an_offer, parse_discounts
 
 # The real ValueOils email, lightly trimmed.
 VALUEOILS_EMAIL = """\
@@ -152,6 +152,23 @@ class RobustnessTests(unittest.TestCase):
         offers = parse_discounts("£5 off 500+ litres, use code abcdef", received_at=RECEIVED)
         self.assertEqual(len(offers), 1)
         self.assertIsNone(offers[0].code)
+
+    def test_wording_for_an_offer_no_rule_can_read_is_still_flagged(self) -> None:
+        """Nothing is guessed from it, but it must not pass unnoticed.
+
+        A discount in a format the parser does not know — a percentage, a free
+        delivery, a bare voucher — used to be indistinguishable from ordinary
+        mail, so the monitor cleared it without a word.
+        """
+        self.assertEqual(parse_discounts("Take 20% off your next order", received_at=RECEIVED), [])
+        self.assertTrue(looks_like_an_offer("Take 20% off your next order"))
+        self.assertTrue(looks_like_an_offer("Free delivery on all orders this week"))
+        self.assertTrue(looks_like_an_offer("Use your voucher at checkout"))
+
+    def test_ordinary_supplier_mail_is_not_flagged(self) -> None:
+        self.assertFalse(looks_like_an_offer("Prices remain volatile - check today's price."))
+        self.assertFalse(looks_like_an_offer("✓ Fast online ordering ✓ Competitive prices"))
+        self.assertFalse(looks_like_an_offer(""))
 
     def test_a_lower_case_code_is_captured(self) -> None:
         """Scottish Fuels issued "autumn25"; a missed code is a lost discount.

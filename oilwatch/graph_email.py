@@ -226,7 +226,7 @@ class GraphEmailMonitor:
             # Capture discount codes before anything is deleted: the message is
             # removed once processed, so an uncaptured code is gone for good.
             # A discount-only email (no price in it) still earns its keep here.
-            from oilwatch.discounts import parse_discounts
+            from oilwatch.discounts import looks_like_an_offer, parse_discounts
             from oilwatch.models import utcnow_naive
 
             stamp = utcnow_naive()
@@ -260,15 +260,25 @@ class GraphEmailMonitor:
                 # Nothing to record. Clear it out of the inbox so supplier mail
                 # does not pile up, but deliberately do NOT mark it processed:
                 # it stays in Deleted Items, still visible to a later sweep and
-                # to any future parsing improvement. Parsing always runs first,
-                # so a real deal can never be dropped by this.
+                # to any future parsing improvement.
                 if inbox and message.get("parentFolderId") == inbox:
                     self.delete(token, message_id)
-                    log.info(
-                        "nothing to record in %r from %s; cleared from the inbox",
-                        message.get("subject", ""),
-                        domain,
-                    )
+                    if looks_like_an_offer(text):
+                        # It reads like an offer but no rule could read it, so it
+                        # may be a discount in a format we cannot parse yet. Say
+                        # so rather than lose it in silence; it stays in Deleted
+                        # Items until a rule for that format exists.
+                        log.warning(
+                            "possible offer no rule could read in %r from %s; cleared to Deleted Items",
+                            message.get("subject", ""),
+                            domain,
+                        )
+                    else:
+                        log.info(
+                            "nothing to record in %r from %s; cleared from the inbox",
+                            message.get("subject", ""),
+                            domain,
+                        )
                 continue
 
             if ex_vat is not None:

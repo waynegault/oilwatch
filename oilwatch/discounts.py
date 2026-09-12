@@ -199,6 +199,28 @@ def parse_discounts(text: str, *, received_at: datetime | None = None) -> list[D
     return offers
 
 
+# Wording that reads like a money-off offer. Used only to decide whether to warn
+# about a message no rule could read, so it is deliberately broad: a false
+# positive costs one warning line, a false negative loses a discount unnoticed.
+_OFFER_HINTS = re.compile(
+    r"\b\d+(?:\.\d+)?\s*%\s*(?:off|discount)|"
+    r"\bfree\s+delivery\b|"
+    r"\bvoucher\b|"
+    r"\bpromo(?:tion(?:al)?)?\s+code\b",
+    re.IGNORECASE,
+)
+
+
+def looks_like_an_offer(text: str) -> bool:
+    """True when ``text`` hints at an offer that :func:`parse_discounts` could not read.
+
+    Nothing is inferred from it — guessing an amount or a code is worse than
+    guessing nothing — but it is the difference between a discount in an unknown
+    format being reported and being swept away in silence.
+    """
+    return bool(_OFFER_HINTS.search(text or ""))
+
+
 def best_discount_for(
     offers: list[DiscountOffer],
     litres: int,

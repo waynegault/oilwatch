@@ -109,7 +109,7 @@ The orders table is unchanged and still the record of what was bought.
 | MCP server | ✅ Complete | 9 tools over streamable HTTP or stdio; OpenClaw spawns it on demand |
 | Scheduler | ✅ Complete | Background jobs for discovery and quotes |
 | CLI | ✅ Complete | 21 commands |
-| Tests | ✅ Complete | 558 tests, all offline |
+| Tests | ✅ Complete | 560 tests, all offline |
 | Email intake | ✅ Complete | Microsoft Graph monitor: extract reply price, record, delete mail |
 | Market context | ✅ Complete | Brent crude daily series from the EIA |
 
