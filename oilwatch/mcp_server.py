@@ -11,12 +11,17 @@ interfaces and connect from WSL using the Windows host's address::
     MCP_HOST=0.0.0.0 python -m oilwatch.mcp_server
     # from WSL: http://<windows-host-address>:8000/mcp
 
-Host/port are configurable via ``MCP_HOST`` and ``MCP_PORT``.
+Host/port are configurable via ``MCP_HOST`` and ``MCP_PORT``. Passing ``--stdio``
+serves the same tools over stdio instead, for a client that launches the server
+on demand rather than requiring a listening service::
+
+    python -m oilwatch.mcp_server --stdio
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -144,8 +149,16 @@ def update_brent() -> dict[str, Any]:
 
 
 def main() -> None:
-    """Run the streamable-HTTP endpoint. Console-script entry point."""
+    """Run the server. Console-script entry point.
+
+    Defaults to the streamable-HTTP endpoint. ``--stdio`` serves the same tools
+    over stdio instead, so an MCP client can spawn the server on demand and no
+    listening socket (or host address) is needed.
+    """
     configure_logging()
+    if "--stdio" in sys.argv[1:]:
+        mcp.run(transport="stdio")
+        return
     mcp.run(transport="http", host=HOST, port=PORT)
 
 

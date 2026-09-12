@@ -1,4 +1,4 @@
-"""The MCP server's declared identity, lazy wiring, and default postcode.
+"""The MCP server's declared identity, lazy wiring, default postcode and transport.
 
 This file was deleted once as five delegations and a getter, and this is not
 that. What is pinned here is the wiring that had drifted: a served version the
@@ -58,6 +58,33 @@ class DefaultPostcodeTests(unittest.TestCase):
             mcp_server.refresh_prices("AB1 1AA")
 
         self.assertEqual(app.quote_all.call_args.kwargs["postcode"], "AB1 1AA")
+
+
+class TransportSelectionTests(unittest.TestCase):
+    """``--stdio`` serves the same tools without opening a socket.
+
+    That is how an MCP client can spawn the server on demand instead of
+    requiring a running service, so which transport ``main()`` picks is worth
+    pinning: the default must stay HTTP, and ``--stdio`` must open no host/port.
+    """
+
+    def _run_main(self, argv: list[str]) -> MagicMock:
+        run = MagicMock()
+        with (
+            patch("oilwatch.mcp_server.configure_logging"),
+            patch("oilwatch.mcp_server.mcp.run", run),
+            patch("oilwatch.mcp_server.sys.argv", ["oilwatch-mcp", *argv]),
+        ):
+            mcp_server.main()
+        return run
+
+    def test_without_arguments_it_serves_http_on_the_configured_host_and_port(self) -> None:
+        run = self._run_main([])
+        run.assert_called_once_with(transport="http", host=mcp_server.HOST, port=mcp_server.PORT)
+
+    def test_stdio_serves_over_stdio_and_opens_no_socket(self) -> None:
+        run = self._run_main(["--stdio"])
+        run.assert_called_once_with(transport="stdio")
 
 
 if __name__ == "__main__":
