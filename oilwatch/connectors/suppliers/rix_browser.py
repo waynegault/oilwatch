@@ -53,6 +53,16 @@ class RixBrowserConnector(SyncBrowserConnector):
         results_url = page.url
 
         ex_vat_price = self.parse_ppl(results_text)
+        if ex_vat_price is None:
+            # Say what the page actually held: "no price" and "our pattern
+            # missed" look identical from outside, and the pattern can only be
+            # realigned against the real text. The URL matters too, since this
+            # flow can land somewhere other than /your-quote/.
+            log.warning(
+                "no PPL recognised on the Rix results page (%s); text follows:\n%s",
+                results_url,
+                results_text[:2000],
+            )
         raw_payload = {
             "quote_url": self.quote_url,
             "results_url": results_url,
