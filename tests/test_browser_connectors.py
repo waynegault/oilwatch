@@ -70,14 +70,45 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "boilerjuice_browser")
-        self.assertAlmostEqual(result.price_per_liter, 0.85, places=4)
-        # 0.85 * 1000 = £850 ex VAT, +5% VAT = £892.50.
+        # 0.85/L ex-VAT -> 0.8925/L inc-VAT; 1000L = £892.50.
+        self.assertAlmostEqual(result.price_per_liter, 0.8925, places=4)
         self.assertAlmostEqual(result.total_price, 892.5, places=2)
+
+    def test_the_inclusive_total_is_the_cheapest_you_pay(self) -> None:
+        content = (
+            "Delivery on or before Mon 21st Sep Pence per litre (ex. VAT) 113.84 ppl "
+            "You Pay £1,208.30 Continue"
+            "Delivery on or before Mon 28th Sep Pence per litre (ex. VAT) 112.64 ppl "
+            "You Pay £1,195.70 Continue"
+        )
+        self.assertEqual(BoilerJuiceBrowserConnector.parse_inclusive_total(content), 1195.70)
+
+    def test_the_price_comes_from_the_inclusive_total(self) -> None:
+        """The inclusive total carries the service charge the ppl omits, so the
+        quote is read from it rather than the headline ppl."""
+        page = FakeAsyncPage(
+            content=(
+                "Pence per litre (ex. VAT) 112.64 ppl You Pay £1,195.70 Continue"
+            )
+        )
+        result = _quote(self.connector, page)
+
+        self.assertEqual(result.status, "ok")
+        self.assertAlmostEqual(result.price_per_liter, 1.1957, places=4)
+        self.assertAlmostEqual(result.total_price, 1195.70, places=2)
 
     def test_no_price_is_manual_not_fabricated(self) -> None:
         result = _quote(self.connector, FakeAsyncPage(content="<html>no price here</html>"))
         self.assertEqual(result.status, "manual_action_required")
         self.assertIsNone(result.price_per_liter)
+
+    def test_a_field_that_will_not_take_a_value_does_not_error_the_quote(self) -> None:
+        """The live buy-now form sits in a collapsed accordion, so its postcode
+        is hidden. A field that refuses its value must not abort the run as a
+        browser error — it degrades to the manual note."""
+        page = FakeAsyncPage(elements=[("postcode", FakeElement(fill_raises=True))])
+        result = _quote(self.connector, page)
+        self.assertEqual(result.status, "manual_action_required")
 
     def test_login_reports_already_logged_in(self) -> None:
         page = FakeAsyncPage(elements=[("logout", FakeElement())])
@@ -183,7 +214,8 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         result = _quote(self.connector, page)
 
         self.assertEqual(result.status, "ok")
-        self.assertAlmostEqual(result.price_per_liter, 0.85, places=4)
+        # 0.85/L ex-VAT -> 0.8925/L inc-VAT.
+        self.assertAlmostEqual(result.price_per_liter, 0.8925, places=4)
 
     def test_an_extraction_error_leaves_the_quote_for_manual_action(self) -> None:
         page = FakeAsyncPage(content="whatever")

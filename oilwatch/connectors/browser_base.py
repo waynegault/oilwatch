@@ -61,7 +61,9 @@ class BrowserConnector(BaseConnector, ABC):
         """
         Log in to the supplier website.
 
-        Override this method to implement supplier-specific login logic.
+        Override this method to implement supplier-specific login logic. The
+        implementation is expected to navigate to the sign-in page itself, so
+        :meth:`quote` does not pre-navigate.
 
         Returns:
             True if login successful, False otherwise
@@ -220,11 +222,9 @@ class BrowserConnector(BaseConnector, ABC):
                 
                 # Get credentials
                 creds = self._get_or_create_credentials(supplier)
-                
-                # Navigate to login
-                await page.goto(self.login_url, wait_until="domcontentloaded")
-                
-                # Try to log in
+
+                # login() navigates to the sign-in page itself, so navigating
+                # here first would only load that page twice.
                 try:
                     login_success = await self.login(page, creds["email"], creds["password"])
                     if not login_success:

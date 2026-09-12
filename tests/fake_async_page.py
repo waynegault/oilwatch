@@ -34,7 +34,10 @@ class FakeElement:
         self.clicked = 0
         self.selected: list[Any] = []
 
-    async def fill(self, value: str) -> None:
+    async def fill(self, value: str, **kwargs: Any) -> None:
+        # Playwright's fill(value, timeout=...) takes keyword options; accept and
+        # ignore them so a connector can cap the wait on a possibly-hidden field
+        # without the fake rejecting the call.
         if self.fill_raises:
             raise RuntimeError("element is not editable")
         self.filled.append(value)

@@ -11,9 +11,14 @@ from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
-from oilwatch.pricing import normalise_price_per_litre
+from oilwatch.pricing import DOMESTIC_VAT_RATE, normalise_price_per_litre
 
 log = get_logger("connectors.boilerjuice")
+
+#: Each of BoilerJuice's delivery options ends in "You Pay £<total>", the
+#: inclusive cost (ex-VAT fuel + VAT + its service charge). The rendered markup
+#: puts tags between the label and the amount, so the gap is matched loosely.
+INCLUSIVE_TOTAL_RE = re.compile(r"You Pay[\s\S]{0,120}?(?:£|&pound;)\s*([\d,]+\.\d{2})")
 
 
 class BoilerJuiceBrowserConnector(BrowserConnector):
@@ -192,64 +197,101 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 '#get-quote-button, button:has-text("Get Quote"), button:has-text("Quote")'
             )
             
-            # Fill in fields
-            if postcode_field:
-                await postcode_field.fill(postcode)
-            
+            # The form is driven best-effort. This page keeps its "buy now" form
+            # inside a collapsed accordion (``#collapseUpdateQuote``) and already
+            # renders the quote for a signed-in account, so a field that will not
+            # take a value must not turn the whole run into a browser error. A
+            # short timeout keeps a hidden field from costing the full default.
+            try:
+                if postcode_field:
+                    await postcode_field.fill(postcode, timeout=5000)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("could not fill postcode: %s", exc)
+
             if quantity_field:
-                tag = await quantity_field.evaluate("el => el.tagName")
-                if tag.upper() == "SELECT":
-                    # Dropdown - select closest option
-                    options = await quantity_field.query_selector_all("option")
-                    for option in options:
-                        value = await option.get_attribute("value")
-                        if value and str(quantity_liters) in value:
-                            await quantity_field.select_option(value)
-                            break
-                else:
-                    await quantity_field.fill(str(quantity_liters))
-            
+                try:
+                    tag = await quantity_field.evaluate("el => el.tagName")
+                    if tag.upper() == "SELECT":
+                        # Dropdown - select closest option
+                        options = await quantity_field.query_selector_all("option")
+                        for option in options:
+                            value = await option.get_attribute("value")
+                            if value and str(quantity_liters) in value:
+                                await quantity_field.select_option(value)
+                                break
+                    else:
+                        await quantity_field.fill(str(quantity_liters), timeout=5000)
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("could not set quantity: %s", exc)
+
             # Submit form
             if quote_button:
-                await quote_button.click()
-                
-                # Wait for price to load
-                await page.wait_for_timeout(5000)
+                try:
+                    await quote_button.click(timeout=5000)
+
+                    # Wait for price to load
+                    await page.wait_for_timeout(5000)
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("could not submit the quote form: %s", exc)
             
-            # Try to extract price from page
-            price_per_liter = await self._extract_price(page, quantity_liters)
-            
-            if price_per_liter:
-                total_price = round(price_per_liter * quantity_liters, 2)
-                vat_rate = 0.05  # 5% VAT for domestic heating oil
-                total_with_vat = round(total_price * (1 + vat_rate), 2)
-                
-                return QuoteResult(
-                    supplier_id=int(supplier["id"]),
-                    supplier_name=supplier["name"],
-                    observed_at=self.now(),
-                    quantity_liters=quantity_liters,
-                    status="ok",
-                    price_per_liter=price_per_liter,
-                    total_price=total_with_vat,
-                    source="boilerjuice_browser",
-                    notes=f"Price extracted via browser automation for {quantity_liters}L. Ex VAT: £{total_price:.2f}, Inc VAT: £{total_with_vat:.2f}",
-                    raw_payload={
-                        "quote_url": self.quote_url,
-                        "postcode": postcode,
-                        "method": "browser_automation",
-                    },
+            # Read the price from the inclusive "You Pay" total, which carries the
+            # service charge the headline ppl omits (see the supplier note). The
+            # fallback keeps the ppl path, but reports its inc-VAT basis like every
+            # other connector, so BoilerJuice is not compared on a cheaper number.
+            try:
+                content = await page.content()
+            except Exception as exc:  # noqa: BLE001 - a detached page is "no price"
+                log.debug("could not read the quote page: %s", exc)
+                content = ""
+            inclusive_total = self.parse_inclusive_total(content)
+            if inclusive_total is not None:
+                price_per_liter = round(inclusive_total / quantity_liters, 4)
+                notes = (
+                    f"Price from BoilerJuice's quote options for {quantity_liters}L "
+                    f"(£{inclusive_total:.2f} inc-VAT, incl. the service charge)."
                 )
-            
-            # No price found - return manual action required
+                raw_payload = {
+                    "quote_url": self.quote_url,
+                    "postcode": postcode,
+                    "method": "browser_automation",
+                    "inclusive_total": inclusive_total,
+                }
+            else:
+                ex_vat = await self._extract_price(page, quantity_liters)
+                if ex_vat is None:
+                    # No price found - return manual action required
+                    return QuoteResult(
+                        supplier_id=int(supplier["id"]),
+                        supplier_name=supplier["name"],
+                        observed_at=self.now(),
+                        quantity_liters=quantity_liters,
+                        status="manual_action_required",
+                        source="boilerjuice_browser",
+                        notes="Logged in but could not extract automated price. Please complete quote manually at: https://www.boilerjuice.com/uk/journeys/core/quote",
+                    )
+                price_per_liter = round(ex_vat * (1 + DOMESTIC_VAT_RATE), 4)
+                inclusive_total = round(price_per_liter * quantity_liters, 2)
+                notes = (
+                    f"Price extracted via browser automation for {quantity_liters}L. "
+                    f"Ex VAT: £{ex_vat * quantity_liters:.2f}, Inc VAT: £{inclusive_total:.2f}"
+                )
+                raw_payload = {
+                    "quote_url": self.quote_url,
+                    "postcode": postcode,
+                    "method": "browser_automation",
+                }
+
             return QuoteResult(
                 supplier_id=int(supplier["id"]),
                 supplier_name=supplier["name"],
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
-                status="manual_action_required",
+                status="ok",
+                price_per_liter=price_per_liter,
+                total_price=inclusive_total,
                 source="boilerjuice_browser",
-                notes="Logged in but could not extract automated price. Please complete quote manually at: https://www.boilerjuice.com/uk/journeys/core/quote",
+                notes=notes,
+                raw_payload=raw_payload,
             )
             
         except Exception as e:
@@ -263,6 +305,20 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 notes=f"Browser automation error: {str(e)}",
             )
     
+    @staticmethod
+    def parse_inclusive_total(content: str) -> float | None:
+        """Cheapest inclusive "You Pay" total across BoilerJuice's options.
+
+        BoilerJuice is a broker: the headline "ppl" is ex-VAT and omits its
+        service charge, so the quote is read from this total (see the supplier
+        note). Returns ``None`` when the options are not on the page.
+        """
+        totals = [
+            float(amount.replace(",", ""))
+            for amount in INCLUSIVE_TOTAL_RE.findall(content)
+        ]
+        return min(totals) if totals else None
+
     async def _extract_price(self, page: Page, quantity_liters: int) -> float | None:
         """Extract price per litre from the page."""
         try:

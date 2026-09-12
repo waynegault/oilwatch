@@ -113,7 +113,8 @@ class BoilerJuiceQuoteTests(unittest.TestCase):
         result = self._quote(page)
 
         self.assertEqual(result.status, "ok")
-        self.assertAlmostEqual(result.price_per_liter, 1.08, places=4)
+        # 1.08/L ex-VAT -> 1.134/L inc-VAT.
+        self.assertAlmostEqual(result.price_per_liter, 1.134, places=4)
 
 
 if __name__ == "__main__":
