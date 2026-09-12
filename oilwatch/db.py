@@ -281,15 +281,19 @@ class Database:
         """Return the most recent successful quote for each supplier.
 
         ``max_age_days`` caps how old that quote is allowed to be; leave it unset
-        to take the newest successful row whatever its age. Observed timestamps
-        are all ``YYYY-MM-DD``-prefixed, so an ISO date cutoff compares correctly
-        as a string against both the date-only and datetime rows.
+        to take the newest successful row whatever its age. The cutoff is a full
+        timestamp, so one day means 24 hours: comparing dates instead kept
+        anything from the previous calendar day, which let a quote up to ~48 hours
+        old — including ones whose own ``valid_until`` had already passed — be
+        offered as current. Observed timestamps are all ``YYYY-MM-DD``-prefixed,
+        so the string comparison still holds against date-only rows (which now
+        count only while they are today's).
         """
         cutoff_clause = ""
         params: tuple[Any, ...] = ()
         if max_age_days is not None:
             cutoff_clause = "AND observed_at >= ?"
-            params = ((utcnow_naive() - timedelta(days=max_age_days)).date().isoformat(),)
+            params = ((utcnow_naive() - timedelta(days=max_age_days)).isoformat(),)
         with closing(self.connect()) as conn:
             rows = conn.execute(
                 f"""
@@ -319,7 +323,7 @@ class Database:
         """
         if max_age_days is None:
             return []
-        cutoff = (utcnow_naive() - timedelta(days=max_age_days)).date().isoformat()
+        cutoff = (utcnow_naive() - timedelta(days=max_age_days)).isoformat()
         with closing(self.connect()) as conn:
             rows = conn.execute(
                 """

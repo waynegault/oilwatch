@@ -14,6 +14,7 @@ class _StubApp:
         self.fail = fail or set()
         self.calls: list[str] = []
         self.postcodes: list[str | None] = []
+        self.browser_flags: list[bool] = []
         self.init_called = False
         self.settings = SimpleNamespace(
             scheduler=SimpleNamespace(
@@ -28,9 +29,10 @@ class _StubApp:
         if name in self.fail:
             raise RuntimeError(f"{name} exploded")
 
-    def quote_all(self, postcode=None):
+    def quote_all(self, postcode=None, prefer_browser=False):
         self._record("quote_all")
         self.postcodes.append(postcode)
+        self.browser_flags.append(prefer_browser)
         return []
 
     def update_brent(self):
@@ -91,6 +93,17 @@ class RefreshChainTests(unittest.TestCase):
         scheduler, app = self._scheduler(postcode="ZZ99 9ZZ")
         scheduler._refresh_quotes_and_charts()
         self.assertEqual(app.postcodes, ["ZZ99 9ZZ"])
+
+    def test_the_refresh_asks_for_browser_quotes(self) -> None:
+        """The scheduled refresh must cover the browser suppliers too.
+
+        quote_all defaults to prefer_browser=False, so a plain call refreshed the
+        HTTP suppliers and left Rix, the Fuelsoft trio and Scottish Fuels
+        unrefreshed - they then drop out of the comparison within a day.
+        """
+        scheduler, app = self._scheduler()
+        scheduler._refresh_quotes_and_charts()
+        self.assertEqual(app.browser_flags, [True])
 
     def test_non_critical_failures_are_logged_and_do_not_stop_the_chain(self) -> None:
         scheduler, app = self._scheduler(fail={"update_brent", "chart", "time_series_chart"})

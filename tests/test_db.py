@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import timedelta
 from pathlib import Path
 
 from oilwatch.db import Database
@@ -160,6 +161,39 @@ class DatabaseTests(unittest.TestCase):
 
         # Unbounded there is no window, hence nothing excluded.
         self.assertEqual(self.db.stale_quotes(), [])
+
+    def test_the_window_is_24_hours_not_a_calendar_day(self) -> None:
+        """``max_age_days=1`` means a day, not "since midnight".
+
+        A date cutoff kept anything from the previous calendar day, so a quote
+        could be up to ~48 hours old and still be offered as current — including
+        ones whose own ``valid_until`` had already passed.
+        """
+        now = utcnow_naive()
+        for name, age in (("Recent", timedelta(hours=23)), ("Older", timedelta(hours=25))):
+            supplier_id = self.db.upsert_supplier(
+                self._supplier(name, f"https://{name.lower()}.example.com")
+            )
+            self.db.record_quote(
+                {
+                    "supplier_id": supplier_id,
+                    "observed_at": (now - age).isoformat(),
+                    "quantity_liters": 1000,
+                    "status": "ok",
+                    "price_per_liter": 1.0,
+                    "total_price": 1000.0,
+                    "currency": "GBP",
+                    "source": "test",
+                    "notes": "",
+                    "raw_payload": {},
+                }
+            )
+
+        windowed = self.db.latest_quotes(max_age_days=1)
+        self.assertEqual([q["supplier_name"] for q in windowed], ["Recent"])
+        self.assertEqual(
+            [q["supplier_name"] for q in self.db.stale_quotes(max_age_days=1)], ["Older"]
+        )
 
     def test_mark_missing_suppliers_inactive(self) -> None:
         self.db.upsert_supplier(self._supplier("A", "https://a.example.com"))

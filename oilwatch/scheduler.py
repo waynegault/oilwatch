@@ -17,7 +17,7 @@ class OilWatchScheduler:
         self.scheduler = BackgroundScheduler()
 
     def _refresh_quotes_and_charts(self) -> None:
-        self.app.quote_all(postcode=self.postcode)
+        self.app.quote_all(postcode=self.postcode, prefer_browser=True)
         # Non-critical refresh steps: a network/charting failure here must not
         # stop the scheduler, and the next run retries them anyway.
         try:

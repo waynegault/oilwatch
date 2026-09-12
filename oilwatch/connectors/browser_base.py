@@ -135,8 +135,15 @@ class BrowserConnector(BaseConnector, ABC):
                 "post_data": request.post_data,
             })
         
-        # Continue the request
-        response = await route.fetch()
+        # Forward the request. A request still in flight when the context comes
+        # down lands here after teardown, where fetch() raises "Request context
+        # disposed"; that is a race, not a page failure, so it is logged at debug
+        # instead of escaping as a traceback that hides the real error.
+        try:
+            response = await route.fetch()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("could not forward intercepted request %s: %s", url, exc)
+            return
         
         # Log API responses
         if "/api/" in url.lower() or "/json" in url.lower() or ".json" in url.lower():
@@ -155,6 +162,9 @@ class BrowserConnector(BaseConnector, ABC):
     async def _close_browser(self) -> None:
         """Close browser and clean up."""
         if self._context:
+            # Drop in-flight route callbacks first: without this, a request still
+            # being handled as the context closes raises inside the callback.
+            await self._context.unroute_all(behavior="ignoreErrors")
             await self._context.close()
         if self._browser:
             await self._browser.close()

@@ -116,6 +116,11 @@ class SetupAndInterceptionTests(unittest.TestCase):
             asyncio.run(connector._close_browser())
 
         self.assertTrue(context.closed)
+        self.assertEqual(
+            context.unrouted_with,
+            "ignoreErrors",
+            "in-flight route callbacks are dropped before the context closes",
+        )
         self.assertTrue(playwright.stopped)
         self.assertIsNone(connector._page)
 

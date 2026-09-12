@@ -159,10 +159,16 @@ class FakeContext:
     def __init__(self, page: Any) -> None:
         self._page = page
         self.route_handler = None
+        self.unrouted_with = None
         self.closed = False
 
     async def route(self, pattern: str, handler) -> None:
         self.route_handler = handler
+
+    async def unroute_all(self, behavior: str | None = None) -> None:
+        # Mirrors Playwright's browser_context.unroute_all(); teardown passes
+        # 'ignoreErrors' so an in-flight callback cannot raise as it closes.
+        self.unrouted_with = behavior
 
     async def new_page(self) -> Any:
         return self._page
