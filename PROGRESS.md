@@ -148,11 +148,15 @@ suppliers whose only priced row came from the spreadsheet import won on
   Scottish Fuels (browser, Magento + reCAPTCHA login).
 - **Phone-only:** Oilfast Insch, Turriff Fuels, Brogan Fuels, Carnegie Fuels,
   Compass Fuels, Gleaner Oils, Highland Fuels.
-- **Scheduled:** a Windows task ("OilWatch Email Monitor", hourly, runs
-  `monitor_email.bat`) sweeps email; the in-process scheduler handles discovery
-  and quotes on their own intervals. Creating the task needed no elevation, but
-  the `/TR` path must be quoted for the shell — `\"…\"` under `cmd.exe`, `'"…"'`
-  under PowerShell — or it is split at the first space in the path.
+- **Scheduled:** the per-user Startup entry `OilWatch Scheduler.bat` runs
+  `start_scheduler.bat` -> `oilwatch schedule` at logon, so quotes, discovery and
+  the email sweep all follow `config/settings.json` (quotes daily, discovery
+  weekly, email hourly); `monitor_email.bat` runs one email sweep by hand, and the
+  separate hourly email task was retired once this covered it. Two schtasks
+  traps met on the way: `/Create` works unelevated for `HOURLY`/`DAILY` but not
+  `ONLOGON` (Access denied), which is why logon autostart uses the Startup
+  folder; and its `/TR` path must be quoted for the shell — `\"…\"` under
+  `cmd.exe`, `'"…"'` under PowerShell — or it splits at the first space.
 
 ### MCP / OpenClaw integration
 
