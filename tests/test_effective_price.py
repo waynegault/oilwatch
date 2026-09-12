@@ -3,13 +3,17 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from oilwatch.discounts import effective_price_per_litre, parse_discounts
+from oilwatch.models import utcnow_naive
 from oilwatch.service import OilWatchApp
 
-RECEIVED = datetime(2026, 9, 10, 9, 0, 0)
+# Relative to "now", not a fixed date: the code below is described as expiring in
+# 48 hours, so pinning the received-at date made its window close two days after
+# it was written and the test start failing on its own.
+RECEIVED = utcnow_naive().replace(microsecond=0) - timedelta(hours=1)
 VALUEOILS_OFFERS = parse_discounts(
     "£12 OFF 1,000-1,999 litres - Code: KJHA154306\nexpires in 48 hours", received_at=RECEIVED
 )

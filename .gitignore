@@ -30,8 +30,6 @@ __pycache__/
 config/supplier_credentials.json*
 config/email_credentials.json
 config/contact.json
-config/*.json.example
-!config/contact.example.json
 
 # API discovery results (large files)
 data/api_discovery/

@@ -14,9 +14,9 @@ OilWatch now includes **browser-based connectors** using Playwright that can:
 4. ✅ **Generate secure passwords** for new account registration
 5. ✅ **Fall back to HTTP scraping** if browser automation fails
 
-### Two automation stacks (and why)
+### Three automation stacks (and why)
 
-There are two browser stacks, not one — they cover different jobs and are not
+There are three browser stacks, not one — they cover different jobs and are not
 interchangeable:
 
 | Stack | Modules | Used for |
@@ -105,9 +105,12 @@ store_supplier_credentials(
 
 | Supplier | Connector Class | Status |
 |----------|----------------|--------|
+| BoilerJuice | `BoilerJuiceBrowserConnector` | ✅ Ready |
+| Regency Oils / Connon Bros / Johnson Oils | `FuelsoftConnector` | ✅ Ready |
+| HomeFuels Direct | `HomeFuelsDirectBrowserConnector` | ✅ Ready |
+| Rix | `RixBrowserConnector` | ✅ Ready |
 | Scottish Fuels | `ScottishFuelsBrowserConnector` | ✅ Ready |
 | ValueOils | `ValueOilsBrowserConnector` | ✅ Working |
-| HomeFuels Direct | `HomeFuelsDirectBrowserConnector` | ✅ Ready |
 
 ### How It Works
 
@@ -123,7 +126,9 @@ store_supplier_credentials(
 ```python
 from oilwatch.connectors.suppliers import get_supplier_connector
 
-# Get browser connector for ValueOils
+# This returns the HTTP ValueOilsConnector, not a browser connector:
+# prefer_browser defaults to False, and valueoils.com is in
+# _HTTP_WINS_OVER_BROWSER, so even prefer_browser=True keeps the HTTP connector.
 connector = get_supplier_connector("https://www.valueoils.com")
 
 # Get quote
@@ -281,11 +286,12 @@ The API discovery tool found these endpoints:
 ### Browser Automation
 - Runs in headless mode by default
 - User-agent spoofed to avoid bot detection
-- No persistent cookies between sessions
+- A persistent Chrome profile (`--user-data-dir`) is used for login, with
+  cookies also saved to JSON, so an authenticated session is reused between runs
 
 ### Rate Limiting
 - Add delays between quote requests
-- Respect supplier": "supplier websites' terms of service
+- Respect supplier websites' terms of service
 - Don't hammer APIs with rapid requests
 
 ---
@@ -313,7 +319,7 @@ oilwatch/
 2. **Run API discovery** on each supplier to find direct APIs
 3. **Test browser automation** with visible browser for debugging
 4. **Add more connectors** for remaining suppliers
-5. **Implement order placement** via browser automation
+5. **Record completed purchases** with `oilwatch record-purchase` — buying stays manual (by phone or on the supplier's own site); OilWatch deliberately has no order placement
 
 ---
 

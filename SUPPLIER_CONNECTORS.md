@@ -1,243 +1,182 @@
-# Supplier Connectors Guide
+# Supplier Connectors
 
-This document describes the supplier-specific connectors for automated and manual quote collection.
+How OilWatch reaches each supplier: the connector a supplier domain resolves to,
+the contact details the manual flows use, and how to add a connector.
 
----
-
-## Overview
-
-OilWatch now includes **supplier-specific connectors** for each of the 7 discovered heating oil suppliers. Each connector is tailored to the supplier's quote mechanism:
-
-| Supplier | Connector | Automation Level | Price Found |
-|----------|-----------|-----------------|-------------|
-| **ValueOils** | `valueoils_auto` | ✅ Automated (web scraping) | **155.80p/L** (£1635.90 inc VAT) |
-| **HomeFuels Direct** | `homefuels_direct_auto` | ⚠️ Semi-automated (price extraction) | Varies |
-| **Oilfast Insch** | `oilfast_manual` | Manual (phone/email/form) | - |
-| **Rix** | `rix_manual` | Manual (phone/email/quote tool) | - |
-| **Regency Oils** | `regency_oils_manual` | Manual (phone/instant quote) | - |
-| **Scottish Fuels** | `scottish_fuels_manual` | Manual (account required) | - |
-| **Brogan Fuels** | `brogan_fuels_manual` | Manual (redirects to Scottish Fuels) | - |
+No prices live here — they move daily. Run `oilwatch cheapest` (or the `cheapest`
+MCP tool) for today's figures.
 
 ---
 
-## Automated Connectors
+## How selection works
 
-### ValueOils (`valueoils_auto`)
+Two registries in `oilwatch/connectors/suppliers/__init__.py` drive everything:
 
-**Status:** ✅ Fully Automated  
-**Mechanism:** Web scraping of Quick Quote prices  
-**Price:** 155.50-155.80 pence/litre (Ex VAT)  
-**VAT Rate:** 5% (domestic heating oil)
+- `_CONNECTORS` — public class name → the submodule that defines it, held as
+  strings so a class is imported only when something asks for it.
+- `_SUPPLIER_CONNECTORS` — supplier domain fragment → `(http, browser)`, either
+  side `None` where that kind does not exist for the supplier.
 
-**How it works:**
-1. Fetches the supplier's Aberdeenshire page
-2. Extracts price using regex patterns
-3. Calculates total with 5% VAT for domestic customers
-4. Returns structured quote result
+`get_supplier_connector(website, prefer_browser=False)` matches the website's
+domain against `_SUPPLIER_CONNECTORS` and returns a connector:
 
-**Configuration:**
-```json
-{
-  "connector_type": "valueoils",
-  "connector_config": {
-    "quote_url": "https://www.valueoils.com/regions/scotland/aberdeenshire/"
-  }
-}
-```
+- By default only the **HTTP** connector is used. It is a single request against
+  a server-rendered page, so it stays the default.
+- **Browser** (Playwright) connectors are opt-in with `prefer_browser=True`.
+- Two domains never take the browser path: `valueoils.com` and
+  `homefuelsdirect.co.uk` are listed in `_HTTP_WINS_OVER_BROWSER`, because their
+  browser connectors are unreliable (SSL / fill timeouts) while the HTTP one
+  works.
+- When a supplier is browser-only and `prefer_browser` was not requested,
+  `get_supplier_connector` returns `None` and the caller falls back to a manual
+  quote.
 
-### HomeFuels Direct (`homefuels_direct_auto`)
+Resolution is lazy (PEP 562 module-level `__getattr__`), so an HTTP-only run never
+imports the Playwright-backed modules.
 
-**Status:** ⚠️ Semi-Automated  
-**Mechanism:** Web scraping of tier-based pricing  
-**Price:** ~132 pence/litre (UK average for 900L+)
+## Domain → connector
 
-**How it works:**
-1. Fetches the pricing page
-2. Looks for tier-based pricing (500L, 900L+)
-3. Extracts price per litre
-4. Falls back to manual contact if extraction fails
+| Domain fragment | HTTP connector | Browser connector |
+|-----------------|----------------|-------------------|
+| `homefuelsdirect.co.uk` | `HomeFuelsDirectConnector` | `HomeFuelsDirectBrowserConnector` |
+| `valueoils.com` | `ValueOilsConnector` | `ValueOilsBrowserConnector` |
+| `fueltool.co.uk` | `FueltoolConnector` | — |
+| `highlandfuels.co.uk` | `HighlandFuelsConnector` | — |
+| `oilfast.co.uk` | `OilfastConnector` | — |
+| `rix.co.uk` | `RixConnector` | `RixBrowserConnector` |
+| `regencyoils.com` | `RegencyOilsConnector` | `FuelsoftConnector` |
+| `scottishfuels.co.uk` | `ScottishFuelsConnector` | `ScottishFuelsBrowserConnector` |
+| `brogans.co.uk` | `BroganFuelsConnector` | — |
+| `boilerjuice.com` | — | `BoilerJuiceBrowserConnector` |
+| `fuelsoft.co.uk` | — | `FuelsoftConnector` |
+| `johnstonfuels.co.uk` | — | `FuelsoftConnector` |
 
----
+`FuelsoftConnector` covers every Fuelsoft-hosted supplier from one implementation
+(Connon Bros, Johnson Oils, and Regency Oils' WebOrdering). `FueltoolConnector` is
+a UK-average benchmark, not a local supplier.
 
-## Manual Connectors
+## HTTP connectors
 
-These connectors provide structured contact information and quote instructions.
+One request; the price is parsed from the response (HTML, or XML for Highland).
 
-### Oilfast Insch (`oilfast_manual`)
+| Connector | Endpoint |
+|------------|----------|
+| `ValueOilsConnector` | `https://www.valueoils.com/Quote.aspx` (regional `/regions/scotland/aberdeenshire/`) |
+| `HomeFuelsDirectConnector` | `https://homefuelsdirect.co.uk/home/heating-oil-prices` (Aberdeenshire page) |
+| `FueltoolConnector` | `https://www.fueltool.co.uk/` |
+| `HighlandFuelsConnector` | `https://iqo-highland.fuels.app/lib/getoffers.php` — IQO XML quote API |
+| `OilfastConnector` | `https://oilfast.co.uk/depot/insch/` (enquiry form; no scrapable price) |
+| `RixConnector` | `https://www.rix.co.uk/fuels/heating-oil` |
+| `RegencyOilsConnector` | `https://www.regencyoils.com` |
+| `ScottishFuelsConnector` | `https://scottishfuels.co.uk/heating-oil-in-aberdeenshire/` |
+| `BroganFuelsConnector` | `https://www.brogans.co.uk` (trades as Scottish Fuels) |
 
-**Contact:**
-- Phone (Insch): 01464 631 835
-- Phone (General): 03302 320 104
-- Email: insch@oilfast.co.uk
-- Enquiry Form: https://oilfast.co.uk/depot/insch/
+## Browser connectors
 
-**Notes:** Local Aberdeenshire supplier, response within 24 hours
+Playwright drives the supplier's own quote form, sometimes behind a login
+session. The shared bases are `BrowserConnector` (`connectors/browser_base.py`)
+and `SyncBrowserConnector` / `sync_page` (`connectors/sync_browser.py`).
 
-### Rix (`rix_manual`)
+| Connector | Entry point |
+|------------|-------------|
+| `RixBrowserConnector` | `https://fuelquote.rix.co.uk/` |
+| `FuelsoftConnector` | Fuelsoft WebOrdering forms (Connon Bros, Johnson Oils, Regency Oils) |
+| `ScottishFuelsBrowserConnector` | `https://quote.scottishfuels.co.uk/quote/` (login `/customer/account/login/`) |
+| `ValueOilsBrowserConnector` | `https://www.valueoils.com/regions/scotland/aberdeenshire/` |
+| `HomeFuelsDirectBrowserConnector` | `https://homefuelsdirect.co.uk/home/heating-oil-prices/aberdeenshire` |
+| `BoilerJuiceBrowserConnector` | `https://www.boilerjuice.com/uk/journeys/core/quote` |
 
-**Contact:**
-- Aberdeen Depot: 01224 418294
-- General: 0800 542 4207
-- Email (Aberdeen): montsales@rix.co.uk
-- Online Quote: https://www.rix.co.uk/fuels/heating-oil
+Scottish Fuels needs a live login session: `/quote/` answers 302 to the account
+page once it lapses, and the connector reports that rather than failing obscurely.
+Re-establish it with `oilwatch login scottish_fuels`.
 
-**Notes:** Online quote tool available ("Get your fuel quote here")
+BoilerJuice's connector is written but not yet collecting a price.
 
-### Regency Oils (`regency_oils_manual`)
+## Manual and generic connectors
 
-**Contact:**
-- Phone: 01542 832327
-- Website: https://www.regencyoils.com
+A supplier with no scrapable quote resolves to contact details plus instructions,
+or to one of three generic connector types (`GENERIC_CONNECTOR_TYPES` in
+`oilwatch/connectors/__init__.py`):
 
-**Services:**
-- Monthly budget plan
-- Automatic top-up service
-- Community buying group service
+| `connector_type` | Connector | Use |
+|------------------|-----------|-----|
+| `manual` | `ManualConnector` | Contact details only; returns `manual_action_required` |
+| `price_page` | `PricePageConnector` | A price read from a plain page |
+| `http_form` | `HTTPFormConnector` | One form POST |
 
-### Scottish Fuels (`scottish_fuels_manual`)
+Domain matching is tried first. A supplier row may name a `connector_type`
+explicitly, and an unknown type is a configuration error rather than a silent
+downgrade to a manual quote.
 
-**Contact:**
-- Phone (General): 0345 300 8844
-- Phone (Aberdeenshire): 01224 213 132
-- Website: https://scottishfuels.co.uk
+## Contact details
 
-**Notes:** Online quote generator requires account registration
+Used by the manual connectors, the enquiry-form path (`oilwatch
+submit-requests`) and the `phone-script` command.
 
-### Brogan Fuels (`brogan_fuels_manual`)
+| Supplier | Contact |
+|----------|---------|
+| Oilfast (Insch) | 01464 635999 · 03302 320 104 · insch@oilfast.co.uk · https://oilfast.co.uk/depot/insch/ |
+| Rix | Aberdeen 01224 455477 · general 0800 542 4207 · montsales@rix.co.uk · sales@rix.co.uk |
+| Regency Oils | 0800 838500 · https://www.regencyoils.com |
+| Scottish Fuels | 0345 300 8844 · Aberdeen 01224 213 132 · info@scottishfuels.co.uk |
+| Brogan Fuels | 0345 300 8844 · domestic@brogans.co.uk · https://www.brogans.co.uk |
 
-**Contact:**
-- Phone: 0345 300 8844
-- Email: domestic@brogans.co.uk
-- Website: https://www.brogans.co.uk
+## Telephone quote script
 
-**Notes:** Part of Scottish Fuels (same company)
-
----
-
-## Telephone Quote Script Tool
-
-Use the `phone-script` command to generate call scripts for manual quote collection:
+`TelephoneQuoteScript` (`connectors/suppliers/telephone.py`) builds call sheets and
+is exposed as the `phone-script` command:
 
 ```powershell
-# Generate telephone scripts for all suppliers
 .venv\Scripts\python -m oilwatch.cli phone-script `
   --quantity-liters 1000 `
   --postcode "AB21 0YA" `
   --name "Your Name" `
-  --address "Your Address"
-
-# Export to JSON for tracking
-.venv\Scripts\python -m oilwatch.cli phone-script `
-  --postcode "AB21 0YA" `
-  --name "Your Name" `
+  --address "Your Address" `
   --output data/quote-calls.json
 ```
 
-**Output includes:**
-- Quick reference card with all phone numbers
-- Individual call scripts for each supplier
-- Quote recording checklist
-- JSON export for tracking results
+It emits a quick-reference card with the phone numbers above, per-supplier call
+scripts and a recording checklist; `--output` writes the run to JSON.
 
----
+## Adding a connector
 
-## File Structure
+1. Add the connector module under `oilwatch/connectors/suppliers/`.
+2. Register the class in `_CONNECTORS` (public name → submodule string).
+3. Add the supplier's domain row to `_SUPPLIER_CONNECTORS` as
+   `(http_name, browser_name)`, using `None` for a kind that does not exist.
+4. Cover it and try it:
 
-```
-oilwatch/connectors/suppliers/
-├── __init__.py              # Connector registry
-├── homefuels_direct.py      # HomeFuels Direct connector
-├── valueoils.py             # ValueOils connector
-├── oilfast.py               # Oilfast Insch connector
-├── rix.py                   # Rix connector
-├── regency_oils.py          # Regency Oils connector
-├── scottish_fuels.py        # Scottish Fuels connector
-├── brogan_fuels.py          # Brogan Fuels connector
-└── telephone.py             # Telephone quote script tool
-```
-
----
-
-## How Connectors Work
-
-### Connector Selection
-
-When `quote-all` is called, the system:
-
-1. **Checks website domain** → Matches to supplier-specific connector
-2. **Falls back to connector_type** → Uses generic `manual`, `price_page`, or `http_form`
-3. **Defaults to manual** → If no match found
-
-### Quote Result Structure
-
-```python
-QuoteResult(
-    supplier_id=1,
-    supplier_name="ValueOils",
-    observed_at="2026-03-23T18:00:00",
-    quantity_liters=1000,
-    status="ok",  # or "manual_action_required", "error"
-    price_per_liter=1.558,
-    total_price=1635.90,
-    currency="GBP",
-    source="valueoils_auto",
-    notes="Price extracted from Quick Quote...",
-    raw_payload={...}
-)
-```
-
----
-
-## Adding New Supplier Connectors
-
-To add a new supplier-specific connector:
-
-1. **Create connector file** in `oilwatch/connectors/suppliers/`:
-   ```python
-   from oilwatch.connectors.base import BaseConnector
-   from oilwatch.models import QuoteResult
-
-   class NewSupplierConnector(BaseConnector):
-       def quote(self, supplier, quantity_liters, context):
-           # Implement quote logic
-           return QuoteResult(...)
-   ```
-
-2. **Register in `__init__.py`**:
-   ```python
-   from oilwatch.connectors.suppliers.new_supplier import NewSupplierConnector
-
-   def get_supplier_connector(website: str):
-       connectors = {
-           "example.com": NewSupplierConnector(),
-           # ...
-       }
-       for domain, connector in connectors.items():
-           if domain in website.lower():
-               return connector
-       return None
-   ```
-
-3. **Test the connector**:
    ```powershell
+   .venv\Scripts\python -m unittest tests.test_connector_imports
    .venv\Scripts\python -m oilwatch.cli quote <supplier_id>
    ```
 
----
+## File structure
 
-## Current Pricing (from automated collection)
-
-| Date | Supplier | Price/L | Total (1000L) | VAT |
-|------|----------|---------|---------------|-----|
-| 2026-03-23 | ValueOils | £1.558 | £1635.90 | 5% inc |
-
-**Note:** Prices fluctuate daily. Run `quote-all` regularly for current prices.
-
----
-
-## Next Steps
-
-1. **Improve HomeFuels Direct connector** - Add browser automation for reliable price extraction
-2. **Add Rix quote tool integration** - Investigate the online quote tool API
-3. **Add price history tracking** - Store historical prices for trend analysis
-4. **Add price alerts** - Notify when prices drop below threshold
+```
+oilwatch/connectors/
+├── base.py                   # BaseConnector
+├── browser_base.py           # BrowserConnector (Playwright)
+├── sync_browser.py           # SyncBrowserConnector / sync_page
+├── manual.py                 # ManualConnector
+├── price_page.py             # PricePageConnector
+├── http_form.py              # HTTPFormConnector
+└── suppliers/
+    ├── __init__.py           # _CONNECTORS + _SUPPLIER_CONNECTORS + selection
+    ├── valueoils.py          # ValueOilsConnector
+    ├── valueoils_browser.py  # ValueOilsBrowserConnector
+    ├── homefuels_direct.py   # HomeFuelsDirectConnector
+    ├── homefuels_direct_browser.py
+    ├── fueltool.py           # FueltoolConnector
+    ├── highland_fuels.py     # HighlandFuelsConnector
+    ├── oilfast.py            # OilfastConnector
+    ├── rix.py                # RixConnector
+    ├── rix_browser.py        # RixBrowserConnector
+    ├── regency_oils.py       # RegencyOilsConnector
+    ├── scottish_fuels.py     # ScottishFuelsConnector
+    ├── scottish_fuels_browser.py
+    ├── brogan_fuels.py       # BroganFuelsConnector
+    ├── boilerjuice.py        # BoilerJuiceBrowserConnector
+    ├── fuelsoft.py           # FuelsoftConnector
+    └── telephone.py          # TelephoneQuoteScript
+```

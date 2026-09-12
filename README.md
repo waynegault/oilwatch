@@ -38,7 +38,7 @@ for today's figures.
 | **Regency Oils** | Browser (`fuelsoft`) | Fuelsoft WEBPLUS |
 | **Connon Bros** | Browser (`fuelsoft`) | Fuelsoft WebOrdering |
 | **Johnson Oils** | Browser (`fuelsoft`) | Fuelsoft WebOrdering |
-| **Highland Fuels** | Browser (`highland_fuels`) | |
+| **Highland Fuels** | HTTP scrape (`highland_fuels`) | IQO XML quote API |
 | **Scottish Fuels** | Browser (`scottish_fuels_browser`) + email replies | Needs a live login session — see Known Issues |
 | **Oilfast Insch, Turriff, Carnegie, Brogan** | Phone / email | No scrapable quote; see `oilwatch phone-script` |
 
@@ -340,7 +340,7 @@ and rotted within weeks.
 | 5 | Regency Oils | Browser (`fuelsoft`) | https://www.regencyoils.com/ |
 | 6 | Connon Bros | Browser (`fuelsoft`) | https://connon.fuelsoft.co.uk/ |
 | 7 | Johnson Oils | Browser (`fuelsoft`) | https://oilweb.johnstonfuels.co.uk/ |
-| 8 | Highland Fuels | Browser (`highland_fuels`, IQO XML) | https://www.highlandfuels.co.uk/home-heating |
+| 8 | Highland Fuels | HTTP scrape (`highland_fuels`, IQO XML) | https://www.highlandfuels.co.uk/home-heating |
 | 9 | Scottish Fuels | Browser (`scottish_fuels_browser`) plus email replies | https://quote.scottishfuels.co.uk/quote/ |
 
 Scottish Fuels needs a live login session: `/quote/` answers 302 to its account
@@ -455,6 +455,7 @@ Oil Price Webscraper/
 ├── ROADMAP.md                   # Development roadmap
 ├── PROGRESS.md                  # Current progress status
 ├── BROWSER_AUTOMATION.md        # Browser automation guide
+├── SUPPLIER_CONNECTORS.md       # Supplier connectors and contacts
 ├── pyproject.toml               # Package configuration
 ├── config/
 │   ├── settings.json            # Main configuration
@@ -576,6 +577,7 @@ python -m oilwatch.cli phone-script --postcode "AB21 0YA"
 |----------|---------|
 | `README.md` | This file - overview and quick start |
 | `BROWSER_AUTOMATION.md` | Browser automation details |
+| `SUPPLIER_CONNECTORS.md` | Supplier connectors and contact details |
 | `ROADMAP.md` | Future development plans |
 | `PROGRESS.md` | Current implementation status |
 

@@ -101,6 +101,21 @@ class HighlandParseOffersTests(unittest.TestCase):
     def test_no_offer_returns_none(self) -> None:
         self.assertIsNone(HighlandFuelsConnector.parse_offers_response("<Response><ResultStatus>0</ResultStatus></Response>"))
 
+    def test_picks_the_cheapest_of_several_offers(self) -> None:
+        xml = (
+            "<Offers>"
+            "<Offer><UnitPrice>104.50</UnitPrice></Offer>"
+            "<Offer><UnitPrice>101.03</UnitPrice></Offer>"
+            "</Offers>"
+        )
+        self.assertEqual(HighlandFuelsConnector.parse_offers_response(xml), 1.0103)
+
+    def test_empty_offers_returns_none(self) -> None:
+        self.assertIsNone(HighlandFuelsConnector.parse_offers_response("<Offers></Offers>"))
+
+    def test_malformed_xml_returns_none(self) -> None:
+        self.assertIsNone(HighlandFuelsConnector.parse_offers_response("not xml"))
+
 
 if __name__ == "__main__":
     unittest.main()
