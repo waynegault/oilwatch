@@ -83,8 +83,11 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         page = FakeAsyncPage(elements=[("logout", FakeElement())])
         self.assertTrue(asyncio.run(self.connector.login(page, "owner@example.test", "pw")))
 
-    def test_login_returns_false_without_a_form(self) -> None:
-        self.assertFalse(asyncio.run(self.connector.login(FakeAsyncPage(), "owner@example.test", "pw")))
+    def test_login_reports_a_missing_form_as_the_reason(self) -> None:
+        with self.assertRaises(RuntimeError) as raised:
+            asyncio.run(self.connector.login(FakeAsyncPage(), "owner@example.test", "pw"))
+
+        self.assertIn("sign-in form was not found", str(raised.exception))
 
     def test_login_succeeds_even_when_networkidle_times_out(self) -> None:
         email, password, button = FakeElement(), FakeElement(), FakeElement(tag="BUTTON")
@@ -98,7 +101,7 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         self.assertEqual(button.clicked, 1)
         self.assertEqual(page.session_checks, 2)  # once before the form, once after
 
-    def test_login_reports_an_invalid_credentials_message_as_failure(self) -> None:
+    def test_login_reports_the_credentials_message_as_the_reason(self) -> None:
         page = FakeAsyncPage(
             elements=[
                 ("email", FakeElement()),
@@ -108,7 +111,10 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
             ]
         )
 
-        self.assertFalse(asyncio.run(self.connector.login(page, "owner@example.test", "wrong")))
+        with self.assertRaises(RuntimeError) as raised:
+            asyncio.run(self.connector.login(page, "owner@example.test", "wrong"))
+
+        self.assertIn("that email or password is incorrect", str(raised.exception))
 
     def test_an_unrelated_error_banner_still_means_the_login_failed(self) -> None:
         """Any error element means the sign-in did not take, whatever it says."""
@@ -121,9 +127,12 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
             ]
         )
 
-        self.assertFalse(asyncio.run(self.connector.login(page, "owner@example.test", "pw")))
+        with self.assertRaises(RuntimeError) as raised:
+            asyncio.run(self.connector.login(page, "owner@example.test", "pw"))
 
-    def test_a_login_that_breaks_does_not_escape(self) -> None:
+        self.assertIn("Please try again later", str(raised.exception))
+
+    def test_a_login_that_breaks_reports_the_reason(self) -> None:
         page = FakeAsyncPage()
 
         async def boom(url: str, **kwargs) -> None:
@@ -131,7 +140,10 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
 
         page.goto = boom
 
-        self.assertFalse(asyncio.run(self.connector.login(page, "owner@example.test", "pw")))
+        with self.assertRaises(RuntimeError) as raised:
+            asyncio.run(self.connector.login(page, "owner@example.test", "pw"))
+
+        self.assertIn("no such window", str(raised.exception))
 
     def test_the_quantity_dropdown_is_searched_for_the_right_option(self) -> None:
         cases = {

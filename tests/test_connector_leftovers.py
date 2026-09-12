@@ -71,13 +71,16 @@ class BoilerJuiceLoginTests(unittest.TestCase):
         email, password, button = FakeElement(), FakeElement(), FakeElement(tag="BUTTON")
         page = FakeAsyncPage(elements=[("email", email), ("password", password), ("Login", button)])
 
-        # The second logout probe (after submitting) would still see the first
-        # element, so this asserts the fill/submit happened rather than the result.
-        asyncio.run(BoilerJuiceBrowserConnector().login(page, "owner@example.test", "pw"))
+        # The fake shows no signed-in marker, so the run ends in the no-marker
+        # failure: this pins both that the fill/submit happened and that the
+        # failure now carries a reason rather than the old silent False.
+        with self.assertRaises(RuntimeError) as raised:
+            asyncio.run(BoilerJuiceBrowserConnector().login(page, "owner@example.test", "pw"))
 
         self.assertEqual(email.filled, ["owner@example.test"])
         self.assertEqual(password.filled, ["pw"])
         self.assertEqual(button.clicked, 1)
+        self.assertIn("signed-in", str(raised.exception))
 
 
 class BoilerJuiceQuoteTests(unittest.TestCase):

@@ -29,64 +29,126 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
     3. Fills in postcode and quantity
     4. Extracts price from quote response
     """
-    
+
+    #: Markers the page shows only to a signed-in account, used to tell a
+    #: successful sign-in from a form that bounced back. BoilerJuice's signed-in
+    #: header offers a sign-out link; the generic ``a.logout`` names it never
+    #: used, so a real sign-in looked like a failure.
+    SIGNED_IN_SELECTORS = "a[href*='logout'], a[href*='sign_out'], a:has-text('Sign out')"
+
+    #: Cookiebot's consent dialog covers the page; the sign-in form is not
+    #: reachable until it is answered.
+    CONSENT_SELECTORS = (
+        "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+        "button:has-text('Allow all')",
+    )
+
     def __init__(self) -> None:
         super().__init__()
         self.supplier_key = "boilerjuice"
         self.supplier_name = "BoilerJuice"
         self.base_url = "https://www.boilerjuice.com"
-        self.login_url = "https://www.boilerjuice.com/uk/login"
+        # The real sign-in path. "/uk/login" serves a 404 page that still
+        # renders the site chrome, so the form was never found and every run
+        # reported the bare "Login failed: .".
+        self.login_url = "https://www.boilerjuice.com/uk/users/login"
         self.quote_url = "https://www.boilerjuice.com/uk/journeys/core/quote"
-    
+
     async def login(self, page: Page, email: str, password: str) -> bool:
         """
         Log in to BoilerJuice.
-        
-        Returns True if login successful, False otherwise.
+
+        Returns True when the page shows a signed-in account. Raises
+        ``RuntimeError`` describing what the page showed when the sign-in form
+        is missing or the credentials are refused, so ``BrowserConnector`` can
+        report that reason instead of the bare "Login failed: ." a silent
+        ``False`` produced.
         """
         try:
             await page.goto(self.login_url, wait_until="domcontentloaded")
             await page.wait_for_timeout(3000)
-            
+            await self._accept_cookie_consent(page)
+
             # Check if already logged in
-            if await page.query_selector("a.logout, .account-link, .my-account"):
+            if await page.query_selector(self.SIGNED_IN_SELECTORS):
                 return True
-            
-            # Find and fill login form
+
+            # Find and fill login form. The submit is pinned by id: a bare
+            # ``button[type="submit"]`` matches Cookiebot's dialog buttons first.
             email_field = await page.query_selector('input[name="email"], input[type="email"], input[id*="email"]')
             password_field = await page.query_selector('input[name="password"], input[type="password"], input[id*="password"]')
-            login_button = await page.query_selector('button:has-text("Login"), input[value*="Login"], button[type="submit"]')
-            
-            if email_field and password_field and login_button:
-                await email_field.fill(email)
-                await password_field.fill(password)
-                await login_button.click()
-                
-                # Wait for navigation
+            login_button = await page.query_selector('#login-btn, button:has-text("Login"), input[value*="Login"]')
+
+            if not (email_field and password_field and login_button):
+                # Say what the page held: "sign-in form not found" against a real
+                # page is only actionable once the markup it actually served is
+                # visible, not by guessing another selector list.
                 try:
-                    await page.wait_for_load_state("networkidle", timeout=10000)
+                    seen = (await page.content())[:1500]
                 except Exception as exc:  # noqa: BLE001
-                    log.debug("login page did not reach networkidle: %s", exc)
-                
-                await page.wait_for_timeout(3000)
-                
-                # Check if login was successful
-                if await page.query_selector("a.logout, .account-link, .my-account"):
-                    return True
-                
-                # Check for error
-                error = await page.query_selector(".error, .alert-danger, .validation-error")
-                if error:
-                    error_text = await error.text_content()
-                    if error_text and ("invalid" in error_text.lower() or "incorrect" in error_text.lower()):
-                        return False
-            
-            return False
-            
+                    seen = f"<page content unavailable: {exc}>"
+                log.warning(
+                    "BoilerJuice sign-in form not found at %s; page (%s):\n%s",
+                    page.url,
+                    "captured" if seen else "empty",
+                    seen,
+                )
+                raise RuntimeError(
+                    "the sign-in form was not found (no email, password or submit control)"
+                )
+
+            await email_field.fill(email)
+            await password_field.fill(password)
+            await login_button.click()
+
+            # Wait for navigation
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("login page did not reach networkidle: %s", exc)
+
+            await page.wait_for_timeout(3000)
+
+            # Check if login was successful
+            if await page.query_selector(self.SIGNED_IN_SELECTORS):
+                return True
+
+            # Say what the page showed rather than returning a reasonless False.
+            error = await page.query_selector(".error, .alert-danger, .validation-error")
+            if error:
+                error_text = (await error.text_content() or "").strip()
+                raise RuntimeError(f"the sign-in form reported an error: {error_text}")
+
+            raise RuntimeError("no signed-in account marker appeared after submitting the sign-in form")
+
+        except RuntimeError:
+            raise
         except Exception as e:
             log.debug("login error: %s", e)
-            return False
-    
+            raise RuntimeError(f"the sign-in attempt raised {type(e).__name__}: {e}") from e
+
+    async def _accept_cookie_consent(self, page: Page) -> None:
+        """Dismiss Cookiebot's consent dialog, best-effort.
+
+        The dialog covers the page and the sign-in form is not reachable behind
+        it, so this runs before the form is looked for. Absence is fine: a
+        returning visitor's consent is already recorded.
+        """
+        for selector in self.CONSENT_SELECTORS:
+            try:
+                button = await page.query_selector(selector)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("cookie consent lookup failed for %r: %s", selector, exc)
+                continue
+            if not button:
+                continue
+            try:
+                await button.click()
+                await page.wait_for_timeout(2500)
+                return
+            except Exception as exc:  # noqa: BLE001
+                log.debug("cookie consent click failed for %r: %s", selector, exc)
+
     async def get_quote_with_browser(
         self,
         supplier: dict[str, Any],
@@ -123,11 +185,11 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 'input[type="number"], select[name="quantity"]'
             )
             
-            # Get quote button
+            # Get quote button. Pinned by id: a bare ``button:has-text("Price")``
+            # matched the hidden "Price Charts" nav button first, so the click
+            # waited 30s on an element that is never visible.
             quote_button = await page.query_selector(
-                'button:has-text("Quote"), button:has-text("Get Quote"), '
-                'button:has-text("Price"), input[value*="Quote"], '
-                'button:has-text("Order"), button:has-text("Continue")'
+                '#get-quote-button, button:has-text("Get Quote"), button:has-text("Quote")'
             )
             
             # Fill in fields

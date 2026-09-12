@@ -59,7 +59,10 @@ class FuelsoftConnector(SyncBrowserConnector):
     ) -> tuple[float | None, dict[str, Any]]:
         postcode = context.get("postcode", "") or ""
         email = context.get("email", "") or load_contact().email
-        address_line1 = context.get("home_label", "") or "Hatton of Fintray"
+        # The form's first address line is the home label up to its first comma.
+        # A literal here would both publish the address in source and drift from
+        # config/settings.json; an empty label simply leaves the field blank.
+        address_line1 = (context.get("home_label", "") or "").split(",")[0].strip()
         config = supplier.get("connector_config") or {}
         quote_url = config.get("quote_url") or supplier.get("website", "")
         product_value = config.get("product_value", self.product_value)

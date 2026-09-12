@@ -247,6 +247,10 @@ class RixBrowserConnectorTests(unittest.TestCase):
 API_URL = "https://oilweb.example/JOil/fuelsoftapi/Quotes/deliveryschedules/quote/1"
 QUOTE_URL = "https://oilweb.example/OnlineQuote.aspx"
 
+# QuoteService always supplies the configured home label; the connector derives
+# the form's first address line from it rather than a literal in source.
+HOME_LABEL = "Hatton of Fintray, Aberdeenshire, Scotland"
+
 
 class FuelsoftFormTests(unittest.TestCase):
     """The form-driving path, which the result-mapping tests never reached.
@@ -260,7 +264,7 @@ class FuelsoftFormTests(unittest.TestCase):
         return {**SUPPLIER, "connector_config": {"quote_url": QUOTE_URL, **config}}
 
     def _quote(self, page: FakePage):
-        context = {"postcode": "AB21 0YA", "email": "quote@example.test"}
+        context = {"postcode": "AB21 0YA", "email": "quote@example.test", "home_label": HOME_LABEL}
         with _patcher(page):
             return FuelsoftConnector().quote(self._supplier(), 1000, context)
 
