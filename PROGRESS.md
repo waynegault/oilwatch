@@ -150,13 +150,13 @@ suppliers whose only priced row came from the spreadsheet import won on
   its suppliers in one pass — Connon Bros £1.2646/L, Johnson Oils £1.2226/L,
   Regency Oils £1.2057/L inc-VAT — so the earlier "no price" was the frozen
   `Chrome/122` user-agent, not the form (fixed in 9d27a11). BoilerJuice's browser
-  connector now authenticates with the stored account: its sign-in path had been a
-  404 (`/uk/login` -> `/uk/users/login`), the Cookiebot consent dialog hid the
-  form, and both the signed-in marker and the Get-Quote button were matching
-  hidden elements. Its price still arrives by email (see the supplier note), so
-  the browser path reads no price yet — though the signed-in quote page does
-  render the options table (`… ppl` ex-VAT and `You Pay £…` inc-VAT, the latter
-  including the service charge the ppl omits).
+  connector now authenticates with the stored account and reads a price: its
+  sign-in path had been a 404 (`/uk/login` -> `/uk/users/login`), the Cookiebot
+  consent dialog hid the form, and both the signed-in marker and the Get-Quote
+  button were matching hidden elements. The price comes from the cheapest
+  inclusive `You Pay £…` total (ex-VAT fuel + VAT + the broker's service charge,
+  the total the supplier note names) — £1.1957/L inc-VAT for 1000L on the day —
+  not from the headline `ppl`, which is ex-VAT and omits the charge.
 - **Phone-only:** Oilfast Insch, Turriff Fuels, Brogan Fuels, Carnegie Fuels,
   Compass Fuels, Gleaner Oils, Highland Fuels.
 - **Scheduled:** the per-user Startup entry `OilWatch Scheduler.bat` runs
