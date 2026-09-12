@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 
-from oilwatch.pricing import pence_to_pounds
+from oilwatch.pricing import DOMESTIC_VAT_RATE, pence_to_pounds
 
 # Map an email sender domain to the supplier website fragment used by the DB.
 SUPPLIER_DOMAINS = {
@@ -40,6 +40,10 @@ SUPPLIER_DOMAINS = {
     # the discount offers it sends.
     "valueoils.com": "valueoils.com",
     "homefuelsdirect.co.uk": "homefuelsdirect.co.uk",
+    # BoilerJuice is a broker rather than a discovered supplier (settings list
+    # boilerjuice.com in excluded_domains), but it emails quotes and its total
+    # carries a service charge the headline PPL omits.
+    "boilerjuice.com": "boilerjuice.com",
     "crownoil.co.uk": "crownoil.co.uk",
     "nationwidefuels.co.uk": "nationwidefuels.co.uk",
     "compassfuels.co.uk": "compassfuels.co.uk",
@@ -61,6 +65,13 @@ PPL_PATTERNS = [
     r"(\d{2,3}\.\d{1,2})p\s*£",
 ]
 
+# BoilerJuice states an inclusive total for a stated quantity rather than a bare
+# unit price: "Get 1,000 litres of kerosene 28 for £1588.99".
+_TOTAL_FOR_QUANTITY = re.compile(
+    r"Get\s+(?P<litres>[\d,]+)\s*litres?\b[^£]{0,80}?£\s*(?P<total>[\d,]+\.\d{2})",
+    re.IGNORECASE,
+)
+
 
 def extract_ppl(text: str) -> float | None:
     """Extract the price per litre (GBP, ex-VAT) from an email body.
@@ -73,9 +84,23 @@ def extract_ppl(text: str) -> float | None:
     * Scottish Fuels writes ``Price Per Litre (Excl. VAT): 101.03p`` (pence).
     * ValueOils quotes list the options as ``102.90p £1,101.45`` — the unit
       price as bare pence beside the total, with neither wording nor VAT suffix.
+    * BoilerJuice quotes state an inclusive total for a quantity
+      (``Get 1,000 litres ... for £1588.99``). That total is used, not the
+      headline PPL, because BoilerJuice's service charge lives in the total.
 
     Returns ``None`` if no price is found.
     """
+    # BoilerJuice's own service charge sits in the stated total and nowhere
+    # else, so the accompanying "Price per litre ... ppl" understates what you
+    # actually pay. Prefer the total, returning an ex-VAT figure so the caller's
+    # VAT step reproduces the supplier's own number.
+    total_match = _TOTAL_FOR_QUANTITY.search(text)
+    if total_match:
+        litres = float(total_match.group("litres").replace(",", ""))
+        if litres > 0:
+            inc_vat = float(total_match.group("total").replace(",", "")) / litres
+            return round(inc_vat / (1 + DOMESTIC_VAT_RATE), 4)
+
     # Fuelsoft-style £ per litre with exactly 4 decimals.
     pounds4 = re.findall(r"£\s?(\d+\.\d{4})\b", text)
     if pounds4:

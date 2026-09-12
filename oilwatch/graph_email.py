@@ -262,13 +262,13 @@ class GraphEmailMonitor:
                 # it stays in Deleted Items, still visible to a later sweep and
                 # to any future parsing improvement. Parsing always runs first,
                 # so a real deal can never be dropped by this.
-                log.info(
-                    "nothing to record in %r from %s; clearing it from the inbox",
-                    message.get("subject", ""),
-                    domain,
-                )
                 if inbox and message.get("parentFolderId") == inbox:
                     self.delete(token, message_id)
+                    log.info(
+                        "nothing to record in %r from %s; cleared from the inbox",
+                        message.get("subject", ""),
+                        domain,
+                    )
                 continue
 
             if ex_vat is not None:

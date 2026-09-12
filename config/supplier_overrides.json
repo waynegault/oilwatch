@@ -95,6 +95,13 @@
     "notes": "UK-wide; quote via form / phone."
   },
   {
+    "name": "BoilerJuice",
+    "website": "https://www.boilerjuice.com/",
+    "status": "active",
+    "connector_type": "manual",
+    "notes": "Broker/aggregator, deliberately not discovered (settings list boilerjuice.com in excluded_domains). Quotes by email; the inclusive total carries a service charge the headline PPL omits, so the quote is read from that total. Its browser connector exists but does not yet collect a price."
+  },
+  {
     "name": "Brogan Fuels",
     "website": "https://www.brogans.co.uk/",
     "status": "active",

@@ -119,6 +119,33 @@ class HighlandFuelsReplyTests(unittest.TestCase):
         self.assertAlmostEqual(inclusive_total(inc_vat, 1000), 1128.75, delta=0.06)
 
 
+class BoilerJuiceQuoteTests(unittest.TestCase):
+    """BoilerJuice states an inclusive total, with a service charge in it.
+
+    1,000L for £1588.99 is 1.58899/L inc VAT. Recording the headline "Price per
+    litre 150.0 ppl" instead would understate the real cost by the £13.99
+    service charge, which appears nowhere else in the message.
+    """
+
+    BODY = (
+        "Here is our cheapest quote. Hurry, as your quote is only valid for 30 "
+        "minutes. Get 1,000 litres of kerosene 28 for £1588.99 Price per litre "
+        "150.0 ppl Order Now Tue 31st Mar 156.5 PPL You pay £1657.24"
+    )
+
+    def test_uses_the_total_you_pay_not_the_headline_ppl(self) -> None:
+        self.assertAlmostEqual(extract_ppl(self.BODY), 1.58899 / 1.05, places=4)
+
+    def test_the_derived_total_reproduces_the_suppliers_own(self) -> None:
+        ex_vat = extract_ppl(self.BODY)
+        assert ex_vat is not None
+        inc_vat = apply_vat(ex_vat, DOMESTIC_VAT_RATE)
+        self.assertAlmostEqual(inclusive_total(inc_vat, 1000), 1588.99, delta=0.06)
+
+    def test_the_sender_domain_is_recognised(self) -> None:
+        self.assertEqual(SUPPLIER_DOMAINS["boilerjuice.com"], "boilerjuice.com")
+
+
 class _Response:
     """Just enough of an httpx.Response for the monitor's calls."""
 
