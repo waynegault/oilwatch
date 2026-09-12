@@ -175,6 +175,14 @@ class ScottishFuelsBrowserConnector(BaseConnector):
 
         ex_vat_price = self.parse_ppl(body_text)
         if ex_vat_price is None:
+            # Say what the page actually held. A parse that quietly reports "no
+            # price" is indistinguishable from a page that has none, and the
+            # pattern can only be realigned against the real text.
+            log.warning(
+                "no price recognised on the Scottish Fuels result page (%s); text follows:\n%s",
+                final_url or self.quote_url,
+                body_text[:2000],
+            )
             return self._manual(supplier, quantity_liters, "Could not find a price on the quote result page.")
 
         price_per_liter = apply_vat(ex_vat_price, DOMESTIC_VAT_RATE)
