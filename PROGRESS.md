@@ -151,8 +151,10 @@ suppliers whose only priced row came from the spreadsheet import won on
 - **Scheduled:** the per-user Startup entry `OilWatch Scheduler.bat` runs
   `start_scheduler.bat` -> `oilwatch schedule` at logon, so quotes, discovery and
   the email sweep all follow `config/settings.json` (quotes daily, discovery
-  weekly, email hourly); `monitor_email.bat` runs one email sweep by hand, and the
-  separate hourly email task was retired once this covered it. Two schtasks
+  weekly, email hourly); `monitor_email.bat` runs one email sweep by hand. The
+  hourly email task is kept alongside the scheduler as a fallback: the sweep is
+  idempotent, so a double run costs nothing, while the scheduler is a single
+  process that stops everything if it dies. Two schtasks
   traps met on the way: `/Create` works unelevated for `HOURLY`/`DAILY` but not
   `ONLOGON` (Access denied), which is why logon autostart uses the Startup
   folder; and its `/TR` path must be quoted for the shell — `\"…\"` under

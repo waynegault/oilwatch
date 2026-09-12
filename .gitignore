@@ -26,10 +26,11 @@ __pycache__/
 !.vscode/launch.json
 .idea/
 
-# Credentials and sensitive config
+# Credentials and personal config
 config/supplier_credentials.json*
 config/email_credentials.json
 config/contact.json
+config/settings.json
 
 # API discovery results (large files)
 data/api_discovery/

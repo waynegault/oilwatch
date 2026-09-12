@@ -3,19 +3,17 @@
   "chart_path": "data/oilwatch-market.png",
   "time_series_chart_path": "data/oilwatch-time-series.png",
   "home": {
-    "label": "Hatton of Fintray, Aberdeenshire, Scotland",
-    "latitude": 57.23875,
-    "longitude": -2.2643
+    "label": "Your delivery area",
+    "latitude": null,
+    "longitude": null
   },
   "radius_miles": 50,
   "quote_quantity_liters": 1000,
   "max_quote_age_days": 1,
   "currency": "GBP",
   "search_queries": [
-    "domestic heating oil suppliers Aberdeenshire",
-    "heating oil Aberdeen supplier",
-    "heating oil Inverurie supplier",
-    "kerosene supplier Aberdeenshire"
+    "domestic heating oil suppliers <your area>",
+    "heating oil <your town> supplier"
   ],
   "excluded_domains": [
     "boilerjuice.com",
@@ -28,15 +26,13 @@
     "spendlessonfuel.com",
     "yell.com"
   ],
-  "login_urls": {
-    "scottish_fuels": "https://quote.scottishfuels.co.uk/quote/"
-  },
-  "submit_request_suppliers": ["gleaner_oils", "oilfast"],
-  "microsoft_client_id": "7767e037-c75b-489a-a4fc-7177d0067013",
+  "login_urls": {},
+  "submit_request_suppliers": [],
+  "microsoft_client_id": "",
   "scheduler": {
     "discovery_interval_hours": 168,
     "quote_interval_hours": 24,
     "email_monitor_interval_hours": 1
   },
-  "default_postcode": "AB21 0YA"
+  "default_postcode": ""
 }

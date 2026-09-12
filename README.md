@@ -60,6 +60,9 @@ cd <path-to-oilwatch>
 python -m venv .venv
 .venv\Scripts\activate
 
+# Copy the settings template and fill in your own home, postcode and queries
+copy config\settings.example.json config\settings.json
+
 # Install the package with its dev extras
 pip install -e .[dev]
 
@@ -466,7 +469,7 @@ Oil Price Webscraper/
 ├── SUPPLIER_CONNECTORS.md       # Supplier connectors and contacts
 ├── pyproject.toml               # Package configuration
 ├── config/
-│   ├── settings.json            # Main configuration
+│   ├── settings.example.json    # Copy to settings.json (gitignored)
 │   └── supplier_credentials.json # All passwords
 ├── data/
 │   ├── oilwatch.sqlite          # Database (generated)
