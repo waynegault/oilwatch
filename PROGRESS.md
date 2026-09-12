@@ -23,7 +23,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 547, all passing offline |
+| Tests | 553, all passing offline |
 | Database | 26 suppliers, 244 quotes, 0 orders |
 
 ---
@@ -96,7 +96,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 547 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 553 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -148,8 +148,9 @@ suppliers whose only priced row came from the spreadsheet import won on
   Scottish Fuels (browser, Magento + reCAPTCHA login).
 - **Phone-only:** Oilfast Insch, Turriff Fuels, Brogan Fuels, Carnegie Fuels,
   Compass Fuels, Gleaner Oils, Highland Fuels.
-- **Scheduled:** daily email monitor (`monitor_email.bat`), plus the in-process
-  scheduler for discovery and quotes.
+- **Scheduled:** the in-process scheduler sweeps email hourly, with discovery and
+  quotes on their own intervals; `monitor_email.bat` runs the same email sweep by
+  hand.
 
 ### MCP / OpenClaw integration
 

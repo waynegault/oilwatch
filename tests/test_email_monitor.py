@@ -247,6 +247,26 @@ class GraphSweepRerunTests(unittest.TestCase):
 
         self.assertEqual(len(self.db.active_discounts()), 1)
 
+    def test_a_newsletter_is_cleared_but_not_marked_processed(self) -> None:
+        """Supplier mail with nothing in it is swept out, not left to pile up.
+
+        Parsing always runs before this, so a real deal is never dropped by the
+        clearing, and the message is left unmarked so a later parser improvement
+        can still reach it in Deleted Items.
+        """
+        message = self._message("FFF", "inbox-id")
+        message["subject"] = "Have you been asking the million-dollar question?"
+        message["body"] = {
+            "contentType": "text",
+            "content": "Prices remain volatile. Check today's price.",
+        }
+
+        recorded, deleted = self._sweep([message], [])
+
+        self.assertEqual(recorded, [])
+        self.assertEqual(len(deleted), 1, "cleared out of the inbox")
+        self.assertFalse(self.db.message_processed("FFF"), "left re-scannable")
+
 
 if __name__ == "__main__":
     unittest.main()

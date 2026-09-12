@@ -232,11 +232,17 @@ class SweepTests(unittest.TestCase):
         self.assertEqual(db.quotes, [])
         self.assertEqual(db.marked, ["m1"])
 
-    def test_a_reply_with_nothing_to_learn_is_left_alone(self) -> None:
+    def test_a_reply_with_nothing_to_learn_is_cleared_but_not_marked(self) -> None:
+        """Nothing to record, so it is swept out of the inbox — but left unmarked.
+
+        Marking it would retire it for good; unmarked, a later parser improvement
+        can still reach it in Deleted Items, and a real deal can never be dropped
+        because parsing always runs before the clearing.
+        """
         db = FakeDb()
         self._run(db, [_message(body={"contentType": "text", "content": "Thanks for your enquiry"})])
         self.assertEqual(db.marked, [])
-        self.monitor.delete.assert_not_called()
+        self.monitor.delete.assert_called_once_with({"access_token": "a"}, "m1")
 
     def test_a_duplicate_observation_is_not_recorded_twice(self) -> None:
         db = FakeDb(already_recorded=True)

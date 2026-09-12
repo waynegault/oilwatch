@@ -87,6 +87,49 @@ class BestOfferTests(unittest.TestCase):
         self.assertEqual(DiscountOffer(amount_gbp=50.0).discounted_total(20.0), 0.0)
 
 
+class ExpiryWordingTests(unittest.TestCase):
+    """Suppliers state the deadline in several ways.
+
+    A deadline the parser misses is worse than none: ``is_expired`` returns False
+    for an offer with no expiry, so an unread "ends 30/09/2026" would leave a
+    dead code looking live and getting applied to quotes.
+    """
+
+    def _expiry(self, text: str) -> datetime | None:
+        offers = parse_discounts(text, received_at=RECEIVED)
+        self.assertEqual(len(offers), 1)
+        return offers[0].expires_at
+
+    def test_within_the_next_48_hours(self) -> None:
+        self.assertEqual(
+            self._expiry("£10 OFF 1,000+ litres - order within the next 48 hours"),
+            RECEIVED + timedelta(hours=48),
+        )
+
+    def test_expires_tomorrow(self) -> None:
+        self.assertEqual(
+            self._expiry("£10 OFF 1,000+ litres - expires tomorrow"),
+            RECEIVED + timedelta(days=1),
+        )
+
+    def test_absolute_date_with_slashes(self) -> None:
+        self.assertEqual(self._expiry("£10 OFF 1,000+ litres - ends 30/09/2026"), datetime(2026, 9, 30))
+
+    def test_absolute_date_with_a_month_name(self) -> None:
+        self.assertEqual(
+            self._expiry("£10 OFF 1,000+ litres - valid until 30 September 2026"),
+            datetime(2026, 9, 30),
+        )
+
+    def test_a_delivery_date_is_not_an_expiry(self) -> None:
+        """'delivery by 28-Sep-2026' must not retire a live offer early."""
+        offers = parse_discounts(
+            "£10 OFF 1,000+ litres - delivery by 28-Sep-2026", received_at=RECEIVED
+        )
+        self.assertEqual(len(offers), 1)
+        self.assertIsNone(offers[0].expires_at)
+
+
 class RobustnessTests(unittest.TestCase):
     def test_empty_text_is_not_an_error(self) -> None:
         self.assertEqual(parse_discounts(""), [])

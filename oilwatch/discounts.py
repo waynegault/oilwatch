@@ -43,8 +43,30 @@ _CODE = re.compile(
     r"(?:[Cc]ode|[Vv]oucher)\s*[:\s]\s*(?P<code>(?=[A-Za-z0-9]*[A-Z0-9])[A-Za-z0-9]{4,})"
 )
 
-# "expires in 48 hours", "expire in 3 days", "expires 48 hours"
-_EXPIRY = re.compile(r"expires?\s+(?:in\s+)?(?P<n>\d+)\s*(?P<unit>hour|day)s?", re.IGNORECASE)
+# "expires in 48 hours", "expire in 3 days", "expires 48 hours", and the same
+# statement with the verb dropped: "order within the next 48 hours".
+_EXPIRY_SPAN = re.compile(
+    r"(?:expires?|ends?|valid\s+for|within(?:\s+the\s+next)?)\s+(?:in\s+)?"
+    r"(?P<n>\d+)\s*(?P<unit>hour|day)s?",
+    re.IGNORECASE,
+)
+
+# "expires tomorrow", "ends tonight"
+_EXPIRY_DAY_WORD = re.compile(r"(?:expires?|ends?)\s+(?:tomorrow|tonight)", re.IGNORECASE)
+
+# "expires 2026-09-30", "ends 30/09/2026", "valid until 30 September 2026". The
+# verb must be explicit: "delivery by 28-Sep-2026" is a delivery date, not an
+# expiry, and mis-reading it would retire a live offer early.
+_EXPIRY_DATE = re.compile(
+    r"(?:expires?|ends?|valid\s+until)\s+(?P<date>"
+    r"\d{4}-\d{2}-\d{2}"
+    r"|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}"
+    r"|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}"
+    r")",
+    re.IGNORECASE,
+)
+
+_DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y", "%d %B %Y", "%d %b %Y")
 
 _TERMS = re.compile(r"cannot be used|cannot be combined|excludes|in conjunction", re.IGNORECASE)
 
@@ -115,12 +137,22 @@ def _band_from(line: str) -> tuple[int | None, int | None]:
 
 
 def _expiry_from(text: str, received_at: datetime) -> datetime | None:
-    match = _EXPIRY.search(text)
-    if not match:
-        return None
-    count = int(match.group("n"))
-    delta = timedelta(hours=count) if match.group("unit").lower().startswith("hour") else timedelta(days=count)
-    return received_at + delta
+    date_match = _EXPIRY_DATE.search(text)
+    if date_match:
+        for fmt in _DATE_FORMATS:
+            try:
+                return datetime.strptime(date_match.group("date"), fmt)
+            except ValueError:
+                continue
+    span = _EXPIRY_SPAN.search(text)
+    if span:
+        count = int(span.group("n"))
+        unit = span.group("unit").lower()
+        delta = timedelta(hours=count) if unit.startswith("hour") else timedelta(days=count)
+        return received_at + delta
+    if _EXPIRY_DAY_WORD.search(text):
+        return received_at + timedelta(days=1)
+    return None
 
 
 def parse_discounts(text: str, *, received_at: datetime | None = None) -> list[DiscountOffer]:

@@ -257,7 +257,19 @@ class GraphEmailMonitor:
 
             ex_vat = extract_ppl(text)
             if ex_vat is None and not offers:
-                continue  # nothing to learn from this one; leave it alone
+                # Nothing to record. Clear it out of the inbox so supplier mail
+                # does not pile up, but deliberately do NOT mark it processed:
+                # it stays in Deleted Items, still visible to a later sweep and
+                # to any future parsing improvement. Parsing always runs first,
+                # so a real deal can never be dropped by this.
+                log.info(
+                    "nothing to record in %r from %s; clearing it from the inbox",
+                    message.get("subject", ""),
+                    domain,
+                )
+                if inbox and message.get("parentFolderId") == inbox:
+                    self.delete(token, message_id)
+                continue
 
             if ex_vat is not None:
                 price_per_liter = apply_vat(ex_vat, DOMESTIC_VAT_RATE)

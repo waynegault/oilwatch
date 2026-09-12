@@ -36,7 +36,7 @@
   "scheduler": {
     "discovery_interval_hours": 168,
     "quote_interval_hours": 24,
-    "email_monitor_interval_hours": 24
+    "email_monitor_interval_hours": 1
   },
   "default_postcode": "AB21 0YA"
 }
