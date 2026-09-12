@@ -83,6 +83,17 @@ class FuelsoftConnector(SyncBrowserConnector):
         self._wait_for_quote_body(page, captured)
 
         ex_vat_price = self.parse_quote_response(captured.get("body"))
+        if ex_vat_price is None:
+            # Say what came back: "no price in the response" and "no response at
+            # all" produced the same manual note, and the body's shape is what a
+            # realignment has to be written against.
+            body = captured.get("body")
+            log.warning(
+                "no PPL in the Fuelsoft quote response from %s; body (%s):\n%.1500s",
+                quote_url,
+                "captured" if body is not None else "never captured",
+                body if body is not None else "",
+            )
         raw_payload = {"quote_url": quote_url, "postcode": postcode, "price_ex_vat": ex_vat_price}
         return ex_vat_price, raw_payload
 

@@ -110,9 +110,19 @@ class BrowserConnector(BaseConnector, ABC):
             ],
         )
         
+        # Claim the installed Chrome rather than a frozen version: a UA saying
+        # Chrome/122 next to a real 140+ build is itself a fingerprint, and it
+        # ages out of date every time Chrome updates. Imported lazily so this
+        # module does not depend on the Selenium side at import time.
+        from oilwatch.browser_auth import detect_chrome_major_version
+
+        chrome_major = detect_chrome_major_version() or 122
         self._context = await self._browser.new_context(
             viewport={"width": 1920, "height": 1080},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                f"(KHTML, like Gecko) Chrome/{chrome_major}.0.0.0 Safari/537.36"
+            ),
         )
         
         # Enable request interception for API discovery
