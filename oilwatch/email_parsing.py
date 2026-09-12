@@ -1,7 +1,7 @@
 """Supplier email parsing: which senders count, and what price they state.
 
 Suppliers that only quote by form/email (Gleaner Oils, Oilfast, Highland Fuels,
-Regency Oils) reply by email with their price. This module holds the two pieces
+Regency Oils, ValueOils) reply by email with their price. This module holds the two pieces
 of that knowledge which are independent of how the mailbox is read:
 
 * ``SUPPLIER_DOMAINS`` — the reply domains seen, mapped to the supplier website
@@ -54,6 +54,11 @@ PPL_PATTERNS = [
     # "107.50PPL" — Highland Fuels states the unit price as pence per litre with
     # a PPL suffix and no "per litre" wording.
     r"(\d+(?:\.\d{1,2})?)\s*ppl\b",
+    # ValueOils quotes state the unit price beside the option total as bare
+    # pence: "Standard Delivery ... 102.90p £1,101.45". There is no "per litre"
+    # wording and no "Excl. VAT" suffix, so every pattern above misses it — which
+    # left the message unprocessed and stuck in the inbox.
+    r"(\d{2,3}\.\d{1,2})p\s*£",
 ]
 
 
@@ -66,6 +71,8 @@ def extract_ppl(text: str) -> float | None:
       decimals; totals use only two).
     * Rix writes ``Price per litre 110.35`` (pence, no unit suffix).
     * Scottish Fuels writes ``Price Per Litre (Excl. VAT): 101.03p`` (pence).
+    * ValueOils quotes list the options as ``102.90p £1,101.45`` — the unit
+      price as bare pence beside the total, with neither wording nor VAT suffix.
 
     Returns ``None`` if no price is found.
     """

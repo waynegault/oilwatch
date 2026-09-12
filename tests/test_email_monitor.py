@@ -36,6 +36,20 @@ class ExtractPplTests(unittest.TestCase):
     def test_scottish_fuels_price_per_litre_p(self) -> None:
         self.assertEqual(extract_ppl("Price Per Litre (Excl. VAT): 101.03p"), 1.0103)
 
+    def test_valueoils_quote_states_pence_beside_the_total(self) -> None:
+        """ValueOils puts the unit price as bare pence next to the option total.
+
+        No "per litre" wording and no Excl. VAT suffix, so the other patterns
+        missed it and the quote email stayed unprocessed in the inbox.
+        """
+        text = (
+            "Delivery Option Fuel PPL Ex. VAT Total You Pay "
+            "Standard Delivery - Estimated Delivery by Wednesday 23rd Sep 2026 "
+            "102.90p £1,101.45 Buy Now "
+            "Express Delivery 4 (+£69.90) 109.70p £1,242.75 Buy Now"
+        )
+        self.assertEqual(extract_ppl(text), 1.029)
+
 
 class SupplierMappingsTests(unittest.TestCase):
     def test_supplier_domains_present(self) -> None:
