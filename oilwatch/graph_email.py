@@ -25,7 +25,7 @@ from typing import Any
 import httpx
 import msal
 
-from oilwatch.email_parsing import SUPPLIER_DOMAINS, extract_ppl
+from oilwatch.email_parsing import extract_ppl, supplier_fragment_for
 from oilwatch.logging_setup import get_logger
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
 
@@ -214,7 +214,7 @@ class GraphEmailMonitor:
                 continue  # already mined; re-reading old mail must not duplicate
             sender = message.get("from", {}).get("emailAddress", {}).get("address", "")
             domain = sender_domain_from_email(sender)
-            supplier_fragment = SUPPLIER_DOMAINS.get(domain)
+            supplier_fragment = supplier_fragment_for(domain)
             if supplier_fragment is None:
                 continue
             supplier = self._find_supplier(app, supplier_fragment)

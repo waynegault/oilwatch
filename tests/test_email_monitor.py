@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from oilwatch.db import Database
-from oilwatch.email_parsing import SUPPLIER_DOMAINS, extract_ppl
+from oilwatch.email_parsing import SUPPLIER_DOMAINS, extract_ppl, supplier_fragment_for
 from oilwatch.form_submit import SUPPLIER_FORMS
 from oilwatch.graph_email import GraphEmailMonitor, sender_domain_from_email
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
@@ -64,6 +64,21 @@ class SupplierMappingsTests(unittest.TestCase):
         self.assertEqual(SUPPLIER_DOMAINS["regencyoils.co.uk"], "regencyoils.com")
         self.assertEqual(SUPPLIER_DOMAINS["certasenergy.co.uk"], "scottishfuels.co.uk")
         self.assertEqual(SUPPLIER_DOMAINS["connon-oils.co.uk"], "connon")
+
+    def test_a_sender_subdomain_is_recognised(self) -> None:
+        """Mail-outs come from a subdomain while quotes use the bare domain.
+
+        BoilerJuice sends news from ``e.boilerjuice.com``; an exact map skipped
+        it, so the mail was neither parsed nor cleared.
+        """
+        self.assertEqual(supplier_fragment_for("e.boilerjuice.com"), "boilerjuice.com")
+        self.assertEqual(supplier_fragment_for("E.BOILERJUICE.COM"), "boilerjuice.com")
+        self.assertEqual(supplier_fragment_for("boilerjuice.com"), "boilerjuice.com")
+
+    def test_a_domain_that_merely_ends_with_a_known_one_is_not_matched(self) -> None:
+        self.assertIsNone(supplier_fragment_for("notvalueoils.com"))
+        self.assertIsNone(supplier_fragment_for("example.com"))
+        self.assertIsNone(supplier_fragment_for(""))
 
     def test_body_text_strips_html(self) -> None:
         msg = {

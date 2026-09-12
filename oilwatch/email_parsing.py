@@ -42,12 +42,35 @@ SUPPLIER_DOMAINS = {
     "homefuelsdirect.co.uk": "homefuelsdirect.co.uk",
     # BoilerJuice is a broker rather than a discovered supplier (settings list
     # boilerjuice.com in excluded_domains), but it emails quotes and its total
-    # carries a service charge the headline PPL omits.
+    # carries a service charge the headline PPL omits. Quotes come from
+    # boilerjuice.com, mail-outs from e.boilerjuice.com — subdomains are matched
+    # by supplier_fragment_for(), so only the registrable domain is listed.
     "boilerjuice.com": "boilerjuice.com",
     "crownoil.co.uk": "crownoil.co.uk",
     "nationwidefuels.co.uk": "nationwidefuels.co.uk",
     "compassfuels.co.uk": "compassfuels.co.uk",
 }
+
+
+def supplier_fragment_for(domain: str) -> str | None:
+    """The supplier website fragment for a sender domain, or ``None``.
+
+    Suppliers send from subdomains as well as their registrable domain:
+    BoilerJuice quotes come from ``boilerjuice.com``, but its mail-outs come from
+    ``e.boilerjuice.com``. An exact-lookup map silently skips those, so match the
+    longest known domain the sender equals or sits under — on a dot boundary, so
+    ``notvalueoils.com`` cannot masquerade as ``valueoils.com``.
+    """
+    if not domain:
+        return None
+    domain = domain.lower()
+    matched = max(
+        (known for known in SUPPLIER_DOMAINS if domain == known or domain.endswith("." + known)),
+        key=len,
+        default=None,
+    )
+    return SUPPLIER_DOMAINS[matched] if matched else None
+
 
 # Price patterns found in supplier reply emails.
 PPL_PATTERNS = [

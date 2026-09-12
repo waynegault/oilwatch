@@ -23,7 +23,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 556, all passing offline |
+| Tests | 558, all passing offline |
 | Database | 27 suppliers, 245 quotes, 0 orders |
 
 ---
@@ -96,7 +96,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 556 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 558 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -148,9 +148,11 @@ suppliers whose only priced row came from the spreadsheet import won on
   Scottish Fuels (browser, Magento + reCAPTCHA login).
 - **Phone-only:** Oilfast Insch, Turriff Fuels, Brogan Fuels, Carnegie Fuels,
   Compass Fuels, Gleaner Oils, Highland Fuels.
-- **Scheduled:** the in-process scheduler sweeps email hourly, with discovery and
-  quotes on their own intervals; `monitor_email.bat` runs the same email sweep by
-  hand.
+- **Scheduled:** a Windows task ("OilWatch Email Monitor", hourly, runs
+  `monitor_email.bat`) sweeps email; the in-process scheduler handles discovery
+  and quotes on their own intervals. Creating the task needed no elevation, but
+  the `/TR` path must be quoted for the shell — `\"…\"` under `cmd.exe`, `'"…"'`
+  under PowerShell — or it is split at the first space in the path.
 
 ### MCP / OpenClaw integration
 
