@@ -9,7 +9,8 @@ the session is reused on subsequent automated runs.
 Approach (adapted from the user's Ancestry project):
 - ``uc.Chrome`` (undetected-chromedriver) handles its own anti-detection.
 - ``--user-data-dir`` persists the login session across runs.
-- Cookies are additionally saved/loaded to/from JSON for resilience.
+- Cookies are additionally saved to JSON as a backup; the persistent profile,
+  not that file, is what a later run reuses.
 
 Usage:
     auth = BrowserAuth("scottish_fuels")

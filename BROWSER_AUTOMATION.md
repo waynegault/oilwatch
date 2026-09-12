@@ -286,8 +286,9 @@ The API discovery tool found these endpoints:
 ### Browser Automation
 - Runs in headless mode by default
 - User-agent spoofed to avoid bot detection
-- A persistent Chrome profile (`--user-data-dir`) is used for login, with
-  cookies also saved to JSON, so an authenticated session is reused between runs
+- A persistent Chrome profile (`--user-data-dir`) is what carries the login
+  session between runs; cookies are also written to JSON as a backup, but nothing
+  loads them back — the profile is what the next run reuses
 
 ### Rate Limiting
 - Add delays between quote requests
