@@ -91,6 +91,8 @@ class FakeDriver:
 
     def execute_script(self, script: str, *args) -> None:
         self.scripts.append(script)
+        if args and hasattr(args[0], "apply_dom_script"):
+            args[0].apply_dom_script(script, *args[1:])
 
     def find_elements(self, by: str, selector: str) -> list:
         if self._elements_by_selector is not None:
@@ -99,19 +101,25 @@ class FakeDriver:
 
 
 class FakeField:
-    """A login input, where Ctrl+A then Delete really does clear it."""
+    """A login input whose value moves only when a script says so."""
 
     def __init__(self, value: str = "", *, refuses: bool = False) -> None:
         self.value = value
         self.refuses = refuses
         self.sent: list = []
         self.clicked = 0
+        self.cleared = 0
 
     def get_attribute(self, name: str):
         return self.value if name == "value" else None
 
     def click(self) -> None:
         self.clicked += 1
+
+    def clear(self) -> None:
+        self.cleared += 1
+        if not self.refuses:
+            self.value = ""
 
     def send_keys(self, *keys) -> None:
         for key in keys:
@@ -121,6 +129,15 @@ class FakeField:
             elif isinstance(key, str) and key.isprintable() and not self.refuses:
                 self.value += key
             self.sent.append(key)
+
+    def apply_dom_script(self, script: str, *args) -> None:
+        """Stand in for the browser running ``script`` against this element."""
+        if self.refuses:
+            return  # the page keeps its own value, whatever the script says
+        if "arguments[0].value = ''" in script:
+            self.value = ""
+        elif "arguments[0].value = arguments[1]" in script:
+            self.value = args[0]
 
 
 class BrowserAuthTests(unittest.TestCase):
@@ -350,8 +367,10 @@ class ElementHelpersTests(unittest.TestCase):
 
     def test_set_field_value_leaves_a_correct_field_alone(self) -> None:
         field = FakeField(value="owner@example.test")
-        BrowserAuth._set_field_value(FakeDriver(), field, "owner@example.test")
+        driver = FakeDriver()
+        BrowserAuth._set_field_value(driver, field, "owner@example.test")
         self.assertEqual(field.sent, [])
+        self.assertEqual(driver.scripts, [], "an already-correct field is not touched")
 
     def test_set_field_value_raises_when_the_field_will_not_stick(self) -> None:
         with patch("oilwatch.browser_auth.time.sleep"):
@@ -363,13 +382,17 @@ class ElementHelpersTests(unittest.TestCase):
     def test_set_field_value_replaces_an_autofilled_value(self) -> None:
         """The doubled-username bug: autofill's value is replaced, not added to."""
         field = FakeField(value="stored@example.com")
+        driver = FakeDriver()
 
-        with patch("oilwatch.browser_auth.time.sleep"):
-            BrowserAuth._set_field_value(FakeDriver(), field, "owner@example.test")
+        BrowserAuth._set_field_value(driver, field, "owner@example.test")
 
         self.assertEqual(field.value, "owner@example.test")
-        self.assertIn(Keys.DELETE, field.sent)  # the field was cleared before typing
-        self.assertEqual(field.clicked, 1)  # and one attempt was enough
+        self.assertEqual(field.sent, [], "nothing is typed, so autofill cannot interleave")
+        self.assertIn("arguments[0].value = ''", driver.scripts[0], "blanked through the DOM")
+        self.assertTrue(
+            any("arguments[1]" in script for script in driver.scripts),
+            "the value is assigned through the DOM, not typed",
+        )
 
     def test_submit_falls_back_to_enter_when_the_click_is_blocked(self) -> None:
         button = MagicMock()

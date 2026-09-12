@@ -118,7 +118,15 @@ class BrowserAuth:
         profile = self.profile_dir / "Default"
         profile.mkdir(parents=True, exist_ok=True)
         preferences = {
-            "profile": {"exit_type": "Normal", "exited_cleanly": True},
+            "profile": {
+                "exit_type": "Normal",
+                "exited_cleanly": True,
+                # Chrome's own password manager refills these login fields even
+                # with server-side autofill off, which is how a second copy ends
+                # up appended to the value.
+                "password_manager_enabled": False,
+            },
+            "credentials_enable_service": False,
             "browser": {"has_seen_welcome_page": True},
             "sync": {"allowed": False},
             "session": {"restore_on_startup": 4, "startup_urls": []},
@@ -175,7 +183,7 @@ class BrowserAuth:
         email: str,
         password: str,
         *,
-        wait_before_submit: float = 2.0,
+        wait_before_submit: float = 5.0,
         wait_after_submit: float = 10.0,
     ) -> bool:
         """Sign in on an already-open driver. Returns True when authenticated.
@@ -250,43 +258,45 @@ class BrowserAuth:
         value: str,
         *,
         attempts: int = 3,
-        per_char_delay: float = 0.03,
     ) -> None:
         """Put ``value`` into a field without racing Chrome autofill.
 
-        Autofill pre-fills these Magento fields and re-populates them mid-typing,
-        so a blind ``send_keys`` *appends* — submitting ``user@example.comuser@example.com``
-        and failing as an invalid login. Three defences, in order:
-
-        1. Leave the field alone if it already holds the right value.
-        2. Switch autofill off for this input. Setting an attribute is harmless,
-           unlike blanking ``.value``, which detaches what the page is watching
-           and makes ``send_keys`` land nowhere.
-        3. Type character by character, so autofill cannot land between whole
-           keystrokes.
+        Autofill pre-fills these Magento fields, and a typed value either lands
+        nowhere or *appends* — submitting ``user@example.comuser@example.com`` and
+        failing as an invalid login. So nothing is typed: as the Ancestry project
+        does, the field is blanked and its ``value`` assigned through the DOM,
+        then a bubbling ``input`` (and ``change``) event is dispatched so the
+        page's own listeners see the edit. There is no keystroke to lose or
+        duplicate, which typing could never guarantee.
 
         Deliberately never puts the value in an error message: one of the two
         callers is passing a password.
         """
-        from selenium.webdriver.common.keys import Keys
-
-        driver.execute_script(
-            "arguments[0].setAttribute('autocomplete', 'off');"
-            "arguments[0].setAttribute('autocorrect', 'off');"
-            "arguments[0].setAttribute('spellcheck', 'false');",
-            element,
-        )
-
         for _ in range(attempts):
             if (element.get_attribute("value") or "") == value:
-                return  # already correct; do not type on top
+                return  # already correct; leave the page's state alone
 
-            element.click()
-            element.send_keys(Keys.CONTROL, "a")
-            element.send_keys(Keys.DELETE)
-            for character in value:
-                element.send_keys(character)
-                time.sleep(per_char_delay)
+            driver.execute_script(
+                "arguments[0].setAttribute('autocomplete', 'off');"
+                "arguments[0].setAttribute('autocorrect', 'off');"
+                "arguments[0].setAttribute('spellcheck', 'false');"
+                "arguments[0].value = '';",
+                element,
+            )
+            try:
+                element.clear()
+            except WebDriverException as exc:
+                # The DOM assignment above already blanked it, so a field that
+                # refuses the WebDriver clear is not fatal on its own.
+                log.debug("WebDriver clear failed, DOM blank already applied: %s", exc)
+
+            driver.execute_script(
+                "arguments[0].value = arguments[1];"
+                "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));"
+                "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
+                element,
+                value,
+            )
             if (element.get_attribute("value") or "") == value:
                 return
             time.sleep(0.3)
