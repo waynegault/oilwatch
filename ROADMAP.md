@@ -106,7 +106,7 @@ The orders table is unchanged and still the record of what was bought.
 | Quote collection | ✅ Complete | Pluggable; live browser + HTTP collection working |
 | Analytics | ✅ Complete | Recency window (`max_quote_age_days`, default 30d) keeps 2007–2025 spreadsheet rows out of the current comparison |
 | Ordering | ❌ Dropped | Buying is manual; `record-purchase` records what was bought |
-| MCP server | ✅ Complete | 9 tools over streamable HTTP; registered in OpenClaw as `oilwatch` |
+| MCP server | ✅ Complete | 9 tools over streamable HTTP or stdio; OpenClaw spawns it on demand |
 | Scheduler | ✅ Complete | Background jobs for discovery and quotes |
 | CLI | ✅ Complete | 21 commands |
 | Tests | ✅ Complete | 546 tests, all offline |
@@ -117,46 +117,35 @@ The orders table is unchanged and still the record of what was bought.
 
 ## Recommended Next Steps
 
-### Immediate (High Priority)
-
-1. **Keep the OpenClaw `oilwatch` URL pointed at the right host address**
-   - Now `http://172.28.144.1:8000/mcp` — the WSL **NAT gateway**. On 2026-09-10
-     Wayne reverted WSL from mirrored to NAT, which invalidated the previous
-     `192.168.33.56` LAN-IP URL
-   - `localhost`/`127.0.0.1` never work from WSL and the Tailscale address times
-     out. The correct address changes with the WSL networking mode, and the NAT
-     gateway changes if the WSL vEthernet is recreated — so re-read
-     `wsl -e ip route` (`default via …`) after a mode change or reboot
-
 ### Short-term (Medium Priority)
 
-2. **Deepen test coverage** — the suite is green (see PROGRESS.md for the
+1. **Deepen test coverage** — the suite is green (see PROGRESS.md for the
    current count), but gaps remain
    - Add integration tests for each connector type
    - Add tests for discovery service (mock HTTP)
    - Add tests for analytics edge cases, especially the recency window
      described in PROGRESS.md
 
-3. **Enhance error handling and logging**
+2. **Enhance error handling and logging**
    - Add structured logging throughout
    - Add retry logic for transient HTTP failures
    - Add graceful degradation for geocoding rate limits
 
 ### Long-term (Low Priority)
 
-4. **Delivery area validation**
+3. **Delivery area validation**
    - Add postcode-level delivery area checks per supplier
    - Some suppliers may not deliver to all postcodes within 50 miles
 
-5. **Notification system**
+4. **Notification system**
    - Add email/SMS alerts when a new cheapest supplier is found
    - Add price drop alerts for tracked suppliers
 
-6. **Historical analysis**
+5. **Historical analysis**
    - Add seasonal trend analysis
    - Add price prediction based on historical patterns
 
-7. **Deployment hardening**
+6. **Deployment hardening**
    - Add health check endpoints
    - Document deployment to always-on host (VM, Raspberry Pi, etc.)
 
@@ -165,7 +154,7 @@ The orders table is unchanged and still the record of what was bought.
 ## Completed Since the Phases Above
 
 These sat under "Recommended Next Steps" while they were open; all are finished
-as of 2026-09-11 and kept here only as a pointer. See `PROGRESS.md` for the
+as of 2026-09-12 and kept here only as a pointer. See `PROGRESS.md` for the
 detail and for the older completion history.
 
 - `cheapest` recency fix — `latest_quotes(max_age_days=…)` driven by the
@@ -173,5 +162,7 @@ detail and for the older completion history.
 - Supplier connectors, discovery and baseline quotes.
 - OpenClaw gateway confirmed connected to `oilwatch`, with tool annotations.
 - Stale `data/*.md` reports removed.
-- The MCP server now starts at logon via a per-user Startup entry.
+- The OpenClaw `oilwatch` host-address chore — the HTTP URL was replaced by an
+  on-demand stdio server, so there is no address to keep in step and the logon
+  Startup entry was retired.
 

@@ -230,15 +230,23 @@ return f"{cheapest['name']} at £{cheapest['price_per_liter']}/L (observed {chea
 
 ### Starting the MCP Server
 
-The server starts automatically at logon (a per-user Startup entry that runs
-`start_mcp_server.bat`, binding `0.0.0.0:8000`). To run it by hand instead:
+OpenClaw runs the server **on demand over stdio**: its `mcp.servers.oilwatch`
+entry spawns `.venv\Scripts\python -m oilwatch.mcp_server --stdio` when it needs
+the tools, so nothing has to be running beforehand and there is no host address
+to keep in step. To serve the same tools over streamable HTTP instead — for a
+client that dials a URL, or to use them by hand:
 
 ```powershell
-# Start MCP server in the foreground (runs continuously)
+# Streamable HTTP on 0.0.0.0:8000/mcp (MCP_HOST / MCP_PORT are respected)
 python -m oilwatch.mcp_server
+
+# or run the repo's launcher, which sets those two variables:
+start_mcp_server.bat
 ```
 
-The MCP server will be available for AI agents that support MCP protocol (such as Claude Desktop with MCP support).
+A WSL client reaching that HTTP endpoint must use the Windows host address (the
+NAT gateway, e.g. `172.28.144.1`), never `localhost`; the stdio path above
+sidesteps that. Any MCP-capable client can use the server either way.
 
 ---
 

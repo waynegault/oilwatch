@@ -22,7 +22,7 @@ It is a working system, not a prototype:
 | Modules under `oilwatch/` | 53 Python files |
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
-| MCP tools | 9 (served over streamable HTTP) |
+| MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
 | Tests | 546, all passing offline |
 | Database | 26 suppliers, 244 quotes, 0 orders |
 
@@ -37,7 +37,7 @@ It is a working system, not a prototype:
 | `cli.py` | CLI entry point (21 commands) |
 | `cli_handlers.py` | One handler per CLI command; the browser/Graph ones live here |
 | `service.py` | `OilWatchApp` — orchestration used by both CLI and MCP |
-| `mcp_server.py` | FastMCP server, 9 tools, streamable HTTP on `/mcp` |
+| `mcp_server.py` | FastMCP server, 9 tools; streamable HTTP on `/mcp`, or `--stdio` |
 | `scheduler.py` | APScheduler jobs for recurring discovery / quotes |
 | `db.py` | SQLite layer (`data/oilwatch.sqlite`) |
 | `models.py`, `config.py`, `pricing.py` | Data models, settings, VAT + £/p normalisation |
@@ -154,23 +154,30 @@ suppliers whose only priced row came from the spreadsheet import won on
 ### MCP / OpenClaw integration
 
 The server is registered in OpenClaw (`~/.openclaw/openclaw.json`) as
-`mcp.servers.oilwatch`, `transport: "streamable-http"`, URL
-`http://172.28.144.1:8000/mcp` — the WSL **NAT gateway**, i.e. the Windows host.
+`mcp.servers.oilwatch`, as an **on-demand stdio** server: OpenClaw spawns
 
-WSL cannot reach a Windows-hosted service on `localhost`/`127.0.0.1`, and the
-address that works **depends on the WSL networking mode**: under NAT (current) it
-is the NAT gateway `172.28.144.1`; under mirrored it was the LAN IP
-`192.168.33.56`. Switching modes silently breaks the integration — after any
-change verify from WSL and re-read `wsl -e ip route` (the `default via` line).
+    .venv\Scripts\python.exe -m oilwatch.mcp_server --stdio
 
-Verified 2026-09-10 with OpenClaw 2026.9.2: `openclaw mcp probe oilwatch`
-reports **9 tools, resources, prompts**, and an MCP `initialize` handshake from
-WSL returns `serverInfo: {"name":"oilwatch","version":"0.1.0"}`. That version
-used to read `3.1.1` — the MCP framework's own, because the server declared no
-version of its own; it now reports the package's.
+(from WSL, `/mnt/c/.../.venv/Scripts/python.exe`) when it needs the tools, and
+the process dies with the session. WSL launches the Windows venv's python through
+interop; the module is editable-installed and `main()` resolves its root from
+`__file__`, so no working directory is needed. `--stdio` is the transport added
+for this; HTTP remains the default for `start_mcp_server.bat` and manual runs.
 
-It is started at logon by a per-user Startup entry (see next action 4), which
-runs `start_mcp_server.bat` (binds `0.0.0.0:8000`).
+Verified 2026-09-12 with OpenClaw 2026.9.3: `openclaw mcp probe oilwatch`
+reports **9 tools, resources, prompts**, and `openclaw mcp doctor` reports
+`oilwatch: ok`. The stdio `initialize` handshake returns
+`serverInfo: {"name":"oilwatch","version":"0.1.0"}` — the package's own version,
+not the MCP framework's (which is what it reported before the server declared
+one).
+
+**Superseded:** until 2026-09-12 this was a streamable-HTTP endpoint OpenClaw
+dialled at `http://172.28.144.1:8000/mcp` — the WSL **NAT gateway**, because WSL
+cannot reach the Windows host on `localhost` and the working address depends on
+the WSL networking mode (NAT now; the LAN IP `192.168.33.56` under mirrored).
+That required the server to be running *and* the address to be right, so either
+slipping produced a `did not complete initialize within 10s` doctor warning. The
+stdio entry removes both preconditions.
 
 ---
 
@@ -215,9 +222,10 @@ runs `start_mcp_server.bat` (binds `0.0.0.0:8000`).
 1. **DONE — the database is the source of truth** (decided 2026-09-10). The
    workbook is retained only as a historical import: the hardcoded `P:\` path is
    gone and `import-spreadsheet` now requires an explicit `--path`.
-2. **Keep the OpenClaw `oilwatch` URL valid** — it points at the WSL NAT gateway
-   (`172.28.144.1`), which changes if the WSL vEthernet is recreated; re-check
-   with `wsl -e ip route` after a mode change or reboot.
+2. **DONE 2026-09-12 — there is no OpenClaw `oilwatch` URL to keep valid.** It
+   pointed at the WSL NAT gateway (`172.28.144.1`), so the server had to be
+   running and the address right. OpenClaw now spawns the server on demand over
+   stdio, so neither precondition applies.
 3. **DONE 2026-09-11 — `max_quote_age_days: 1` is deliberate, not a knob to
    loosen.** Heating-oil quotes stand for at most a day — 24h is the ceiling,
    not an average — which the code already assumes elsewhere (`models.py`
@@ -228,18 +236,15 @@ runs `start_mcp_server.bat` (binds `0.0.0.0:8000`).
    `cheapest` and `status` now list `excluded_suppliers` — the suppliers it held
    back and the last price each gave — so a thin snapshot reads as "not
    re-quoted yet" rather than looking like a scrape failure.
-4. **DONE 2026-09-11 — the MCP server starts at logon.** It no longer has to be
-   started by hand: a per-user Startup entry
-   (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\OilWatch MCP
-   Server.bat`) runs `start_mcp_server.bat` minimised at every logon, so the
-   repo launcher stays the single place host/port live. It is a Startup entry
-   rather than a Task Scheduler task because creating a task needs elevation —
-   `schtasks /Create /SC ONLOGON` returned Access denied. For a true task
-   (hidden, restart-on-failure, starts before logon) run this once from an
-   elevated prompt, then delete the Startup entry:
-   `schtasks /Create /TN "OilWatch MCP Server" /TR "\"C:\Users\wayne\GitHub\Python\Projects\Oil Price Webscraper\start_mcp_server.bat\"" /SC ONLOGON /F`
-   The server takes ~15 s after logon before it answers, so an early probe
-   getting "connection refused" is normal, not a fault.
+4. **DONE 2026-09-11, retired 2026-09-12 — the MCP server started at logon.** A
+   per-user Startup entry (`%APPDATA%\Microsoft\Windows\Start
+   Menu\Programs\Startup\OilWatch MCP Server.bat`) ran `start_mcp_server.bat`
+   minimised at every logon (a Startup entry rather than a Task Scheduler task
+   because creating one needs elevation — `schtasks /Create /SC ONLOGON` returned
+   Access denied). Once OpenClaw moved to spawning the server on demand over
+   stdio, nothing dialled the HTTP endpoint any more, so the entry was disabled
+   by renaming it to `OilWatch MCP Server.bat.disabled`; `start_mcp_server.bat`
+   remains for serving HTTP by hand.
 5. **DONE 2026-09-11 — one virtualenv: `.venv`.** The working copy had
    accumulated a second environment (`.venv-1`) built from the current
    `pyproject.toml`, while `.venv` — the one every script and doc references —
