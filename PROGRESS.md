@@ -23,7 +23,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 575, all passing offline |
+| Tests | 577, all passing offline |
 | Database | 27 suppliers, 245 quotes, 0 orders |
 
 ---
@@ -96,7 +96,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 575 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 577 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -186,10 +186,12 @@ suppliers whose only priced row came from the spreadsheet import won on
   `cmd.exe`, `'"…"'` under PowerShell — or it splits at the first space.
   **Logged 2026-09-13:** both unattended runs now write a rotating log to
   `data/oilwatch.log` (1 MB, 3 backups), because Task Scheduler and the
-  minimised Startup window leave no console to read a failure from. The two
-  launchers name the file through `OILWATCH_LOG_FILE` rather than a
-  `config/settings.json` key, which keeps the test suite and interactive runs
-  out of it — a hand-run `oilwatch status` still logs to its console only.
+  minimised Startup window leave no console to read a failure from. The path is
+  written once, in `oilwatch_env.bat`, which both launchers call — a copy in each
+  is the same drift the settings pair is guarded against, and `tests/test_docs.py`
+  fails if a launcher defines it again. It is an environment variable rather than
+  a `config/settings.json` key, which keeps the test suite and interactive runs
+  out of the log: a hand-run `oilwatch status` still logs to its console only.
 
 ### MCP / OpenClaw integration
 

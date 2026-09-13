@@ -11,7 +11,9 @@ misinforming.
 The same applies to a pair of files rather than a number: config/settings.json
 is gitignored while config/settings.example.json is shipped, so a setting added
 to only one of them goes unnoticed — it either reads its dataclass default here,
-or is absent from the file a new install copies.
+or is absent from the file a new install copies. The launchers are guarded the
+same way: one value written into two scripts drifts, so the unattended log path
+is defined once and both scripts have to call the file that holds it.
 
 Deliberately not checked: counts in the narrative sections, which describe past
 states and were true when written, and prose that counts something fuzzy such as
@@ -26,11 +28,15 @@ import re
 import unittest
 from pathlib import Path
 
+from oilwatch.logging_setup import LOG_FILE_ENV
+
 ROOT = Path(__file__).resolve().parents[1]
 PROGRESS = (ROOT / "PROGRESS.md").read_text(encoding="utf-8")
 ROADMAP = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
 LIVE_SETTINGS = ROOT / "config" / "settings.json"
 EXAMPLE_SETTINGS = ROOT / "config" / "settings.example.json"
+SHARED_ENV = ROOT / "oilwatch_env.bat"
+LAUNCHERS = ("start_scheduler.bat", "monitor_email.bat")
 
 
 def _decorated_tools() -> int:
@@ -186,6 +192,32 @@ class SettingsDriftTests(unittest.TestCase):
             set(),
             "settings.json sets keys settings.example.json does not document",
         )
+
+
+class LogPathSourceTests(unittest.TestCase):
+    """The unattended log path is defined once, in the file both launchers call.
+
+    It was a literal ``set`` in each launcher until 2026-09-13: two copies of one
+    value, which is the drift the settings pair above is guarded against.
+    """
+
+    def test_the_shared_env_file_is_where_the_log_path_lives(self) -> None:
+        self.assertIn(
+            LOG_FILE_ENV,
+            SHARED_ENV.read_text(encoding="utf-8"),
+            "the shared env file is where the log path is meant to be defined",
+        )
+
+    def test_a_launcher_calls_the_shared_file_rather_than_redefining_it(self) -> None:
+        for name in LAUNCHERS:
+            text = (ROOT / name).read_text(encoding="utf-8")
+            with self.subTest(launcher=name):
+                self.assertIn(SHARED_ENV.name, text, f"{name} must call the shared env file")
+                for line in text.splitlines():
+                    self.assertFalse(
+                        line.strip().lower().startswith("set") and LOG_FILE_ENV in line,
+                        f"{name} defines the log path itself; it belongs in {SHARED_ENV.name}",
+                    )
 
 
 if __name__ == "__main__":

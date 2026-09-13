@@ -9,11 +9,11 @@ Level comes from ``OILWATCH_LOG_LEVEL`` (default ``INFO``): use ``DEBUG`` for
 per-request detail, or ``WARNING`` to keep scheduled runs quiet.
 
 A run that names a log file also writes to a rotating one. ``OILWATCH_LOG_FILE``
-carries that path, and the launchers for the two unattended runs set it: the
-scheduler started from the Startup folder and the Task Scheduler's
-``monitor_email.bat`` both run without a visible window, so their output was
-otherwise unrecoverable — a scheduled sweep that failed left nothing to look at.
-An interactive run keeps its console and needs no file.
+carries that path, and ``oilwatch_env.bat`` - which both unattended launchers
+call - sets it. Those two are the scheduler started from the Startup folder and
+the Task Scheduler's ``monitor_email.bat``, neither of which has a window to
+print to, so a sweep that failed left nothing to look at. An interactive run
+keeps its console and needs no file.
 """
 
 from __future__ import annotations
