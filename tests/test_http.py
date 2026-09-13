@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 
 from oilwatch.http import build_client, request_with_retry
-from oilwatch.logging_setup import LOGGER_NAME, configure_logging
+from oilwatch.logging_setup import LOG_FILE_ENV, LOGGER_NAME, configure_logging
 
 
 def _client(handler) -> httpx.Client:
@@ -126,6 +130,12 @@ class LoggingSetupTests(unittest.TestCase):
         self.logger.handlers = self._handlers
         self.logger.setLevel(self._level)
 
+    def _close_file_handlers(self) -> None:
+        """Release the log files a test opened, so its temp dir can be removed."""
+        for handler in list(self.logger.handlers):
+            if handler not in self._handlers:
+                handler.close()
+
     def test_configure_logging_is_idempotent(self) -> None:
         first = configure_logging("DEBUG")
         second = configure_logging("DEBUG")
@@ -136,6 +146,64 @@ class LoggingSetupTests(unittest.TestCase):
 
     def test_unrecognised_level_falls_back_to_info(self) -> None:
         self.assertEqual(configure_logging("NOT-A-LEVEL").level, logging.INFO)
+
+    def test_a_log_path_is_created_and_written_to(self) -> None:
+        """The scheduler and the scheduled sweep run with no console to read."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "nested" / "oilwatch.log"
+            try:
+                logger = configure_logging("INFO", log_path)
+                logger.warning("sweep failed: site down")
+                written = log_path.read_text(encoding="utf-8")
+            finally:
+                self._close_file_handlers()
+
+        self.assertIn("sweep failed: site down", written)
+
+    def test_the_file_handler_does_not_stack_up(self) -> None:
+        """Configured twice for one path, records must not land in it twice."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "oilwatch.log"
+            try:
+                first = configure_logging("INFO", log_path)
+                before = len(first.handlers)
+                second = configure_logging("INFO", log_path)
+                self.assertEqual(len(second.handlers), before, "records must not double")
+            finally:
+                self._close_file_handlers()
+
+    def test_asking_for_the_log_file_keeps_the_console_handler(self) -> None:
+        """The file is in addition to the console, never instead of it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "oilwatch.log"
+            try:
+                logger = configure_logging("INFO", log_path)
+                console = [
+                    handler
+                    for handler in logger.handlers
+                    if type(handler) is logging.StreamHandler
+                ]
+                self.assertEqual(len(console), 1, "the console handler must survive")
+            finally:
+                self._close_file_handlers()
+
+    def test_the_launch_env_var_names_the_log_file(self) -> None:
+        """This variable is how the unattended launchers ask for the log.
+
+        The scheduler and the scheduled sweep are started by scripts, not by a
+        person, so if this name drifts the file silently stops being written.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "oilwatch.log"
+            try:
+                with patch.dict(os.environ, {LOG_FILE_ENV: str(log_path)}):
+                    logger = configure_logging("INFO")
+                    logger.warning("swept the inbox")
+                written = log_path.read_text(encoding="utf-8")
+            finally:
+                self._close_file_handlers()
+
+        self.assertIn("swept the inbox", written)
 
 
 if __name__ == "__main__":

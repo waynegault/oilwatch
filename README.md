@@ -477,7 +477,8 @@ Oil Price Webscraper/
 │   └── supplier_credentials.json # All passwords
 ├── data/
 │   ├── oilwatch.sqlite          # Database (generated)
-│   └── oilwatch-market.png      # Latest chart (generated)
+│   ├── oilwatch-market.png      # Latest chart (generated)
+│   └── oilwatch.log             # Unattended runs, rotating (generated)
 ├── oilwatch/
 │   ├── __init__.py
 │   ├── cli.py                   # Command-line interface

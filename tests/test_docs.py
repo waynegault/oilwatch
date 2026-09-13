@@ -8,6 +8,11 @@ it had been dropped. The numbers that can be derived are read back out of the
 code here, so a count that goes stale fails the suite instead of quietly
 misinforming.
 
+The same applies to a pair of files rather than a number: config/settings.json
+is gitignored while config/settings.example.json is shipped, so a setting added
+to only one of them goes unnoticed — it either reads its dataclass default here,
+or is absent from the file a new install copies.
+
 Deliberately not checked: counts in the narrative sections, which describe past
 states and were true when written, and prose that counts something fuzzy such as
 "4 generic connectors".
@@ -16,6 +21,7 @@ states and were true when written, and prose that counts something fuzzy such as
 from __future__ import annotations
 
 import ast
+import json
 import re
 import unittest
 from pathlib import Path
@@ -23,6 +29,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PROGRESS = (ROOT / "PROGRESS.md").read_text(encoding="utf-8")
 ROADMAP = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+LIVE_SETTINGS = ROOT / "config" / "settings.json"
+EXAMPLE_SETTINGS = ROOT / "config" / "settings.example.json"
 
 
 def _decorated_tools() -> int:
@@ -136,6 +144,47 @@ class RoadmapCountTests(unittest.TestCase):
             self._roadmap(r"\| Tests \| ✅ Complete \| (\d+) tests", "the Tests row"),
             _discovered_tests(),
             "ROADMAP.md's test count is stale; run the suite and update it",
+        )
+
+
+#: Settings objects whose keys are schema. Every other object in the file is
+#: either a scalar or a map whose entries are data, and those legitimately differ
+#: between an install and the shipped example (login_urls names this owner's
+#: supplier, the example ships an empty map), so their entries are not compared.
+_FIXED_OBJECTS = ("home", "scheduler")
+
+
+def _settings_keys(document: object) -> set[str]:
+    """The configurable keys a settings document offers, nested ones as ``a.b``."""
+    if not isinstance(document, dict):
+        return set()
+    keys = set(document)
+    for name in _FIXED_OBJECTS:
+        nested = document.get(name)
+        if isinstance(nested, dict):
+            keys |= {f"{name}.{key}" for key in nested}
+    return keys
+
+
+@unittest.skipUnless(
+    LIVE_SETTINGS.exists(),
+    "config/settings.json is gitignored, so a fresh clone has nothing to compare",
+)
+class SettingsDriftTests(unittest.TestCase):
+    """The shipped example and the live settings must offer the same keys."""
+
+    def test_the_example_and_the_live_settings_agree_on_keys(self) -> None:
+        live = _settings_keys(json.loads(LIVE_SETTINGS.read_text(encoding="utf-8")))
+        example = _settings_keys(json.loads(EXAMPLE_SETTINGS.read_text(encoding="utf-8")))
+        self.assertEqual(
+            example - live,
+            set(),
+            "settings.example.json documents keys the live settings.json lacks",
+        )
+        self.assertEqual(
+            live - example,
+            set(),
+            "settings.json sets keys settings.example.json does not document",
         )
 
 
