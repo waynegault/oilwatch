@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from oilwatch.scheduler import OilWatchScheduler
+from oilwatch.scheduler import OilWatchScheduler, _window_hours
 
 
 class _StubApp:
@@ -20,7 +21,10 @@ class _StubApp:
             scheduler=SimpleNamespace(
                 discovery_interval_hours=168,
                 quote_interval_hours=24,
-                email_monitor_interval_hours=12,
+                email_monitor_interval_hours=1,
+                email_monitor_start_hour=8,
+                email_monitor_end_hour=18,
+                email_monitor_days="mon-fri",
             )
         )
 
@@ -147,14 +151,15 @@ class StartTests(unittest.TestCase):
 
         self.assertTrue(app.init_called)
         self.assertTrue(stub.started)
+        by_id = {job["id"]: job for job in stub.jobs}
         self.assertEqual(
-            sorted(job["id"] for job in stub.jobs),
+            sorted(by_id),
             ["discover_suppliers", "monitor_email", "quote_all"],
         )
-        intervals = {job["id"]: job["hours"] for job in stub.jobs}
-        self.assertEqual(intervals["discover_suppliers"], 168)
-        self.assertEqual(intervals["quote_all"], 24)
-        self.assertEqual(intervals["monitor_email"], 12)
+        # These two stay open-ended intervals. The email sweep's trigger is a
+        # window, so it is asserted on its fire times in EmailWindowTests.
+        self.assertEqual(by_id["discover_suppliers"]["hours"], 168)
+        self.assertEqual(by_id["quote_all"]["hours"], 24)
 
 
 class RunForeverTests(unittest.TestCase):
@@ -173,6 +178,66 @@ class RunForeverTests(unittest.TestCase):
             ["discover_suppliers", "monitor_email", "quote_all"],
         )
         self.assertFalse(stub.started, "the scheduler should be shut down on the way out")
+
+
+class WindowHoursTests(unittest.TestCase):
+    """The cron hour list a windowed job is built from."""
+
+    def test_the_configured_interval_sets_the_hop(self) -> None:
+        self.assertEqual(_window_hours(8, 18, 1), "8,9,10,11,12,13,14,15,16,17,18")
+        self.assertEqual(_window_hours(8, 18, 2), "8,10,12,14,16,18")
+
+    def test_an_interval_longer_than_the_window_still_fires_once(self) -> None:
+        """The un-configured default is 24h: one sweep a day, at the window's start."""
+        self.assertEqual(_window_hours(8, 18, 24), "8")
+
+
+class EmailWindowTests(unittest.TestCase):
+    """The email sweep is confined to the hours suppliers are open.
+
+    Added 2026-09-13: the job was an open hourly interval, so it swept at :39
+    past every hour of every day - all weekend, into an inbox no supplier was
+    writing to. An interval trigger cannot express a window, so the job is now a
+    cron trigger built from the configured hours; these tests assert the fire
+    times, not the trigger's internals.
+    """
+
+    def _trigger(self):
+        app = _StubApp()
+        scheduler = OilWatchScheduler(app)
+        stub = _StubScheduler()
+        scheduler.scheduler = stub
+        scheduler.start()
+        job = next(job for job in stub.jobs if job["id"] == "monitor_email")
+        return job["trigger"]
+
+    def test_no_sweep_at_the_weekend(self) -> None:
+        trigger = self._trigger()
+        friday_evening = datetime(2026, 9, 11, 18, 30, tzinfo=trigger.timezone)
+        fire = trigger.get_next_fire_time(None, friday_evening)
+        self.assertEqual(fire.weekday(), 0, "Friday evening waits for Monday")
+        self.assertEqual((fire.hour, fire.minute), (8, 0))
+
+    def test_sweeps_hourly_across_the_working_day(self) -> None:
+        trigger = self._trigger()
+        now = datetime(2026, 9, 14, 7, 0, tzinfo=trigger.timezone)  # Monday
+        fires = []
+        for _ in range(11):
+            fire = trigger.get_next_fire_time(None, now)
+            fires.append(fire)
+            now = fire + timedelta(minutes=1)
+        self.assertEqual([fire.hour for fire in fires], list(range(8, 19)))
+        self.assertTrue(all(fire.weekday() == 0 for fire in fires))
+
+    def test_the_working_day_does_not_run_overnight(self) -> None:
+        """Monday's last sweep is 18:00; the next is Tuesday 08:00, not 03:00.
+
+        A trigger filtered by day alone - the obvious half-fix - fires all night.
+        """
+        trigger = self._trigger()
+        monday_evening = datetime(2026, 9, 14, 18, 1, tzinfo=trigger.timezone)
+        fire = trigger.get_next_fire_time(None, monday_evening)
+        self.assertEqual((fire.weekday(), fire.hour), (1, 8))
 
 
 if __name__ == "__main__":

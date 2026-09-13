@@ -18,6 +18,12 @@ class SchedulerConfig:
     discovery_interval_hours: int = 168
     quote_interval_hours: int = 24
     email_monitor_interval_hours: int = 24
+    #: The supplier-email sweep only runs inside this local-time window. Heating
+    #: oil suppliers are shut at weekends and overnight, so a sweep then can only
+    #: find an inbox that the next in-window run reads anyway.
+    email_monitor_start_hour: int = 8
+    email_monitor_end_hour: int = 18
+    email_monitor_days: str = "mon-fri"
 
 
 @dataclass(slots=True)

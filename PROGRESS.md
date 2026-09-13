@@ -23,7 +23,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 565, all passing offline |
+| Tests | 570, all passing offline |
 | Database | 27 suppliers, 245 quotes, 0 orders |
 
 ---
@@ -96,7 +96,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 565 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 570 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -162,10 +162,24 @@ suppliers whose only priced row came from the spreadsheet import won on
 - **Scheduled:** the per-user Startup entry `OilWatch Scheduler.bat` runs
   `start_scheduler.bat` -> `oilwatch schedule` at logon, so quotes, discovery and
   the email sweep all follow `config/settings.json` (quotes daily, discovery
-  weekly, email hourly); `monitor_email.bat` runs one email sweep by hand. The
-  hourly email task is kept alongside the scheduler as a fallback: the sweep is
-  idempotent, so a double run costs nothing, while the scheduler is a single
-  process that stops everything if it dies. Two schtasks
+  weekly, email hourly on weekdays); `monitor_email.bat` runs one email sweep by
+  hand. The hourly email task is kept alongside the scheduler as a fallback: the
+  sweep is idempotent, so a double run costs nothing, while the scheduler is a
+  single process that stops everything if it dies. **Resolved 2026-09-13:** a
+  second, redundant task (`Oilwatch Monitor Email`, daily at 08:00) was deleted —
+  its `/TR` was byte-identical to the hourly task's, so the hourly run already
+  covered it. The surviving fallback is `Oilwatch Email Monitor`; the two
+  near-identical names are worth reading twice for that reason. **Resolved
+  2026-09-13:** both sweeps were then confined to **08:00-18:00 Mon-Fri**, because
+  heating-oil suppliers are shut at weekends and overnight, so those runs could
+  only read an inbox the next in-window run reads anyway. The scheduler's job is
+  a weekday cron rather than an open interval (`oilwatch/scheduler.py`, built
+  from `email_monitor_start_hour` / `_end_hour` / `_days`); the task is a weekly
+  Mon-Fri trigger with `Interval PT1H` and `Duration PT11H`. The sweep is a poll,
+  so a reply arriving outside the window is still recorded at its own
+  `receivedDateTime` when the next in-window run finds it — but one arriving
+  after Friday's last sweep lands ~2.6 days old and so falls outside the 1-day
+  `max_quote_age_days` window. Two schtasks
   traps met on the way: `/Create` works unelevated for `HOURLY`/`DAILY` but not
   `ONLOGON` (Access denied), which is why logon autostart uses the Startup
   folder; and its `/TR` path must be quoted for the shell — `\"…\"` under
@@ -264,7 +278,10 @@ stdio entry removes both preconditions.
    Access denied). Once OpenClaw moved to spawning the server on demand over
    stdio, nothing dialled the HTTP endpoint any more, so the entry was disabled
    by renaming it to `OilWatch MCP Server.bat.disabled`; `start_mcp_server.bat`
-   remains for serving HTTP by hand.
+   remains for serving HTTP by hand. **Resolved 2026-09-13:** the renamed file
+   was then deleted. A `.disabled` suffix is not an executable extension, so
+   Windows had not launched it since the rename; `openclaw mcp probe oilwatch`
+   again reported 9 tools, resources, prompts over the on-demand stdio path.
 5. **DONE 2026-09-11 — one virtualenv: `.venv`.** The working copy had
    accumulated a second environment (`.venv-1`) built from the current
    `pyproject.toml`, while `.venv` — the one every script and doc references —

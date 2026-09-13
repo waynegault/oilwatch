@@ -3,11 +3,17 @@ from __future__ import annotations
 import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from oilwatch.logging_setup import get_logger
 from oilwatch.service import OilWatchApp
 
 log = get_logger("scheduler")
+
+
+def _window_hours(start: int, end: int, step: int) -> str:
+    """Cron hour list for a daily window, e.g. ``(8, 18, 2)`` -> ``8,10,...,18``."""
+    return ",".join(str(hour) for hour in range(start, end + 1, step))
 
 
 class OilWatchScheduler:
@@ -49,10 +55,21 @@ class OilWatchScheduler:
             id="quote_all",
             replace_existing=True,
         )
+        # Replies only arrive while suppliers are open, so the sweep is a weekday
+        # business-hours cron rather than an open interval: the interval it
+        # replaced fired at :39 past every hour of every day, weekends included.
+        cfg = self.app.settings.scheduler
         self.scheduler.add_job(
             self.app.monitor_email,
-            "interval",
-            hours=self.app.settings.scheduler.email_monitor_interval_hours,
+            CronTrigger(
+                day_of_week=cfg.email_monitor_days,
+                hour=_window_hours(
+                    cfg.email_monitor_start_hour,
+                    cfg.email_monitor_end_hour,
+                    cfg.email_monitor_interval_hours,
+                ),
+                minute=0,
+            ),
             id="monitor_email",
             replace_existing=True,
         )
