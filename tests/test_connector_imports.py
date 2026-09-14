@@ -10,6 +10,11 @@ from oilwatch.connectors.suppliers import get_telephone_script
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+#: Generous: the child only imports oilwatch.connectors (1-3s normally). A bound
+#: is here so a stalled child fails this test loudly instead of hanging the whole
+#: discovery run with no summary and no clue which test was stuck.
+SUBPROCESS_TIMEOUT_S = 60
+
 
 class ConnectorRoutingTests(unittest.TestCase):
     def test_unknown_connector_type_raises(self) -> None:
@@ -41,12 +46,19 @@ class ConnectorImportCostTests(unittest.TestCase):
     """
 
     def _run(self, code: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            [sys.executable, "-c", code],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            return subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail(
+                f"the connector-import subprocess did not finish within "
+                f"{SUBPROCESS_TIMEOUT_S}s; it may be blocked, not slow"
+            )
 
     def test_importing_connectors_does_not_import_playwright(self) -> None:
         proc = self._run(
