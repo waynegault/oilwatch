@@ -45,7 +45,7 @@ from oilwatch.http import build_client, request_with_retry
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
-from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total, pence_to_pounds
+from oilwatch.pricing import inclusive_total
 
 log = get_logger("connectors.highland_fuels")
 
@@ -93,11 +93,11 @@ class HighlandFuelsConnector(BaseConnector):
             log.warning("Highland Fuels quote request failed: %s", exc)
             return self._manual(supplier, quantity_liters, f"HTTP error: {exc}")
 
-        ex_vat_price = self.parse_offers_response(response.text)
-        if ex_vat_price is None:
+        parsed = self.parse_offers_response(response.text)
+        if parsed is None:
             return self._manual(supplier, quantity_liters, "No offer/price in the getoffers.php response.")
 
-        price_per_liter = apply_vat(ex_vat_price, DOMESTIC_VAT_RATE)
+        price_per_liter, offer_total = parsed
         return QuoteResult(
             supplier_id=int(supplier["id"]),
             supplier_name=supplier["name"],
@@ -107,31 +107,48 @@ class HighlandFuelsConnector(BaseConnector):
             price_per_liter=price_per_liter,
             total_price=inclusive_total(price_per_liter, quantity_liters),
             source="highland_fuels",
-            notes=f"Price from Highland Fuels quote app for {quantity_liters}L (ex-VAT £{ex_vat_price:.4f}/L, inc-VAT £{price_per_liter:.4f}/L). Postcode: {postcode}",
-            raw_payload={"quote_url": self.quote_url, "postcode": postcode, "price_ex_vat": ex_vat_price},
+            notes=(
+                f"Standard Delivery from the Highland Fuels quote app for "
+                f"{quantity_liters}L: £{offer_total:.2f} inc VAT = "
+                f"£{price_per_liter:.4f}/L. Postcode: {postcode}"
+            ),
+            raw_payload={
+                "quote_url": self.quote_url,
+                "postcode": postcode,
+                "standard_total": offer_total,
+            },
         )
 
     @staticmethod
-    def parse_offers_response(xml_text: str) -> float | None:
-        """Extract the ex-VAT price-per-litre from the getoffers.php XML.
+    def parse_offers_response(xml_text: str) -> tuple[float, float] | None:
+        """The standard offer's (price_per_liter_inc_vat, order_total_gbp).
 
-        ``UnitPrice`` is pence per litre (ex-VAT). Return the cheapest offer.
+        Each ``<Offer>`` carries ``UnitPrice`` (pence/L, ex-VAT), ``Total``
+        (pence for the order, inc-VAT), a ``Quantity`` and an ``OfferName``.
+        ``Total`` is what you actually pay, so it is divided by the ordered
+        litres — and the offer named "Standard" is used, falling back to the
+        first, so an express option cannot stand in for the standard one.
         """
         try:
             root = ET.fromstring(xml_text)
         except ET.ParseError:
             return None
-        unit_prices = []
+        offers: list[tuple[str, float, float]] = []
         for offer in root.findall(".//Offer"):
-            unit = offer.findtext("UnitPrice")
-            if unit:
-                try:
-                    unit_prices.append(pence_to_pounds(float(unit)))
-                except (TypeError, ValueError):
-                    continue
-        if not unit_prices:
+            name = (offer.findtext("OfferName") or "").strip().lower()
+            try:
+                total_pence = float(offer.findtext("Total"))
+                litres = float(offer.findtext("Quantity"))
+            except (TypeError, ValueError):
+                continue
+            if litres <= 0:
+                continue
+            total = total_pence / 100.0
+            offers.append((name, total / litres, total))
+        if not offers:
             return None
-        return round(min(unit_prices), 4)
+        _, price_per_liter, total = next((o for o in offers if "standard" in o[0]), offers[0])
+        return round(price_per_liter, 4), round(total, 2)
 
     def _manual(self, supplier: dict[str, Any], quantity_liters: int, notes: str) -> QuoteResult:
         contact = ", ".join(p for p in [supplier.get("phone"), supplier.get("email"), supplier.get("website")] if p)

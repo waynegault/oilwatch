@@ -53,9 +53,11 @@ _SUPPLIER_CONNECTORS: dict[str, tuple[str | None, str | None]] = {
     "johnstonfuels.co.uk": (None, "FuelsoftConnector"),
 }
 
-# Domains whose browser connector is unreliable (SSL/fill timeouts). Their HTTP
-# connector works, so it must win even when --browser is requested.
-_HTTP_WINS_OVER_BROWSER = frozenset({"valueoils.com", "homefuelsdirect.co.uk"})
+# Domains whose browser connector is unreliable, so their HTTP connector must
+# win even when --browser is requested. ValueOils used to be here: its page
+# stalls when the browser's requests are proxied through Python, which the
+# connector now opts out of, and its Quick Quote form selectors never matched.
+_HTTP_WINS_OVER_BROWSER = frozenset({"homefuelsdirect.co.uk"})
 
 
 def __getattr__(name: str):

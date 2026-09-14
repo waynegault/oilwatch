@@ -32,6 +32,12 @@ class BrowserConnector(BaseConnector, ABC):
     - Screenshot capture for debugging
     """
     
+    #: Whether to route every request through Python for API discovery. Some
+    #: sites stall when their requests are re-fetched that way (ValueOils' SSL
+    #: handshake) even though a plain browser loads them, so a connector may
+    #: opt out and keep only its own explicit waits.
+    _intercept_requests: bool = True
+
     def __init__(self) -> None:
         self.supplier_key = ""
         self.supplier_name = ""
@@ -191,8 +197,10 @@ class BrowserConnector(BaseConnector, ABC):
             ),
         )
         
-        # Enable request interception for API discovery
-        await self._context.route("**/*", self._intercept_request)
+        # Enable request interception for API discovery, unless the connector
+        # opted out because routing every request stalls the site.
+        if self._intercept_requests:
+            await self._context.route("**/*", self._intercept_request)
         
         self._page = await self._context.new_page()
         return self._page

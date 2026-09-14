@@ -12,15 +12,14 @@ import httpx
 
 from oilwatch.connectors.suppliers.boilerjuice import BoilerJuiceBrowserConnector
 from oilwatch.connectors.suppliers.highland_fuels import HighlandFuelsConnector
-from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat
 from tests.fake_async_page import FakeAsyncPage, FakeElement
 
 SUPPLIER = {"id": 6, "name": "Highland Fuels", "website": "https://www.highlandfuels.co.uk", "phone": "0800"}
 
 OFFERS_XML = (
     "<Offers>"
-    "<Offer><UnitPrice>104.50</UnitPrice></Offer>"
-    "<Offer><UnitPrice>101.03</UnitPrice></Offer>"
+    "<Offer><Quantity>1000</Quantity><UnitPrice>109.2</UnitPrice>"
+    "<Total>114660</Total><OfferName>Standard Delivery</OfferName></Offer>"
     "</Offers>"
 )
 
@@ -40,12 +39,14 @@ class HighlandFuelsTests(unittest.TestCase):
             result = HighlandFuelsConnector().quote(supplier or SUPPLIER, 1000, {"postcode": "AB21 0YA"})
         return result, request
 
-    def test_an_offer_is_read_and_vat_applied(self) -> None:
+    def test_the_standard_offer_total_is_read(self) -> None:
         result, request = self._quote(response=FakeHttpResponse(OFFERS_XML))
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "highland_fuels")
-        self.assertAlmostEqual(result.price_per_liter, apply_vat(1.0103, DOMESTIC_VAT_RATE), places=4)
+        # £1,146.60 for 1000L inc VAT -> £1.1466/L.
+        self.assertAlmostEqual(result.price_per_liter, 1.1466, places=4)
+        self.assertAlmostEqual(result.total_price, 1146.6, places=2)
         body = request.call_args.kwargs["content"]
         self.assertIn("<Product>043</Product>", body)
         self.assertIn("<PostCode>AB21 0YA</PostCode>", body)

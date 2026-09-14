@@ -248,34 +248,56 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.connector = ValueOilsBrowserConnector()
 
-    def test_fills_the_form_and_applies_5pc_vat(self) -> None:
-        usage, fuel = FakeElement(tag="SELECT"), FakeElement(tag="SELECT")
-        postcode, quantity, button = FakeElement(), FakeElement(), FakeElement(tag="BUTTON")
-        page = FakeAsyncPage(
-            content="Heating Oil Kerosene 103.90p per litre",
+    #: The Quick Quote result, as ValueOils renders it (text, tags stripped).
+    QUICK_QUOTE = (
+        "Delivery Options based on postcode AB21 0YA Quantity: 1000 (litres) "
+        "Delivery Option Fuel ppl ex. VAT Total You Pay "
+        "Standard Delivery - Estimated Delivery by Monday 28th Sep 2026 "
+        "111.10p £1,187.55 Buy Now "
+        "Express Delivery 7 (+£29.90) Delivery by Wednesday 23rd Sep 2026 "
+        "111.10p £1,217.45 Buy Now"
+    )
+
+    def _page(self, *, content: str | None = None, email: FakeElement | None = None) -> FakeAsyncPage:
+        return FakeAsyncPage(
+            content=self.QUICK_QUOTE if content is None else content,
             elements=[
-                ("usage_type", usage),
-                ("fuel_type", fuel),
-                ("postcode", postcode),
-                ("quantity", quantity),
-                ('has-text("Quote")', button),
+                ("sgcPriceChecker_txtQuotePostcode", FakeElement()),
+                ("sgcPriceChecker_txtQuoteEmail", email or FakeElement()),
+                ("sgcPriceChecker_txtQuantity", FakeElement()),
+                ("sgcPriceChecker_btnShowPrices", FakeElement(tag="INPUT")),
             ],
         )
+
+    def test_reads_the_standard_delivery_total(self) -> None:
+        postcode, quantity, button = FakeElement(), FakeElement(), FakeElement(tag="INPUT")
+        page = FakeAsyncPage(
+            content=self.QUICK_QUOTE,
+            elements=[
+                ("sgcPriceChecker_txtQuotePostcode", postcode),
+                ("sgcPriceChecker_txtQuoteEmail", FakeElement()),
+                ("sgcPriceChecker_txtQuantity", quantity),
+                ("sgcPriceChecker_btnShowPrices", button),
+            ],
+        )
+
         result = _quote(self.connector, page)
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "valueoils_browser")
-        # 103.90p/L ex-VAT -> £1.0390 -> +5% VAT, rounded to the app-wide 4 dp
-        # -> £1.0909/L, and the stored total is price_per_liter * litres (the
-        # app-wide invariant) -> £1090.90.
-        self.assertAlmostEqual(result.price_per_liter, 1.0909, places=4)
-        self.assertAlmostEqual(result.total_price, 1090.9, places=2)
+        # £1,187.55 for 1000L is already inc VAT and commission -> £1.1875/L,
+        # and the stored total follows from it (the app-wide invariant).
+        self.assertEqual(result.raw_payload["standard_delivery_total"], 1187.55)
+        self.assertAlmostEqual(result.price_per_liter, 1.1875, places=4)
         self.assertAlmostEqual(result.total_price, result.price_per_liter * 1000, places=2)
-        self.assertEqual(usage.selected, ["domestic"])
-        self.assertEqual(fuel.selected, ["kerosene"])
         self.assertEqual(postcode.filled, ["AB21 0YA"])
         self.assertEqual(quantity.filled, ["1000"])
         self.assertEqual(button.clicked, 1)
+
+    def test_it_reads_the_standard_option_not_express(self) -> None:
+        result = _quote(self.connector, self._page())
+        self.assertEqual(result.raw_payload["standard_delivery_total"], 1187.55)
+        self.assertNotAlmostEqual(result.price_per_liter, 1.2175, places=4)  # not Express 7
 
     def test_falls_back_to_http_when_no_price_is_shown(self) -> None:
         sentinel = object()
@@ -299,12 +321,10 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
         self.assertEqual(button.clicked, 1)
         self.assertEqual(page.goto_urls, [self.connector.login_url])
 
-    def test_the_quote_form_email_comes_from_the_contact(self) -> None:
+    def test_the_quick_quote_email_comes_from_the_contact(self) -> None:
         """The form asks for an address to quote to; it is the configured one."""
         email = FakeElement()
-        page = FakeAsyncPage(
-            content="Heating Oil Kerosene 103.90p per litre", elements=[("email", email)]
-        )
+        page = self._page(email=email)
 
         with patch(
             "oilwatch.connectors.suppliers.valueoils_browser.load_contact",
@@ -315,19 +335,15 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
         self.assertEqual(email.filled, ["owner@example.test"])
         self.assertEqual(result.status, "ok")
 
-    def test_a_dropdown_that_will_not_take_a_value_does_not_lose_the_quote(self) -> None:
-        usage = FakeElement(tag="SELECT", select_raises=True)
-        fuel = FakeElement(tag="SELECT", select_raises=True)
-        page = FakeAsyncPage(
-            content="Heating Oil Kerosene 103.90p per litre",
-            elements=[("usage_type", usage), ("fuel_type", fuel)],
-        )
+    def test_a_missing_form_falls_back_to_http_with_the_error(self) -> None:
+        sentinel = object()
+        with patch.object(
+            ValueOilsBrowserConnector, "_fallback_to_http", new=AsyncMock(return_value=sentinel)
+        ) as fallback:
+            result = _quote(self.connector, FakeAsyncPage(content=self.QUICK_QUOTE))
 
-        result = _quote(self.connector, page)
-
-        self.assertEqual(result.status, "ok")
-        self.assertEqual(usage.selected, [])
-        self.assertEqual(fuel.selected, [])
+        self.assertIs(result, sentinel)
+        self.assertIn("postcode", fallback.await_args.args[3])
 
     def test_a_broken_browser_falls_back_to_http_with_the_error(self) -> None:
         sentinel = object()
@@ -345,31 +361,15 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
         self.assertIs(result, sentinel)
         self.assertEqual(fallback.await_args.args[3], "browser died")
 
-    def test_an_extraction_error_falls_back_without_blaming_the_browser(self) -> None:
+    def test_no_delivery_table_falls_back_without_blaming_the_browser(self) -> None:
         sentinel = object()
-        page = FakeAsyncPage(content="whatever")
-
-        async def boom() -> str:
-            raise RuntimeError("page detached")
-
-        page.content = boom
         with patch.object(
             ValueOilsBrowserConnector, "_fallback_to_http", new=AsyncMock(return_value=sentinel)
         ) as fallback:
-            result = _quote(self.connector, page)
+            result = _quote(self.connector, self._page(content="<html>no delivery table</html>"))
 
         self.assertIs(result, sentinel)
         self.assertEqual(len(fallback.await_args.args), 3)  # no browser error to report
-
-    def test_a_price_already_in_pounds_is_not_converted_again(self) -> None:
-        """The >100 rule is a heuristic, so a pounds price has to pass through."""
-        page = FakeAsyncPage(content="Our price today: £1.55 per litre")
-
-        result = _quote(self.connector, page)
-
-        self.assertEqual(result.status, "ok")
-        # £1.55/L ex-VAT -> +5% VAT -> £1.6275/L.
-        self.assertAlmostEqual(result.price_per_liter, 1.6275, places=4)
 
 
 class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):

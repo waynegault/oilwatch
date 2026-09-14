@@ -18,6 +18,13 @@ SUPPLIER = {"id": 4, "name": "Test Supplier", "website": "https://example.test",
 
 CONNECTORS = [ValueOilsBrowserConnector, HomeFuelsDirectBrowserConnector]
 
+#: The ValueOils regional price table: ppl ex VAT, then Total You Pay per tier.
+VALUEOILS_REGIONAL = (
+    "Live Heating Oil Prices in Aberdeenshire"
+    "<tr><td>Price Per Litre Ex VAT</td><td>112.10p</td><td>112.10p</td></tr>"
+    "<tr><td>Total You Pay</td><td>£604.53</td><td>£1,075.35</td></tr>"
+)
+
 
 class BoomPage(FakeAsyncPage):
     async def goto(self, url: str, **kwargs) -> None:
@@ -82,21 +89,21 @@ class FallbackTests(unittest.TestCase):
         with patch("httpx.AsyncClient", return_value=client):
             return asyncio.run(connector._fallback_to_http(SUPPLIER, 1000, {"postcode": "AB21 0YA"}))
 
-    def test_valueoils_reads_the_price_from_the_fallback_page(self) -> None:
-        client = FakeAsyncClient("Heating Oil 900 Litres 103.90p")
+    def test_valueoils_fallback_reads_the_900l_total(self) -> None:
+        client = FakeAsyncClient(VALUEOILS_REGIONAL)
         result = self._fallback(ValueOilsBrowserConnector(), client)
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "valueoils_http_fallback")
-        # 103.90p ex-VAT -> +5% VAT -> £1.0909/L, total = price * litres.
-        self.assertAlmostEqual(result.price_per_liter, 1.0909, places=4)
-        self.assertAlmostEqual(result.total_price, 1090.9, places=2)
+        # £1,075.35 for 900L inc VAT + commission -> £1.1948/L.
+        self.assertAlmostEqual(result.price_per_liter, 1.1948, places=4)
+        self.assertAlmostEqual(result.total_price, 1194.8, places=2)
         self.assertEqual(client.urls, [ValueOilsBrowserConnector().quote_url])
 
-    def test_valueoils_fallback_without_a_price_is_an_error(self) -> None:
+    def test_valueoils_fallback_without_a_price_needs_manual_action(self) -> None:
         result = self._fallback(ValueOilsBrowserConnector(), FakeAsyncClient("<html>nothing</html>"))
-        self.assertEqual(result.status, "error")
-        self.assertIn("Could not extract price", result.notes)
+        self.assertEqual(result.status, "manual_action_required")
+        self.assertIn("Could not extract the standard-delivery total", result.notes)
 
     def test_valueoils_fallback_reports_a_failed_fetch(self) -> None:
         result = self._fallback(ValueOilsBrowserConnector(), FakeAsyncClient(get_raises=True))

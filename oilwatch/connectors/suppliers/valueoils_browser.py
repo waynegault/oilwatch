@@ -1,4 +1,19 @@
-"""ValueOils browser connector with auto-login and API discovery."""
+"""ValueOils browser connector.
+
+ValueOils' "Quick Quote" is an ASP.NET WebForms panel on the regional page: a
+postcode, an email and a quantity, then "Show Price", which redirects to
+``/Quote.aspx`` with a table of delivery options. Each option states the fuel
+ppl *excluding VAT* beside the **Total You Pay**, which — as the page says —
+"includes vat, commission and any chargeable delivery option selected". The
+total is therefore the only figure comparable with the other suppliers'
+delivered prices, and the earlier connector's ``ppl × 1.05`` dropped ValueOils'
+commission.
+
+This connector fills that form and reads the **Standard Delivery** option's
+total. The site stalls when the browser's requests are proxied back through
+Python, so this connector opts out of interception (see ``_intercept_requests``)
+— which is also why the HTTP connector used to win for this domain.
+"""
 
 from __future__ import annotations
 
@@ -11,31 +26,27 @@ from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
-from oilwatch.pricing import apply_vat, normalise_price_per_litre, pence_to_pounds
+from oilwatch.pricing import inclusive_total
 
 log = get_logger("connectors.valueoils")
 
-#: The Quick Quote form's postcode control, shared by the readiness wait and
-#: the fill.
-_POSTCODE_SELECTOR = (
-    'input[name="postcode"], input[id*="postcode"], input[placeholder*="postcode"]'
-)
+#: The Quick Quote controls (ASP.NET WebForms ids).
+_POSTCODE_SELECTOR = "#sgcPriceChecker_txtQuotePostcode"
+_EMAIL_SELECTOR = "#sgcPriceChecker_txtQuoteEmail"
+_QUANTITY_SELECTOR = "#sgcPriceChecker_txtQuantity"
+_SUBMIT_SELECTOR = "#sgcPriceChecker_btnShowPrices"
+
+#: "Standard Delivery - Estimated ... £1,187.55". The first £ after the label is
+#: that option's Total You Pay; the fuel ppl is stated in pence with no £ sign,
+#: so this cannot pick up the per-litre figure by mistake.
+_STANDARD_TOTAL_RE = r"Standard Delivery[\s\S]{0,700}?£\s*([\d,]+\.\d{2})"
 
 
 class ValueOilsBrowserConnector(BrowserConnector):
-    """
-    ValueOils browser connector.
-    
-    ValueOils has a Quick Quote form that shows instant pricing.
-    This connector:
-    1. Navigates to the quote page
-    2. Fills in the Quick Quote form
-    3. Extracts the price from the response
-    4. Falls back to web scraping if browser automation fails
-    
-    Note: ValueOils may not require login for basic quotes.
-    """
-    
+    """Read ValueOils' standard-delivery, inclusive-of-VAT Quick Quote total."""
+
+    _intercept_requests = False
+
     def __init__(self) -> None:
         super().__init__()
         self.supplier_key = "valueoils"
@@ -44,11 +55,11 @@ class ValueOilsBrowserConnector(BrowserConnector):
         self.login_url = "https://www.valueoils.com/my-account/"
         self.quote_url = "https://www.valueoils.com/regions/scotland/aberdeenshire/"
         self._requires_login = False
-    
+
     async def login(self, page: Page, email: str, password: str) -> bool:
         """Optional sign-in; ValueOils quotes work signed-out (see the base)."""
         return await self._optional_login(page, email, password)
-    
+
     async def get_quote_with_browser(
         self,
         supplier: dict[str, Any],
@@ -56,156 +67,83 @@ class ValueOilsBrowserConnector(BrowserConnector):
         context: dict[str, Any],
         page: Page,
     ) -> QuoteResult:
-        """
-        Get a quote from ValueOils using browser automation.
-        
-        Strategy:
-        1. Navigate to quote page
-        2. Fill in Quick Quote form (usage, fuel type, postcode, email, quantity)
-        3. Submit and extract price
-        """
+        """Fill the Quick Quote and read the Standard Delivery total."""
+        postcode = context.get("postcode", "") or load_contact().postcode
         try:
-            postcode = context.get("postcode", "") or load_contact().postcode
-            
-            # Navigate to quote page
             await page.goto(self.quote_url, wait_until="domcontentloaded")
-            # Wait for the form rather than sleeping a flat 3s: the postcode
-            # control is the readiness signal, and the wait is bounded.
-            await self._wait_for(
-                page,
-                lambda: page.query_selector(_POSTCODE_SELECTOR),
-                what="the ValueOils Quick Quote form",
-            )
+            await self._fill_quick_quote(page, postcode, quantity_liters)
 
-            # Find and fill Quick Quote form fields
-            # Usage dropdown (Domestic/Commercial)
-            usage_select = await page.query_selector(
-                'select[name="usage_type"], select[id*="usage"], '
-                'select[aria-label*="usage"]'
-            )
-            
-            # Fuel type dropdown
-            fuel_select = await page.query_selector(
-                'select[name="fuel_type"], select[id*="fuel"], '
-                'select[aria-label*="fuel"]'
-            )
-            
-            # Postcode field
-            postcode_field = await page.query_selector(_POSTCODE_SELECTOR)
-            
-            # Email field
-            email_field = await page.query_selector(
-                'input[name="email"], input[id*="email"], '
-                'input[type="email"], input[placeholder*="email"]'
-            )
-            
-            # Quantity field
-            quantity_field = await page.query_selector(
-                'input[name="quantity"], input[id*="quantity"], '
-                'input[type="number"], input[placeholder*="quantity"]'
-            )
-            
-            # Get quote button
-            quote_button = await page.query_selector(
-                'button:has-text("Quote"), button:has-text("Get Quote"), '
-                'input[value*="Quote"], button:has-text("Get Price"), '
-                'button:has-text("Start Order")'
-            )
-            
-            # Fill in fields
-            if usage_select:
-                try:
-                    await usage_select.select_option("domestic")
-                except Exception as exc:  # noqa: BLE001
-                    log.debug("could not select usage=domestic: %s", exc)
-
-            if fuel_select:
-                try:
-                    await fuel_select.select_option("kerosene")
-                except Exception as exc:  # noqa: BLE001
-                    log.debug("could not select fuel=kerosene: %s", exc)
-            
-            if postcode_field:
-                await postcode_field.fill(postcode)
-            
-            if email_field:
-                await email_field.fill(load_contact().email)
-            
-            if quantity_field:
-                await quantity_field.fill(str(quantity_liters))
-            
-            # Submit form
-            if quote_button:
-                await quote_button.click()
-
-                # Wait for the price to appear rather than sleeping a flat 5s;
-                # the extraction below re-reads it once it is there.
-                await self._wait_for(
-                    page,
-                    lambda: self._price_ready(page, quantity_liters),
-                    what="a ValueOils price",
-                )
-
-            # Try to extract price from page. ValueOils quotes ex-VAT (the HTTP
-            # connector reads the same regional page on that basis), so it is
-            # brought onto the app-wide inclusive-of-5% basis before storage.
-            ex_vat_price = await self._extract_price(page, quantity_liters)
-
-            if ex_vat_price:
-                return self._quote_from_ex_vat(
-                    supplier,
-                    quantity_liters,
-                    ex_vat_price,
+            standard_total = await self._read_standard_total(page)
+            if standard_total is not None:
+                # The total is already inclusive of VAT and commission, so it is
+                # divided by the ordered litres rather than uplifted again.
+                price_per_liter = round(standard_total / quantity_liters, 4)
+                return QuoteResult(
+                    supplier_id=int(supplier["id"]),
+                    supplier_name=supplier["name"],
+                    observed_at=self.now(),
+                    quantity_liters=quantity_liters,
+                    status="ok",
+                    price_per_liter=price_per_liter,
+                    total_price=inclusive_total(price_per_liter, quantity_liters),
                     source="valueoils_browser",
                     notes=(
-                        f"Price extracted via browser automation for {quantity_liters}L "
-                        f"(Ex VAT: £{ex_vat_price:.4f}/L, Inc VAT: £{apply_vat(ex_vat_price):.4f}/L)."
+                        f"Standard Delivery from the ValueOils Quick Quote for "
+                        f"{quantity_liters}L: £{standard_total:.2f} inc VAT "
+                        f"(incl. commission) = £{price_per_liter:.4f}/L."
                     ),
                     raw_payload={
                         "quote_url": self.quote_url,
                         "postcode": postcode,
-                        "method": "browser_automation",
+                        "method": "quick_quote",
+                        "standard_delivery_total": standard_total,
                     },
                 )
-            
-            # Fall back to HTTP scraping
+
+            # No delivery table: fall back to the regional-page HTTP figures.
             return await self._fallback_to_http(supplier, quantity_liters, context)
-            
+
         except Exception as e:  # noqa: BLE001 - any browser failure degrades to the HTTP fallback
-            # Fall back to HTTP scraping
             return await self._fallback_to_http(supplier, quantity_liters, context, str(e))
 
-    async def _price_ready(self, page: Page, quantity_liters: int) -> bool:
-        """True once a price can be read off the page, for the bounded wait."""
-        return await self._extract_price(page, quantity_liters) is not None
+    async def _fill_quick_quote(self, page: Page, postcode: str, quantity_liters: int) -> None:
+        """Fill the Quick Quote and submit it. Raises when the form is absent."""
+        postcode_field = await page.query_selector(_POSTCODE_SELECTOR)
+        if postcode_field is None:
+            raise RuntimeError("the ValueOils Quick Quote postcode field was not found")
+        await postcode_field.fill(postcode)
 
-    async def _extract_price(self, page: Page, quantity_liters: int) -> float | None:
-        """Extract price per litre from the page."""
+        email_field = await page.query_selector(_EMAIL_SELECTOR)
+        if email_field is not None:
+            await email_field.fill(load_contact().email)
+
+        quantity_field = await page.query_selector(_QUANTITY_SELECTOR)
+        if quantity_field is not None:
+            await quantity_field.fill(str(quantity_liters))
+
+        submit = await page.query_selector(_SUBMIT_SELECTOR)
+        if submit is None:
+            raise RuntimeError("the ValueOils 'Show Price' button was not found")
+        await submit.click()
+
+    async def _read_standard_total(self, page: Page) -> float | None:
+        """The Standard Delivery total once the results have rendered."""
+        await self._wait_for(
+            page, lambda: self._standard_total(page), timeout_ms=25000, what="the ValueOils Quick Quote"
+        )
+        return await self._standard_total(page)
+
+    @staticmethod
+    async def _standard_total(page: Page) -> float | None:
         try:
             content = await page.content()
-
-            # ValueOils shows prices like "155.80p" for heating oil
-            patterns = [
-                r'Heating\s*Oil.*?Kerosene.*?(\d{2,3}\.\d{2})\s*p',
-                r'Kerosene.*?(\d{2,3}\.\d{2})\s*p',
-                r'(\d{2,3}\.\d{2})\s*p.*?litre',
-                r'£?(\d+\.\d{2})\s*per\s*litre',
-                r'total.*?£?(\d+\.\d{2})',
-            ]
-
-            for pattern in patterns:
-                match = re.search(pattern, content, re.IGNORECASE | re.DOTALL)
-                if match:
-                    # normalise handles the pence/pounds distinction (>100 is
-                    # pence), so the same rule applies as everywhere else.
-                    return normalise_price_per_litre(match.group(1))
-
+        except Exception:  # noqa: BLE001 - an unreadable page is simply not ready
             return None
-
-        except Exception as e:  # noqa: BLE001 - a page without a readable price is "no price"
-            log.debug("price extraction failed: %s", e)
+        match = re.search(_STANDARD_TOTAL_RE, content, re.IGNORECASE)
+        if not match:
             return None
-    
+        return float(match.group(1).replace(",", ""))
+
     async def _fallback_to_http(
         self,
         supplier: dict[str, Any],
@@ -213,46 +151,58 @@ class ValueOilsBrowserConnector(BrowserConnector):
         context: dict[str, Any],
         error: str = "",
     ) -> QuoteResult:
-        """Fall back to HTTP scraping if browser automation fails."""
+        """Use the regional page's own "Total You Pay", which includes commission.
+
+        The page prices 500L and 900L tiers; the 900L "Total You Pay" is the
+        standard-delivery cost at the tier our orders sit in (900L+).
+        """
         import httpx
-        
+
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
                 response = await client.get(self.quote_url)
                 response.raise_for_status()
                 content = response.text
-            
-            # Extract price using regex
-            patterns = [
-                r'Heating\s*Oil.*?Kerosene.*?(\d{2,3}\.\d{2})\s*p.*?900',
-                r'900\s*Litres.*?(\d{2,3}\.\d{2})\s*p',
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, content, re.IGNORECASE | re.DOTALL)
-                if match:
-                    # The regional table is "Price Per Litre Ex VAT", like the
-                    # browser path, so the same 5% uplift is applied.
-                    ex_vat_price = pence_to_pounds(float(match.group(1)))
-                    return self._quote_from_ex_vat(
-                        supplier,
-                        quantity_liters,
-                        ex_vat_price,
-                        source="valueoils_http_fallback",
-                        notes=(
-                            f"Price extracted via HTTP fallback (browser: {error or 'N/A'}). "
-                            f"Ex VAT: £{ex_vat_price:.4f}/L, Inc VAT: £{apply_vat(ex_vat_price):.4f}/L"
-                        ),
-                    )
-            
+
+            match = re.search(
+                r"Live\s*Heating\s*Oil\s*Prices[\s\S]{0,800}?Total\s*You\s*Pay"
+                r"[\s\S]{0,120}?£\s*[\d,]+\.\d{2}"
+                r"[\s\S]{0,80}?£\s*([\d,]+\.\d{2})",
+                content,
+                re.IGNORECASE,
+            )
+            if match:
+                tier_total = float(match.group(1).replace(",", ""))
+                price_per_liter = round(tier_total / 900, 4)
+                return QuoteResult(
+                    supplier_id=int(supplier["id"]),
+                    supplier_name=supplier["name"],
+                    observed_at=self.now(),
+                    quantity_liters=quantity_liters,
+                    status="ok",
+                    price_per_liter=price_per_liter,
+                    total_price=inclusive_total(price_per_liter, quantity_liters),
+                    source="valueoils_http_fallback",
+                    notes=(
+                        f"900L Standard total from the ValueOils regional page "
+                        f"(browser: {error or 'N/A'}): £{tier_total:.2f} inc VAT "
+                        f"(incl. commission) = £{price_per_liter:.4f}/L."
+                    ),
+                    raw_payload={
+                        "url": self.quote_url,
+                        "tier_litres": 900,
+                        "tier_total": tier_total,
+                    },
+                )
+
             return QuoteResult(
                 supplier_id=int(supplier["id"]),
                 supplier_name=supplier["name"],
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
-                status="error",
+                status="manual_action_required",
                 source="valueoils_browser",
-                notes=f"Could not extract price. Browser error: {error}",
+                notes=f"Could not extract the standard-delivery total. Browser error: {error}",
             )
 
         except Exception as e:  # noqa: BLE001 - reported as an error quote rather than raised

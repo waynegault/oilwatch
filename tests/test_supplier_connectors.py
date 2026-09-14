@@ -11,6 +11,7 @@ from oilwatch.connectors.suppliers.homefuels_direct import HomeFuelsDirectConnec
 from oilwatch.connectors.suppliers.regency_oils import RegencyOilsConnector
 from oilwatch.connectors.suppliers.scottish_fuels_browser import ScottishFuelsBrowserConnector
 from oilwatch.connectors.suppliers.valueoils import ValueOilsConnector
+from oilwatch.connectors.suppliers.valueoils_browser import ValueOilsBrowserConnector
 
 
 def fake_response(text: str, url: str = "https://example.com", status_code: int = 200) -> Mock:
@@ -44,16 +45,21 @@ class ValueOilsConnectorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.supplier = {"id": 1, "name": "ValueOils", "website": "https://www.valueoils.com"}
 
-    def test_quote_extracts_heating_oil_not_gas_oil(self) -> None:
+    def test_quote_reads_the_900l_total_you_pay(self) -> None:
+        """The Total You Pay includes VAT and commission; the ppl excludes both.
+
+        So it is the 900L total that is divided by the tier, not the ppl that is
+        uplifted by 5% — the old reading dropped ValueOils' commission.
+        """
         with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as Client:
             Client.return_value.get.return_value = fake_response(VALUEOILS_PAGE)
             result = ValueOilsConnector().quote(self.supplier, 1000, {"postcode": "AB21 0YA"})
 
         self.assertEqual(result.status, "ok")
-        # 103.90p ex-VAT -> £1.039 -> 5% VAT -> ~£1.0909 inclusive.
-        self.assertEqual(result.raw_payload["price_ex_vat"], 1.039)
-        self.assertAlmostEqual(result.price_per_liter, 1.0909, places=4)
-        self.assertAlmostEqual(result.total_price, 1090.9, places=1)
+        # £997.86 for 900L inc VAT + commission -> £1.1087/L.
+        self.assertEqual(result.raw_payload["tier_total"], 997.86)
+        self.assertAlmostEqual(result.price_per_liter, 1.1087, places=4)
+        self.assertAlmostEqual(result.total_price, 1108.7, places=2)
 
     def test_no_price_returns_manual_action(self) -> None:
         with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as Client:
@@ -132,10 +138,16 @@ class HomeFuelsDirectConnectorTests(unittest.TestCase):
 
 
 class SupplierConnectorRoutingTests(unittest.TestCase):
-    def test_valueoils_prefers_http_even_with_browser(self) -> None:
+    def test_valueoils_uses_the_browser_when_preferred(self) -> None:
+        """The browser reads the Quick Quote Standard total; HTTP cannot reach it.
+
+        ValueOils used to be HTTP-wins because its browser connector stalled and
+        its form selectors never matched; both are fixed, so --browser now picks
+        the connector that can see the delivered (inc-commission) figure.
+        """
         self.assertIsInstance(
             get_supplier_connector("https://www.valueoils.com", prefer_browser=True),
-            ValueOilsConnector,
+            ValueOilsBrowserConnector,
         )
 
     def test_homefuels_prefers_http_even_with_browser(self) -> None:

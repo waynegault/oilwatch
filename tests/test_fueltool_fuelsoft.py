@@ -90,25 +90,29 @@ class ScottishFuelsParsePplTests(unittest.TestCase):
 
 
 class HighlandParseOffersTests(unittest.TestCase):
-    def test_extracts_unit_price(self) -> None:
+    def test_reads_the_standard_total(self) -> None:
+        """The inc-VAT Total divided by litres, not the ex-VAT UnitPrice."""
         xml = (
             "<Response><ResultStatus>1</ResultStatus><Offers><Offer>"
             "<Quantity>1000</Quantity><UnitPrice>109.2</UnitPrice><Total>114660</Total>"
+            "<OfferName>Standard Delivery</OfferName>"
             "</Offer></Offers></Response>"
         )
-        self.assertEqual(HighlandFuelsConnector.parse_offers_response(xml), 1.092)
+        self.assertEqual(HighlandFuelsConnector.parse_offers_response(xml), (1.1466, 1146.6))
 
     def test_no_offer_returns_none(self) -> None:
         self.assertIsNone(HighlandFuelsConnector.parse_offers_response("<Response><ResultStatus>0</ResultStatus></Response>"))
 
-    def test_picks_the_cheapest_of_several_offers(self) -> None:
+    def test_uses_the_standard_offer_not_an_express_one(self) -> None:
         xml = (
             "<Offers>"
-            "<Offer><UnitPrice>104.50</UnitPrice></Offer>"
-            "<Offer><UnitPrice>101.03</UnitPrice></Offer>"
+            "<Offer><Quantity>1000</Quantity><Total>125160</Total>"
+            "<OfferName>Express Delivery</OfferName></Offer>"
+            "<Offer><Quantity>1000</Quantity><Total>114660</Total>"
+            "<OfferName>Standard Delivery</OfferName></Offer>"
             "</Offers>"
         )
-        self.assertEqual(HighlandFuelsConnector.parse_offers_response(xml), 1.0103)
+        self.assertEqual(HighlandFuelsConnector.parse_offers_response(xml), (1.1466, 1146.6))
 
     def test_empty_offers_returns_none(self) -> None:
         self.assertIsNone(HighlandFuelsConnector.parse_offers_response("<Offers></Offers>"))
