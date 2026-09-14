@@ -49,6 +49,8 @@ class FuelsoftConnector(SyncBrowserConnector):
     price_description = "Fuelsoft quote form"
     no_price_note = "Could not extract a price from the quote response."
     order_notes = "Order via the supplier's Fuelsoft portal or by phone."
+    #: collect_price returns the standard option's inclusive total per litre.
+    price_is_inclusive = True
 
     def collect_price(
         self,
@@ -85,20 +87,24 @@ class FuelsoftConnector(SyncBrowserConnector):
         self._get_quote(page)
         self._wait_for_quote_body(page, captured)
 
-        ex_vat_price = self.parse_quote_response(captured.get("body"))
-        if ex_vat_price is None:
+        standard_price = self.parse_quote_response(captured.get("body"), quantity_liters)
+        if standard_price is None:
             # Say what came back: "no price in the response" and "no response at
             # all" produced the same manual note, and the body's shape is what a
             # realignment has to be written against.
             body = captured.get("body")
             log.warning(
-                "no PPL in the Fuelsoft quote response from %s; body (%s):\n%.1500s",
+                "no standard total in the Fuelsoft quote response from %s; body (%s):\n%.1500s",
                 quote_url,
                 "captured" if body is not None else "never captured",
                 body if body is not None else "",
             )
-        raw_payload = {"quote_url": quote_url, "postcode": postcode, "price_ex_vat": ex_vat_price}
-        return ex_vat_price, raw_payload
+        raw_payload = {
+            "quote_url": quote_url,
+            "postcode": postcode,
+            "standard_price_per_liter": standard_price,
+        }
+        return standard_price, raw_payload
 
     @staticmethod
     def _dismiss_cookie_dialog(page) -> None:
@@ -198,23 +204,28 @@ class FuelsoftConnector(SyncBrowserConnector):
             log.debug("no Fuelsoft quote response after %d ms", timeout_ms)
 
     @staticmethod
-    def parse_quote_response(body: Any) -> float | None:
-        """Extract the ex-VAT price-per-litre from the quote API JSON.
+    def parse_quote_response(body: Any, litres: int) -> float | None:
+        """The standard option's inclusive total per litre, in GBP.
 
-        The response is a list of delivery-option quote objects; each carries a
-        ``PPL`` (price per litre, ex-VAT) field. Return the cheapest.
+        The response is a list of delivery-schedule quote objects; each carries
+        ``Total`` (inc VAT, for the ordered quantity) and a
+        ``DeliveryOptionWeighting``. The standard option is the comparable one —
+        a faster schedule adds its own carriage — so it is chosen by weighting
+        (falling back to the first) and its total divided by the litres, rather
+        than taking the cheapest ex-VAT ``PPL``.
         """
         quotes = body if isinstance(body, list) else [body]
-        ppls = []
+        offers: list[tuple[str, float]] = []
         for q in quotes:
             if not isinstance(q, dict):
                 continue
-            ppl = q.get("PPL")
-            if ppl is not None:
-                try:
-                    ppls.append(float(ppl))
-                except (TypeError, ValueError):
-                    continue
-        if not ppls:
+            try:
+                total = float(q.get("Total"))
+            except (TypeError, ValueError):
+                continue
+            weighting = str(q.get("DeliveryOptionWeighting") or "").lower()
+            offers.append((weighting, total))
+        if not offers or litres <= 0:
             return None
-        return round(min(ppls), 4)
+        _, total = next((o for o in offers if "standard" in o[0]), offers[0])
+        return round(total / litres, 4)

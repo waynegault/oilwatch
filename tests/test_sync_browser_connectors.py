@@ -13,7 +13,6 @@ from unittest.mock import patch
 
 from oilwatch.connectors.suppliers.fuelsoft import HIDDEN_SECTIONS, FuelsoftConnector
 from oilwatch.connectors.suppliers.rix_browser import RixBrowserConnector
-from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat
 
 SUPPLIER = {
     "id": 7,
@@ -182,11 +181,11 @@ class FuelsoftConnectorTests(unittest.TestCase):
     def _supplier(self) -> dict:
         return {**SUPPLIER, "connector_config": {"quote_url": self.QUOTE_URL}}
 
-    def test_quote_reads_ppl_from_the_quote_api(self) -> None:
+    def test_quote_reads_the_standard_total_from_the_quote_api(self) -> None:
         page = FakePage(
             on_wait_response=(
                 "https://oilweb.example/JOil/fuelsoftapi/Quotes/deliveryschedules/quote/1",
-                [{"PPL": 1.0878}, {"PPL": 1.1021}],
+                [{"Total": 1146.6, "DeliveryOptionWeighting": "Standard Tanker"}],
             )
         )
         with _patcher(page):
@@ -194,10 +193,9 @@ class FuelsoftConnectorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "fuelsoft")
-        self.assertEqual(result.raw_payload["price_ex_vat"], 1.0878)
-        self.assertAlmostEqual(
-            result.price_per_liter, apply_vat(1.0878, DOMESTIC_VAT_RATE), places=4
-        )
+        # £1,146.60 inc VAT for 1000L -> £1.1466/L (the standard option's total).
+        self.assertEqual(result.raw_payload["standard_price_per_liter"], 1.1466)
+        self.assertAlmostEqual(result.price_per_liter, 1.1466, places=4)
         self.assertIn(("goto", self.QUOTE_URL), page.calls)
 
     def test_navigation_failure_falls_back_to_manual(self) -> None:
@@ -221,20 +219,24 @@ class FuelsoftConnectorTests(unittest.TestCase):
 
 
 class RixBrowserConnectorTests(unittest.TestCase):
-    def test_quote_reads_ppl_from_the_results_page(self) -> None:
-        page = FakePage(
-            text="Delivery option\nPPL (ex. VAT) 110.35p\n",
-            url="https://fuelquote.rix.co.uk/your-quote/123",
-        )
+    #: The results page's two options, as Rix renders them (innerText).
+    RIX_RESULTS = (
+        "Economy\n10 days\nFor delivery on or before\nTue 29th Sep\nLitres\n1000L\n"
+        "PPL (ex. VAT)\n119.35p\nTotal price (inc VAT)\n£1,253.18\nOrder now\n"
+        "Standard\n5 days\nFor delivery on or before\nTue 22nd Sep\nLitres\n1000L\n"
+        "PPL (ex. VAT)\n121.35p\nTotal price (inc VAT)\n£1,274.18\nOrder now\n"
+    )
+
+    def test_quote_reads_the_standard_total_from_the_results_page(self) -> None:
+        page = FakePage(text=self.RIX_RESULTS, url="https://fuelquote.rix.co.uk/your-quote/123")
         with _patcher(page):
             result = RixBrowserConnector().quote(SUPPLIER, 1000, {"postcode": "AB21 0YA"})
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "rix_browser")
         self.assertEqual(result.raw_payload["results_url"], "https://fuelquote.rix.co.uk/your-quote/123")
-        self.assertAlmostEqual(
-            result.price_per_liter, apply_vat(1.1035, DOMESTIC_VAT_RATE), places=4
-        )
+        # £1,274.18 for 1000L is the Standard option, not the £1,253.18 Economy.
+        self.assertAlmostEqual(result.price_per_liter, 1.2742, places=4)
 
     def test_navigation_failure_falls_back_to_manual(self) -> None:
         page = FakePage(fail_goto=True)
@@ -272,7 +274,7 @@ class FuelsoftFormTests(unittest.TestCase):
         postcode, address, email = FakeElement(), FakeElement(), FakeElement()
         get_products, get_quote = FakeElement(), FakeElement()
         page = FakePage(
-            on_wait_response=(API_URL, [{"PPL": 1.0878}]),
+            on_wait_response=(API_URL, [{"Total": 1146.6, "DeliveryOptionWeighting": "Standard Tanker"}]),
             elements={
                 "#btnEnterAddressManually": FakeElement(),
                 "#txtPostcode": postcode,
@@ -297,7 +299,7 @@ class FuelsoftFormTests(unittest.TestCase):
         self.assertIn("#mainContent_lstDeliveryOption", selected)
 
     def test_the_hidden_wizard_sections_are_revealed(self) -> None:
-        page = FakePage(on_wait_response=(API_URL, [{"PPL": 1.0}]))
+        page = FakePage(on_wait_response=(API_URL, [{"Total": 1050.0}]))
         self._quote(page)
 
         revealed = " ".join(call[1] for call in page.calls if call[0] == "evaluate")
@@ -308,7 +310,7 @@ class FuelsoftFormTests(unittest.TestCase):
         accept = FakeElement()
         page = FakePage(
             elements={"button:has-text('Accept all')": accept},
-            on_wait_response=(API_URL, [{"PPL": 1.0}]),
+            on_wait_response=(API_URL, [{"Total": 1050.0}]),
         )
         self._quote(page)
 
@@ -320,7 +322,7 @@ class FuelsoftFormTests(unittest.TestCase):
         refuse, later = FakeElement(fail_fill=True), FakeElement()
         page = FakePage(
             elements={"#txtPostcode": refuse, "#txtDelAdd1": later},
-            on_wait_response=(API_URL, [{"PPL": 1.0878}]),
+            on_wait_response=(API_URL, [{"Total": 1146.6, "DeliveryOptionWeighting": "Standard Tanker"}]),
         )
 
         result = self._quote(page)
@@ -336,7 +338,7 @@ class FuelsoftFormTests(unittest.TestCase):
         self.assertIsNone(result.price_per_liter)
 
     def test_a_response_for_a_different_request_is_ignored(self) -> None:
-        page = FakePage(on_wait_response=("https://oilweb.example/other/api", [{"PPL": 1.0}]))
+        page = FakePage(on_wait_response=("https://oilweb.example/other/api", [{"Total": 1050.0}]))
         result = self._quote(page)
 
         self.assertEqual(result.status, "manual_action_required")
@@ -345,13 +347,13 @@ class FuelsoftFormTests(unittest.TestCase):
 class FuelsoftParseRobustnessTests(unittest.TestCase):
     """A supplier sending "N/A" (or a bare object) must not crash the quote."""
 
-    def test_junk_or_missing_prices_are_not_a_price(self) -> None:
-        self.assertIsNone(FuelsoftConnector.parse_quote_response([{"PPL": "N/A"}]))
-        self.assertIsNone(FuelsoftConnector.parse_quote_response([{"PPL": None}]))
-        self.assertIsNone(FuelsoftConnector.parse_quote_response([]))
+    def test_junk_or_missing_totals_are_not_a_price(self) -> None:
+        self.assertIsNone(FuelsoftConnector.parse_quote_response([{"Total": "N/A"}], 1000))
+        self.assertIsNone(FuelsoftConnector.parse_quote_response([{"Total": None}], 1000))
+        self.assertIsNone(FuelsoftConnector.parse_quote_response([], 1000))
 
     def test_a_lone_quote_object_is_accepted(self) -> None:
-        self.assertEqual(FuelsoftConnector.parse_quote_response({"PPL": 1.05}), 1.05)
+        self.assertEqual(FuelsoftConnector.parse_quote_response({"Total": 1050.0}, 1000), 1.05)
 
 
 if __name__ == "__main__":

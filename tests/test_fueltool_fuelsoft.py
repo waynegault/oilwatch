@@ -45,25 +45,33 @@ class FueltoolConnectorTests(unittest.TestCase):
 
 
 class FuelsoftParseQuoteResponseTests(unittest.TestCase):
-    def test_extracts_cheapest_ppl(self) -> None:
-        body = [{"PPL": 1.0878}, {"PPL": 1.15}]
-        self.assertEqual(FuelsoftConnector.parse_quote_response(body), 1.0878)
+    def test_reads_the_standard_option_total(self) -> None:
+        body = [
+            {"Total": 1300.0, "DeliveryOptionWeighting": "Next day"},
+            {"Total": 1146.6, "DeliveryOptionWeighting": "Standard Tanker"},
+        ]
+        # The Standard option's total, not the first/cheapest one.
+        self.assertEqual(FuelsoftConnector.parse_quote_response(body, 1000), 1.1466)
 
     def test_single_quote(self) -> None:
-        self.assertEqual(FuelsoftConnector.parse_quote_response([{"PPL": 1.0878}]), 1.0878)
+        self.assertEqual(FuelsoftConnector.parse_quote_response([{"Total": 1087.8}], 1000), 1.0878)
 
-    def test_missing_ppl_returns_none(self) -> None:
-        self.assertIsNone(FuelsoftConnector.parse_quote_response([{"Goods": 1087.8}]))
-        self.assertIsNone(FuelsoftConnector.parse_quote_response(None))
+    def test_missing_total_returns_none(self) -> None:
+        self.assertIsNone(FuelsoftConnector.parse_quote_response([{"Goods": 1087.8}], 1000))
+        self.assertIsNone(FuelsoftConnector.parse_quote_response(None, 1000))
 
 
-class RixParsePplTests(unittest.TestCase):
-    def test_extracts_cheapest_ppl(self) -> None:
-        text = "Economy 10 days PPL (ex. VAT) 110.35p ... Standard 5 days PPL (ex. VAT) 112.35p"
-        self.assertEqual(RixBrowserConnector.parse_ppl(text), 1.1035)
+class RixParseStandardTotalTests(unittest.TestCase):
+    def test_reads_the_standard_option_total(self) -> None:
+        text = (
+            "Economy 10 days PPL (ex. VAT) 110.35p Total price (inc VAT) £1,103.50 "
+            "Standard 5 days PPL (ex. VAT) 112.35p Total price (inc VAT) £1,179.68"
+        )
+        # The Standard option's total, not the cheaper Economy one before it.
+        self.assertEqual(RixBrowserConnector.parse_standard_total(text, 1000), 1.1797)
 
-    def test_no_ppl_returns_none(self) -> None:
-        self.assertIsNone(RixBrowserConnector.parse_ppl("no price here"))
+    def test_no_standard_total_returns_none(self) -> None:
+        self.assertIsNone(RixBrowserConnector.parse_standard_total("no price here", 1000))
 
 
 class ScottishFuelsParsePplTests(unittest.TestCase):

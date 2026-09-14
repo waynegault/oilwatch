@@ -74,22 +74,21 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         self.assertAlmostEqual(result.price_per_liter, 0.8925, places=4)
         self.assertAlmostEqual(result.total_price, 892.5, places=2)
 
-    def test_the_inclusive_total_is_the_cheapest_you_pay(self) -> None:
+    def test_the_standard_delivery_total_is_read(self) -> None:
+        """The standard option by its tag, not the cheapest of the options."""
         content = (
-            "Delivery on or before Mon 21st Sep Pence per litre (ex. VAT) 113.84 ppl "
-            "You Pay £1,208.30 Continue"
-            "Delivery on or before Mon 28th Sep Pence per litre (ex. VAT) 112.64 ppl "
-            "You Pay £1,195.70 Continue"
+            '<p data-test="ppl_delivery5_value">118.84 ppl</p>'
+            '<p data-test="price_delivery5_value">£1,268.20</p>'
+            '<p data-test="ppl_standard_value">117.64 ppl</p>'
+            '<p data-test="price_standard_value">£1,248.20</p>'
         )
-        self.assertEqual(BoilerJuiceBrowserConnector.parse_inclusive_total(content), 1195.70)
+        self.assertEqual(BoilerJuiceBrowserConnector.parse_inclusive_total(content), 1248.20)
 
-    def test_the_price_comes_from_the_inclusive_total(self) -> None:
+    def test_the_price_comes_from_the_standard_total(self) -> None:
         """The inclusive total carries the service charge the ppl omits, so the
         quote is read from it rather than the headline ppl."""
         page = FakeAsyncPage(
-            content=(
-                "Pence per litre (ex. VAT) 112.64 ppl You Pay £1,195.70 Continue"
-            )
+            content='<p data-test="price_standard_value">£1,195.70</p>'
         )
         result = _quote(self.connector, page)
 

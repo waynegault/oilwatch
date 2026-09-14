@@ -17,7 +17,7 @@ from typing import Any, Iterator
 
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.models import QuoteResult
-from oilwatch.pricing import inclusive_price_and_total
+from oilwatch.pricing import inclusive_price_and_total, inclusive_total
 
 
 @contextmanager
@@ -47,6 +47,10 @@ class SyncBrowserConnector(BaseConnector):
     price_description = ""
     no_price_note = "Could not extract a price from the page."
     order_notes = "Order via the supplier's site or by phone."
+    #: Whether :meth:`collect_price` returns an already-inclusive per-litre price
+    #: (the supplier's "total you pay") or an ex-VAT one the base lifts by the
+    #: domestic rate. Default is the ex-VAT basis.
+    price_is_inclusive = False
 
     @abstractmethod
     def collect_price(
@@ -56,7 +60,11 @@ class SyncBrowserConnector(BaseConnector):
         quantity_liters: int,
         context: dict[str, Any],
     ) -> tuple[float | None, dict[str, Any]]:
-        """Drive ``page`` and return the ex-VAT price-per-litre and raw payload."""
+        """Drive ``page`` and return the per-litre price and raw payload.
+
+        The price is ex-VAT unless ``price_is_inclusive`` is set, in which case
+        it is already the standard-delivery total per litre.
+        """
         raise NotImplementedError
 
     def quote(
@@ -77,7 +85,14 @@ class SyncBrowserConnector(BaseConnector):
         if ex_vat_price is None:
             return self._manual(supplier, quantity_liters, self.no_price_note)
 
-        price_per_liter, total_price = inclusive_price_and_total(ex_vat_price, quantity_liters)
+        if self.price_is_inclusive:
+            price_per_liter = round(ex_vat_price, 4)
+            total_price = inclusive_total(price_per_liter, quantity_liters)
+            basis_note = f"standard-delivery total £{price_per_liter:.4f}/L inc VAT"
+        else:
+            price_per_liter, total_price = inclusive_price_and_total(ex_vat_price, quantity_liters)
+            basis_note = f"ex-VAT £{ex_vat_price:.4f}/L, inc-VAT £{price_per_liter:.4f}/L"
+
         return QuoteResult(
             supplier_id=int(supplier["id"]),
             supplier_name=supplier["name"],
@@ -89,8 +104,7 @@ class SyncBrowserConnector(BaseConnector):
             source=self.source,
             notes=(
                 f"Price from {self.price_description} for {quantity_liters}L "
-                f"(ex-VAT £{ex_vat_price:.4f}/L, inc-VAT £{price_per_liter:.4f}/L). "
-                f"Postcode: {postcode or 'not provided'}"
+                f"({basis_note}). Postcode: {postcode or 'not provided'}"
             ),
             raw_payload=raw_payload,
         )

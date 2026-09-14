@@ -15,10 +15,13 @@ from oilwatch.pricing import inclusive_price_and_total, normalise_price_per_litr
 
 log = get_logger("connectors.boilerjuice")
 
-#: Each of BoilerJuice's delivery options ends in "You Pay £<total>", the
-#: inclusive cost (ex-VAT fuel + VAT + its service charge). The rendered markup
-#: puts tags between the label and the amount, so the gap is matched loosely.
-INCLUSIVE_TOTAL_RE = re.compile(r"You Pay[\s\S]{0,120}?(?:£|&pound;)\s*([\d,]+\.\d{2})")
+#: The standard delivery option's inclusive total ("You Pay"). BoilerJuice tags
+#: each option in the markup (``price_standard_value``, ``price_delivery5_value``
+#: …) and the faster options carry their own, higher totals, so the standard one
+#: is read by its tag rather than taking the cheapest of the "You Pay" amounts.
+STANDARD_TOTAL_RE = re.compile(
+    r'data-test="price_standard_value"[^>]*>\s*(?:£|&pound;)\s*([\d,]+\.\d{2})'
+)
 
 #: The quote form's postcode control, shared by the readiness wait and the fill.
 _POSTCODE_SELECTOR = (
@@ -321,17 +324,18 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
     
     @staticmethod
     def parse_inclusive_total(content: str) -> float | None:
-        """Cheapest inclusive "You Pay" total across BoilerJuice's options.
+        """The Standard Delivery option's inclusive total ("You Pay").
 
         BoilerJuice is a broker: the headline "ppl" is ex-VAT and omits its
-        service charge, so the quote is read from this total (see the supplier
-        note). Returns ``None`` when the options are not on the page.
+        service charge, so the quote is read from a total (see the supplier
+        note). The standard option's total is the comparable one — each faster
+        option adds its own surcharge — so it is read by its tag rather than
+        taking the minimum across options. ``None`` when it is not on the page.
         """
-        totals = [
-            float(amount.replace(",", ""))
-            for amount in INCLUSIVE_TOTAL_RE.findall(content)
-        ]
-        return min(totals) if totals else None
+        match = STANDARD_TOTAL_RE.search(content)
+        if not match:
+            return None
+        return float(match.group(1).replace(",", ""))
 
     async def _quote_page_ready(self, page: Page) -> bool:
         """True once the quote form, or a rendered quote, is on the page."""

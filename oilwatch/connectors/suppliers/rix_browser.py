@@ -4,7 +4,8 @@ Rix's live quote tool is a Remix app embedded at ``fuelquote.rix.co.uk`` (shown
 in an iframe on rix.co.uk/homes/fuel-quote). The price is computed server-side
 and rendered on a results page (``/your-quote/{id}``) after submitting the
 quote form. This connector drives that form with Playwright and reads the
-``PPL (ex. VAT)`` figure from the results page.
+**Standard** option's "Total price (inc VAT)" — Rix also lists an Economy
+option, and that is not the one a normal order uses.
 
 Note: the price API itself is called server-side by the Remix app, so there is
 no client-side endpoint to hit directly; browser automation is required.
@@ -18,7 +19,6 @@ from typing import Any
 from oilwatch.connectors.sync_browser import SyncBrowserConnector
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
-from oilwatch.pricing import pence_to_pounds
 
 log = get_logger("connectors.rix")
 
@@ -30,6 +30,8 @@ class RixBrowserConnector(SyncBrowserConnector):
     price_description = "Rix quote tool"
     no_price_note = "Could not extract a price from the Rix results page."
     order_notes = "Order via the Rix quote tool or by phone (0800 542 4207)."
+    #: collect_price returns the Standard option's inclusive total per litre.
+    price_is_inclusive = True
 
     def collect_price(
         self,
@@ -52,14 +54,14 @@ class RixBrowserConnector(SyncBrowserConnector):
         results_text = page.eval_on_selector("body", "el => el.innerText")
         results_url = page.url
 
-        ex_vat_price = self.parse_ppl(results_text)
-        if ex_vat_price is None:
+        standard_price = self.parse_standard_total(results_text, quantity_liters)
+        if standard_price is None:
             # Say what the page actually held: "no price" and "our pattern
             # missed" look identical from outside, and the pattern can only be
             # realigned against the real text. The URL matters too, since this
             # flow can land somewhere other than /your-quote/.
             log.warning(
-                "no PPL recognised on the Rix results page (%s); text follows:\n%s",
+                "no Standard total recognised on the Rix results page (%s); text follows:\n%s",
                 results_url,
                 results_text[:2000],
             )
@@ -67,9 +69,9 @@ class RixBrowserConnector(SyncBrowserConnector):
             "quote_url": self.quote_url,
             "results_url": results_url,
             "postcode": postcode,
-            "price_ex_vat": ex_vat_price,
+            "standard_price_per_liter": standard_price,
         }
-        return ex_vat_price, raw_payload
+        return standard_price, raw_payload
 
     @staticmethod
     def _wait_for_results(page, timeout_ms: int = 20000) -> None:
@@ -106,19 +108,18 @@ class RixBrowserConnector(SyncBrowserConnector):
         page.wait_for_timeout(800)
 
     @staticmethod
-    def parse_ppl(text: str) -> float | None:
-        """Extract the cheapest ex-VAT price-per-litre (pence) from results.
+    def parse_standard_total(text: str, litres: int) -> float | None:
+        """The Standard option's "Total price (inc VAT)" per litre, in GBP.
 
-        The results page lists one block per delivery option, each with
-        ``PPL (ex. VAT)`` followed by a pence figure (e.g. ``110.35p``).
-        Return the cheapest.
+        Rix lists an Economy option (a longer delivery window) and a Standard
+        one, each with its own inclusive total. The standard option is the one
+        to compare, so it is read by its label rather than taking the cheapest
+        ex-VAT ``PPL``.
         """
-        pence_values = []
-        for m in re.finditer(r"PPL\s*\(ex\.?\s*VAT\)\s*([0-9]+(?:\.[0-9]+)?)\s*p", text, re.IGNORECASE):
-            try:
-                pence_values.append(float(m.group(1)))
-            except ValueError:
-                continue
-        if not pence_values:
+        match = re.search(
+            r"Standard[\s\S]{0,400}?Total price \(inc VAT\)\s*£\s*([\d,]+\.\d{2})",
+            text,
+        )
+        if not match or litres <= 0:
             return None
-        return pence_to_pounds(min(pence_values))
+        return round(float(match.group(1).replace(",", "")) / litres, 4)
