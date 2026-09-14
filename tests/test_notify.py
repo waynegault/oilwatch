@@ -92,7 +92,7 @@ class ServiceIntegrationTests(unittest.TestCase):
                 ],
                 record_quote=lambda payload: None,
             ),
-            settings=SimpleNamespace(quote_quantity_liters=1000, currency="GBP"),
+            settings=SimpleNamespace(quote_quantity_liters=1000, currency="GBP", quote_max_workers=4),
         )
         app.quotes = SimpleNamespace(quote_supplier=self._quote)
         app.quote_all = lambda **kwargs: OilWatchApp.quote_all(app, **kwargs)

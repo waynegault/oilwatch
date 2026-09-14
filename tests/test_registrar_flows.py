@@ -69,6 +69,9 @@ class RegistrarFlowTests(unittest.TestCase):
                 result = self._register(flow, BoomPage())
                 self.assertEqual(result["status"], "manual_review")
                 self.assertIn("encountered issues", result["message"])
+                # The message is printed and may be logged, so it must not carry
+                # the plaintext password that is encrypted at rest elsewhere.
+                self.assertNotIn(result["password"], result["message"])
 
     def test_scottish_fuels_reports_a_confirmed_registration(self) -> None:
         page = FakeAsyncPage(

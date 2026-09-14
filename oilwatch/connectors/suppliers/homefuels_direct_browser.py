@@ -11,9 +11,19 @@ from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
-from oilwatch.pricing import normalise_price_per_litre
+from oilwatch.pricing import apply_vat, normalise_price_per_litre, pence_to_pounds
 
 log = get_logger("connectors.homefuels_direct")
+
+#: The quote form's postcode control, shared by the readiness wait and the fill.
+_POSTCODE_SELECTOR = (
+    'input[name="postcode"], input[id*="postcode"], '
+    'input[placeholder*="postcode"], input[autocomplete="postal-code"]'
+)
+
+#: The page's "NN pence per litre" wording, shared by the browser scan and the
+#: HTTP fallback so the two cannot drift apart.
+_PENCE_PER_LITRE = r'(\d{2,3})\s*pence\s*per\s*litre'
 
 
 class HomeFuelsDirectBrowserConnector(BrowserConnector):
@@ -65,14 +75,17 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
             
             # Navigate to quote page
             await page.goto(self.quote_url, wait_until="domcontentloaded")
-            await page.wait_for_timeout(3000)
-            
+            # Wait for the form rather than sleeping a flat 3s: the postcode
+            # control is the readiness signal, and the wait is bounded.
+            await self._wait_for(
+                page,
+                lambda: page.query_selector(_POSTCODE_SELECTOR),
+                what="the HomeFuels quote form",
+            )
+
             # Find and fill quote form fields
             # Postcode field
-            postcode_field = await page.query_selector(
-                'input[name="postcode"], input[id*="postcode"], '
-                'input[placeholder*="postcode"], input[autocomplete="postal-code"]'
-            )
+            postcode_field = await page.query_selector(_POSTCODE_SELECTOR)
             
             # Quantity field
             quantity_field = await page.query_selector(
@@ -98,28 +111,30 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
             # Submit form
             if price_button:
                 await price_button.click()
-                
-                # Wait for price to load
-                await page.wait_for_timeout(5000)
-            
-            # Try to extract price from page
-            price_per_liter = await self._extract_price(page, quantity_liters)
-            
-            if price_per_liter:
-                total_price = round(price_per_liter * quantity_liters, 2)
-                vat_rate = 0.20  # HomeFuels shows prices with VAT
-                total_with_vat = round(total_price * (1 + vat_rate), 2)
-                
-                return QuoteResult(
-                    supplier_id=int(supplier["id"]),
-                    supplier_name=supplier["name"],
-                    observed_at=self.now(),
-                    quantity_liters=quantity_liters,
-                    status="ok",
-                    price_per_liter=price_per_liter,
-                    total_price=total_with_vat,
+
+                # Wait for the price to appear rather than sleeping a flat 5s;
+                # the extraction below re-reads it once it is there.
+                await self._wait_for(
+                    page,
+                    lambda: self._price_ready(page, quantity_liters),
+                    what="a HomeFuels price",
+                )
+
+            # Try to extract price from page. HomeFuels quotes the price ex-VAT
+            # (the HTTP connector reads the same page on that basis), so it is
+            # brought onto the app-wide inclusive-of-5% basis before storage.
+            ex_vat_price = await self._extract_price(page, quantity_liters)
+
+            if ex_vat_price:
+                return self._quote_from_ex_vat(
+                    supplier,
+                    quantity_liters,
+                    ex_vat_price,
                     source="homefuels_direct_browser",
-                    notes=f"Price extracted via browser automation for {quantity_liters}L. Ex VAT: £{total_price:.2f}, Inc VAT: £{total_with_vat:.2f}",
+                    notes=(
+                        f"Price extracted via browser automation for {quantity_liters}L "
+                        f"(Ex VAT: £{ex_vat_price:.4f}/L, Inc VAT: £{apply_vat(ex_vat_price):.4f}/L)."
+                    ),
                     raw_payload={
                         "quote_url": self.quote_url,
                         "postcode": postcode,
@@ -130,23 +145,29 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
             
             # Fall back to HTTP scraping
             return await self._fallback_to_http(supplier, quantity_liters, context)
-            
-        except Exception as e:
+
+        except Exception as e:  # noqa: BLE001 - any browser failure degrades to the HTTP fallback
             # Fall back to HTTP scraping
             return await self._fallback_to_http(supplier, quantity_liters, context, str(e))
-    
+
+    async def _price_ready(self, page: Page, quantity_liters: int) -> bool:
+        """True once a price can be read off the page, for the bounded wait."""
+        return await self._extract_price(page, quantity_liters) is not None
+
     async def _extract_price(self, page: Page, quantity_liters: int) -> float | None:
         """Extract price per litre from the page."""
         try:
             content = await page.content()
             
-            # HomeFuels shows prices like "138 pence per litre" or "£X.XX"
+            # HomeFuels shows prices like "138 pence per litre" or "£X.XX".
+            # A "£NNN.NN (Inc VAT)" total used to be accepted here too, but it
+            # is a basket total, not a per-litre price, and running it through
+            # the per-litre normaliser only invented a figure.
             patterns = [
-                r'(\d{2,3})\s*pence\s*per\s*litre',
+                _PENCE_PER_LITRE,
                 r'(\d{2,3})\s*p\s*/\s*l',
                 r'£?(\d+\.\d{2})\s*per\s*litre',
                 r'total.*?£?(\d+\.\d{2})',
-                r'£(\d{3,}\.\d{2})\s*\(Inc\s*VAT\)',
             ]
             
             for pattern in patterns:
@@ -171,11 +192,11 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
                             return price
 
             return None
-            
-        except Exception as e:
+
+        except Exception as e:  # noqa: BLE001 - a page without a readable price is "no price"
             log.debug("price extraction failed: %s", e)
             return None
-    
+
     async def _fallback_to_http(
         self,
         supplier: dict[str, Any],
@@ -194,28 +215,24 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
             
             # Extract price using regex
             patterns = [
-                r'(\d{2,3})\s*pence\s*per\s*litre',
+                _PENCE_PER_LITRE,
                 r'UK\s*Average.*?(\d{2,3})\s*pence',
             ]
-            
+
             for pattern in patterns:
                 match = re.search(pattern, content, re.IGNORECASE)
                 if match:
+                    # The page's pence figure is ex-VAT, like the browser path.
                     price_pence = int(match.group(1))
-                    price_per_liter = round(price_pence / 100, 4)
-                    total_price = round(price_per_liter * quantity_liters, 2)
-                    total_with_vat = round(total_price * 1.20, 2)
-                    
-                    return QuoteResult(
-                        supplier_id=int(supplier["id"]),
-                        supplier_name=supplier["name"],
-                        observed_at=self.now(),
-                        quantity_liters=quantity_liters,
-                        status="ok",
-                        price_per_liter=price_per_liter,
-                        total_price=total_with_vat,
+                    return self._quote_from_ex_vat(
+                        supplier,
+                        quantity_liters,
+                        pence_to_pounds(price_pence),
                         source="homefuels_direct_http_fallback",
-                        notes=f"Price extracted via HTTP fallback (browser: {error or 'N/A'}). UK Average: {price_pence}p/L",
+                        notes=(
+                            f"Price extracted via HTTP fallback (browser: {error or 'N/A'}). "
+                            f"UK Average: {price_pence:.2f}p/L ex VAT"
+                        ),
                     )
             
             return QuoteResult(
@@ -227,8 +244,8 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
                 source="homefuels_direct_browser",
                 notes=f"Could not extract automated price. Contact: enquiries@homefuelsdirect.co.uk. Browser error: {error}",
             )
-            
-        except Exception as e:
+
+        except Exception as e:  # noqa: BLE001 - reported as an error quote rather than raised
             return QuoteResult(
                 supplier_id=int(supplier["id"]),
                 supplier_name=supplier["name"],

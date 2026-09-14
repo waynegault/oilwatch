@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from oilwatch.credentials import get_supplier_credentials, store_supplier_creden
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
+from oilwatch.pricing import inclusive_price_and_total
 
 log = get_logger("connectors.browser")
 
@@ -99,7 +101,69 @@ class BrowserConnector(BaseConnector, ABC):
         except Exception as exc:  # noqa: BLE001 - login is optional; never block the quote
             log.warning("%s optional login failed: %s", self.supplier_name, exc)
             return True
-    
+
+    async def _wait_for(
+        self,
+        page: Page,
+        ready: Callable[[], Awaitable[Any]],
+        *,
+        timeout_ms: int = 15000,
+        interval_ms: int = 500,
+        what: str = "the page",
+    ) -> bool:
+        """Poll ``ready`` until it is truthy, bounded by ``timeout_ms``.
+
+        Replaces a flat ``wait_for_timeout``: it returns as soon as the page is
+        ready, so a fast response is not padded with dead time, and keeps
+        waiting up to the bound so a slow one is not cut off. A condition that
+        never holds is given up on quietly — the caller falls back to its manual
+        quote — rather than raising. ``ready`` is an async callable; a lookup
+        for an element not yet in the DOM is expected to return falsy or raise,
+        and neither is fatal.
+        """
+        waited = 0
+        while waited < timeout_ms:
+            try:
+                if await ready():
+                    return True
+            except Exception as exc:  # noqa: BLE001 - "not ready yet" is the normal case here
+                log.debug("%s not ready yet: %s", what, exc)
+            await page.wait_for_timeout(interval_ms)
+            waited += interval_ms
+        log.debug("gave up waiting for %s after %d ms", what, timeout_ms)
+        return False
+
+    def _quote_from_ex_vat(
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        ex_vat_price: float,
+        *,
+        source: str,
+        notes: str,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> QuoteResult:
+        """Build an ``ok`` quote from an ex-VAT per-litre price.
+
+        Every browser connector that reads an ex-VAT figure otherwise repeats
+        the same uplift-plus-``QuoteResult`` block; this is that block in one
+        place, so the stored per-litre price is inclusive of the domestic 5% and
+        the total is always ``price_per_liter * quantity_liters``.
+        """
+        price_per_liter, total_price = inclusive_price_and_total(ex_vat_price, quantity_liters)
+        return QuoteResult(
+            supplier_id=int(supplier["id"]),
+            supplier_name=supplier["name"],
+            observed_at=self.now(),
+            quantity_liters=quantity_liters,
+            status="ok",
+            price_per_liter=price_per_liter,
+            total_price=total_price,
+            source=source,
+            notes=notes,
+            raw_payload=raw_payload or {},
+        )
+
     async def _setup_browser(self, headless: bool = True) -> Page:
         """Set up browser and return a new page."""
         self._playwright = await async_playwright().start()

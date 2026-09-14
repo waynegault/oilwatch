@@ -403,6 +403,7 @@ Scottish Fuels figure covers it.
   },
   "radius_miles": 50,
   "quote_quantity_liters": 1000,
+  "quote_max_workers": 4,
   "default_postcode": "AB21 0YA",
   "scheduler": {
     "discovery_interval_hours": 168,
@@ -450,7 +451,7 @@ envelope looks like this (`blob` is base64-encoded binary ciphertext):
 
 ### Technical Debt
 
-1. **Browser automation** is slow (10-30 s per supplier) and runs sequentially
+1. **Browser automation** is slow (10-30 s per supplier); `quote-all` runs suppliers concurrently, capped by `quote_max_workers` (default 4; `1` restores the strictly sequential behaviour)
 2. **No rate limiting** on API discovery
 
 ### Known Issues

@@ -17,7 +17,7 @@ from typing import Any, Iterator
 
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.models import QuoteResult
-from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
+from oilwatch.pricing import inclusive_price_and_total
 
 
 @contextmanager
@@ -77,7 +77,7 @@ class SyncBrowserConnector(BaseConnector):
         if ex_vat_price is None:
             return self._manual(supplier, quantity_liters, self.no_price_note)
 
-        price_per_liter = apply_vat(ex_vat_price, DOMESTIC_VAT_RATE)
+        price_per_liter, total_price = inclusive_price_and_total(ex_vat_price, quantity_liters)
         return QuoteResult(
             supplier_id=int(supplier["id"]),
             supplier_name=supplier["name"],
@@ -85,7 +85,7 @@ class SyncBrowserConnector(BaseConnector):
             quantity_liters=quantity_liters,
             status="ok",
             price_per_liter=price_per_liter,
-            total_price=inclusive_total(price_per_liter, quantity_liters),
+            total_price=total_price,
             source=self.source,
             notes=(
                 f"Price from {self.price_description} for {quantity_liters}L "

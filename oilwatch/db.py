@@ -289,27 +289,33 @@ class Database:
         so the string comparison still holds against date-only rows (which now
         count only while they are today's).
         """
-        cutoff_clause = ""
-        params: tuple[Any, ...] = ()
-        if max_age_days is not None:
-            cutoff_clause = "AND observed_at >= ?"
-            params = ((utcnow_naive() - timedelta(days=max_age_days)).isoformat(),)
+        # The window is optional, but the SQL stays a single static string and
+        # the cutoff is always bound: COALESCE(NULL, observed_at) makes the
+        # comparison a no-op when no window is asked for. Interpolating the
+        # clause instead (as this once did) is the shape that invites injection
+        # the moment a caller-supplied value reaches it.
+        cutoff = (
+            None
+            if max_age_days is None
+            else (utcnow_naive() - timedelta(days=max_age_days)).isoformat()
+        )
         with closing(self.connect()) as conn:
             rows = conn.execute(
-                f"""
+                """
                 SELECT q.*, s.name AS supplier_name, s.website
                 FROM quotes q
                 JOIN suppliers s ON s.id = q.supplier_id
                 JOIN (
                     SELECT supplier_id, MAX(observed_at) AS max_observed_at
                     FROM quotes
-                    WHERE status = 'ok' {cutoff_clause}
+                    WHERE status = 'ok'
+                      AND observed_at >= COALESCE(?, observed_at)
                     GROUP BY supplier_id
                 ) latest
                 ON latest.supplier_id = q.supplier_id AND latest.max_observed_at = q.observed_at
                 ORDER BY q.price_per_liter ASC
                 """,
-                params,
+                (cutoff,),
             ).fetchall()
         return [dict(row) for row in rows]
 

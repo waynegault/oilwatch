@@ -6,6 +6,7 @@ messages: which ones get recorded, which are skipped, and which are deleted.
 
 from __future__ import annotations
 
+import json
 import types
 import unittest
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,17 @@ from oilwatch.graph_email import (
     load_client_id,
     sender_domain_from_email,
 )
+
+
+def fake_protect(data: bytes) -> bytes:
+    return b"FAKE:" + data[::-1]
+
+
+def fake_unprotect(data: bytes) -> bytes:
+    if not data.startswith(b"FAKE:"):
+        raise OSError("not a fake blob")
+    return data[5:][::-1]
+
 
 SETTINGS = types.SimpleNamespace(quote_quantity_liters=1000, currency="GBP")
 SUPPLIER = {"id": 3, "name": "Oilfast", "website": "https://oilfast.co.uk"}
@@ -123,6 +135,34 @@ class RefreshTokenCacheTests(unittest.TestCase):
             path.return_value = cache_path().parent / "corrupt_test.json"
             path.return_value.write_text("not json", encoding="utf-8")
             self.assertIsNone(_monitor()._load_refresh_token())
+            path.return_value.unlink(missing_ok=True)
+
+    def test_the_token_is_encrypted_at_rest_when_dpapi_is_available(self) -> None:
+        """A refresh token grants Mail.ReadWrite, so it is not cached in the clear."""
+        with (
+            patch("oilwatch.graph_email.cache_path") as path,
+            patch("oilwatch.graph_email.secretstore.available", return_value=True),
+            patch("oilwatch.graph_email.secretstore.protect", side_effect=fake_protect),
+            patch("oilwatch.graph_email.secretstore.unprotect", side_effect=fake_unprotect),
+        ):
+            path.return_value = cache_path().parent / "graph_token_cache_enc_test.json"
+            path.return_value.unlink(missing_ok=True)
+
+            _monitor()._save_refresh_token({"refresh_token": "rt-secret"})
+
+            self.assertNotIn("rt-secret", path.return_value.read_text(encoding="utf-8"))
+            self.assertEqual(_monitor()._load_refresh_token(), "rt-secret")
+
+            path.return_value.unlink(missing_ok=True)
+
+    def test_a_legacy_plaintext_cache_still_loads(self) -> None:
+        """A cache written before encryption must not lock the owner out."""
+        with patch("oilwatch.graph_email.cache_path") as path:
+            path.return_value = cache_path().parent / "graph_token_cache_legacy_test.json"
+            path.return_value.write_text(json.dumps({"refresh_token": "legacy"}), encoding="utf-8")
+
+            self.assertEqual(_monitor()._load_refresh_token(), "legacy")
+
             path.return_value.unlink(missing_ok=True)
 
 

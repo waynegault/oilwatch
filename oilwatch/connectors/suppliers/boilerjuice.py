@@ -11,7 +11,7 @@ from oilwatch.connectors.browser_base import BrowserConnector
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
-from oilwatch.pricing import DOMESTIC_VAT_RATE, normalise_price_per_litre
+from oilwatch.pricing import inclusive_price_and_total, normalise_price_per_litre
 
 log = get_logger("connectors.boilerjuice")
 
@@ -19,6 +19,12 @@ log = get_logger("connectors.boilerjuice")
 #: inclusive cost (ex-VAT fuel + VAT + its service charge). The rendered markup
 #: puts tags between the label and the amount, so the gap is matched loosely.
 INCLUSIVE_TOTAL_RE = re.compile(r"You Pay[\s\S]{0,120}?(?:£|&pound;)\s*([\d,]+\.\d{2})")
+
+#: The quote form's postcode control, shared by the readiness wait and the fill.
+_POSTCODE_SELECTOR = (
+    'input[name="postcode"], input[id*="postcode"], '
+    'input[placeholder*="postcode"], input[autocomplete="postal-code"]'
+)
 
 
 class BoilerJuiceBrowserConnector(BrowserConnector):
@@ -174,14 +180,18 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             
             # Navigate to quote page
             await page.goto(self.quote_url, wait_until="domcontentloaded")
-            await page.wait_for_timeout(3000)
-            
+            # Wait for the quote page rather than sleeping a flat 3s: the form
+            # control (or a quote already rendered for a signed-in account) is
+            # the readiness signal, and the wait is bounded.
+            await self._wait_for(
+                page,
+                lambda: self._quote_page_ready(page),
+                what="the BoilerJuice quote page",
+            )
+
             # Find and fill quote form fields
             # Postcode field
-            postcode_field = await page.query_selector(
-                'input[name="postcode"], input[id*="postcode"], '
-                'input[placeholder*="postcode"], input[autocomplete="postal-code"]'
-            )
+            postcode_field = await page.query_selector(_POSTCODE_SELECTOR)
             
             # Quantity field (usually a dropdown or number input)
             quantity_field = await page.query_selector(
@@ -229,8 +239,13 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 try:
                     await quote_button.click(timeout=5000)
 
-                    # Wait for price to load
-                    await page.wait_for_timeout(5000)
+                    # Wait for the price to render rather than sleeping a flat
+                    # 5s; the extraction below re-reads it once it is there.
+                    await self._wait_for(
+                        page,
+                        lambda: self._quote_ready(page, quantity_liters),
+                        what="a BoilerJuice price",
+                    )
                 except Exception as exc:  # noqa: BLE001
                     log.debug("could not submit the quote form: %s", exc)
             
@@ -269,8 +284,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                         source="boilerjuice_browser",
                         notes="Logged in but could not extract automated price. Please complete quote manually at: https://www.boilerjuice.com/uk/journeys/core/quote",
                     )
-                price_per_liter = round(ex_vat * (1 + DOMESTIC_VAT_RATE), 4)
-                inclusive_total = round(price_per_liter * quantity_liters, 2)
+                price_per_liter, inclusive_total = inclusive_price_and_total(ex_vat, quantity_liters)
                 notes = (
                     f"Price extracted via browser automation for {quantity_liters}L. "
                     f"Ex VAT: £{ex_vat * quantity_liters:.2f}, Inc VAT: £{inclusive_total:.2f}"
@@ -318,6 +332,25 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             for amount in INCLUSIVE_TOTAL_RE.findall(content)
         ]
         return min(totals) if totals else None
+
+    async def _quote_page_ready(self, page: Page) -> bool:
+        """True once the quote form, or a rendered quote, is on the page."""
+        if await page.query_selector(_POSTCODE_SELECTOR) is not None:
+            return True
+        try:
+            return self.parse_inclusive_total(await page.content()) is not None
+        except Exception:  # noqa: BLE001 - an unreadable page is simply not ready
+            return False
+
+    async def _quote_ready(self, page: Page, quantity_liters: int) -> bool:
+        """True once a price can be read off the page, for the bounded wait."""
+        try:
+            content = await page.content()
+        except Exception:  # noqa: BLE001 - an unreadable page is simply not ready
+            return False
+        if self.parse_inclusive_total(content) is not None:
+            return True
+        return await self._extract_price(page, quantity_liters) is not None
 
     async def _extract_price(self, page: Page, quantity_liters: int) -> float | None:
         """Extract price per litre from the page."""

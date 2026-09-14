@@ -36,6 +36,11 @@ class Settings:
     default_postcode: str = ""
     radius_miles: int = 50
     quote_quantity_liters: int = 1000
+    # How many suppliers `quote-all` quotes at once. Each browser quote launches
+    # its own browser, so this caps the fan-out: there is no per-supplier rate
+    # limiting, and a wide burst risks the bot heuristics the connectors already
+    # work around. 1 restores the strictly sequential behaviour.
+    quote_max_workers: int = 4
     # A supplier with no successful quote inside this window counts as having no
     # current price, so 2007-2025 spreadsheet history can't win the comparison.
     max_quote_age_days: int = 30
@@ -68,6 +73,7 @@ def load_settings(root: Path | None = None) -> Settings:
         default_postcode=data.get("default_postcode", ""),
         radius_miles=data.get("radius_miles", 50),
         quote_quantity_liters=data.get("quote_quantity_liters", 1000),
+        quote_max_workers=data.get("quote_max_workers", 4),
         max_quote_age_days=data.get("max_quote_age_days", 30),
         currency=data.get("currency", "GBP"),
         search_queries=data.get("search_queries", []),

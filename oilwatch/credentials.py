@@ -11,6 +11,7 @@ from typing import Any
 
 from oilwatch import secretstore
 from oilwatch.identity import load_contact
+from oilwatch.models import utcnow_naive
 
 ENVELOPE_KEY = "format"
 ENVELOPE_FORMAT = "dpapi"
@@ -164,7 +165,9 @@ class CredentialManager:
             "email": email or load_contact().email,
             "password": password,
             "notes": notes,
-            "created_at": secrets.token_hex(8),
+            # A real timestamp: this used to hold a random hex token, so nothing
+            # could read a creation time back out of a field named created_at.
+            "created_at": utcnow_naive().isoformat(),
         }
         self._save()
 

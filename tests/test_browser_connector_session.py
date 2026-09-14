@@ -88,8 +88,9 @@ class FallbackTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "valueoils_http_fallback")
-        self.assertAlmostEqual(result.price_per_liter, 1.039, places=4)
-        self.assertAlmostEqual(result.total_price, 1090.95, places=2)
+        # 103.90p ex-VAT -> +5% VAT -> £1.0909/L, total = price * litres.
+        self.assertAlmostEqual(result.price_per_liter, 1.0909, places=4)
+        self.assertAlmostEqual(result.total_price, 1090.9, places=2)
         self.assertEqual(client.urls, [ValueOilsBrowserConnector().quote_url])
 
     def test_valueoils_fallback_without_a_price_is_an_error(self) -> None:
@@ -107,8 +108,10 @@ class FallbackTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "homefuels_direct_http_fallback")
-        self.assertAlmostEqual(result.price_per_liter, 1.38, places=4)
-        self.assertAlmostEqual(result.total_price, 1656.0, places=2)
+        # 138p ex-VAT -> +5% VAT -> £1.449/L, total = price * litres. It used to
+        # apply 20% on top of an already-inclusive figure.
+        self.assertAlmostEqual(result.price_per_liter, 1.449, places=4)
+        self.assertAlmostEqual(result.total_price, 1449.0, places=2)
 
     def test_homefuels_fallback_without_a_price_needs_manual_action(self) -> None:
         result = self._fallback(HomeFuelsDirectBrowserConnector(), FakeAsyncClient("<html>nothing</html>"))

@@ -15,6 +15,7 @@ Requires a Microsoft Entra app registration:
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -25,6 +26,8 @@ from typing import Any
 import httpx
 import msal
 
+from oilwatch import secretstore
+from oilwatch.credentials import ENVELOPE_FORMAT, ENVELOPE_KEY
 from oilwatch.email_parsing import extract_ppl, supplier_fragment_for
 from oilwatch.logging_setup import get_logger
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
@@ -62,6 +65,7 @@ def load_client_id() -> str:
 
 
 def cache_path() -> Path:
+    """Where the mailbox refresh token is cached; encrypted at rest when DPAPI runs."""
     return Path.home() / ".oilwatch" / "graph_token_cache.json"
 
 
@@ -81,15 +85,39 @@ class GraphEmailMonitor:
             return
         path = cache_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"refresh_token": refresh_token}), encoding="utf-8")
+        payload = json.dumps({"refresh_token": refresh_token}).encode("utf-8")
+        if secretstore.available():
+            # Same DPAPI envelope as the supplier credentials: a refresh token
+            # grants Mail.ReadWrite, so it must not sit in the file in the
+            # clear. Fall back to plain text off Windows rather than refusing to
+            # cache the token at all (see oilwatch.secretstore).
+            envelope = {
+                ENVELOPE_KEY: ENVELOPE_FORMAT,
+                "hint": (
+                    "Encrypted with Windows DPAPI: readable only by this Windows "
+                    "account on this machine. Delete the file to sign in again."
+                ),
+                "blob": base64.b64encode(secretstore.protect(payload)).decode("ascii"),
+            }
+            path.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
+            return
+        path.write_text(payload.decode("utf-8"), encoding="utf-8")
 
     def _load_refresh_token(self) -> str | None:
         path = cache_path()
-        if path.exists():
-            try:
-                return json.loads(path.read_text(encoding="utf-8")).get("refresh_token")
-            except Exception:  # noqa: BLE001
-                return None
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and payload.get(ENVELOPE_KEY) == ENVELOPE_FORMAT:
+                # An envelope from another Windows account or machine cannot be
+                # decrypted here; that reads as "no token, sign in again".
+                plain = secretstore.unprotect(base64.b64decode(payload["blob"]))
+                payload = json.loads(plain.decode("utf-8"))
+            if isinstance(payload, dict):
+                return payload.get("refresh_token")
+        except Exception:  # noqa: BLE001 - a corrupt or foreign cache is a sign-in prompt
+            return None
         return None
 
     def interactive_login(self) -> dict[str, Any]:

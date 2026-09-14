@@ -17,6 +17,8 @@ from typing import Any
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 
+from oilwatch.waiting import wait_until
+
 # Each supplier's form. ``fields`` keys are the semantic names used by
 # ``submit_request``; values are the HTML field names / selectors.
 SUPPLIER_FORMS: dict[str, dict[str, Any]] = {
@@ -141,6 +143,13 @@ def _select_option(element, value: str) -> None:
             return
 
 
+def _fields_present(driver, fields: dict[str, Any]) -> list:
+    """The form's first field, if it has rendered; empty list otherwise."""
+    if not fields:
+        return []
+    return driver.find_elements(By.CSS_SELECTOR, f"[name='{next(iter(fields.values()))}']")
+
+
 def submit_request(
     driver,
     supplier_key: str,
@@ -157,8 +166,14 @@ def submit_request(
         return {"supplier": supplier_key, "status": "unknown", "message": f"No form configured for {supplier_key}"}
 
     form = SUPPLIER_FORMS[supplier_key]
+    fields = form["fields"]
     driver.get(form["url"])
-    time.sleep(6)
+    # Wait for the form to render rather than sleeping a flat 6s: the first
+    # field is the readiness signal, and the wait is bounded.
+    wait_until(
+        lambda: _fields_present(driver, fields),
+        what=f"the {form.get('name', supplier_key)} enquiry form",
+    )
 
     # quote type radio (Gleaner only)
     if "quote_type" in form:
@@ -167,7 +182,6 @@ def submit_request(
         driver.execute_script("arguments[0].click();", radio)
         time.sleep(0.5)
 
-    fields = form["fields"]
     values = {
         "name": name,
         "email": email,
@@ -200,7 +214,14 @@ def submit_request(
     try:
         submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit']")
         driver.execute_script("arguments[0].click();", submit)
-        time.sleep(8)
+        # Wait for the submission to be accepted (the form is replaced or the
+        # page navigates away) rather than a flat 8s. Bounded by the old value,
+        # so it can only return sooner.
+        wait_until(
+            lambda: not _fields_present(driver, fields),
+            timeout_s=8.0,
+            what="the enquiry form to be accepted",
+        )
     except Exception as exc:  # noqa: BLE001
         return {"supplier": supplier_key, "status": "error", "message": f"submit: {exc}"}
 

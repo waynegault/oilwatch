@@ -66,3 +66,20 @@ def apply_vat(ex_vat_price: float, rate: float = DOMESTIC_VAT_RATE) -> float:
 def inclusive_total(price_per_liter_inclusive: float, quantity_liters: int) -> float:
     """Return the inclusive total cost for a quantity, rounded to 2 dp."""
     return round(price_per_liter_inclusive * quantity_liters, 2)
+
+
+def inclusive_price_and_total(
+    ex_vat_price: float,
+    quantity_liters: int,
+    rate: float = DOMESTIC_VAT_RATE,
+) -> tuple[float, float]:
+    """Return ``(price_per_liter, total_price)`` for an ex-VAT per-litre price.
+
+    The one place the two-step conversion lives: uplift to inclusive of VAT,
+    then derive the total as ``price_per_liter * quantity_liters``. Keeping the
+    two coupled is the point — it stops a connector storing an ex-VAT per-litre
+    price beside an inclusive total, which is exactly the drift this function
+    exists to prevent.
+    """
+    price_per_liter = apply_vat(ex_vat_price, rate)
+    return price_per_liter, inclusive_total(price_per_liter, quantity_liters)

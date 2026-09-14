@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -80,10 +81,13 @@ class OilWatchApp:
         self,
         postcode: str | None = None,
         prefer_browser: bool = False,
+        max_workers: int | None = None,
     ) -> list[dict[str, Any]]:
         self.db.init_schema()
-        results: list[dict[str, Any]] = []
-        for supplier in self.db.list_suppliers(include_inactive=False):
+        suppliers = self.db.list_suppliers(include_inactive=False)
+        workers = max(1, self.settings.quote_max_workers if max_workers is None else max_workers)
+
+        def quote_one(supplier: dict[str, Any]) -> dict[str, Any]:
             try:
                 result = self.quotes.quote_supplier(
                     supplier,
@@ -91,10 +95,10 @@ class OilWatchApp:
                     postcode=postcode,
                     prefer_browser=prefer_browser,
                 )
-                payload = result.to_record()
+                return result.to_record()
             except Exception as exc:  # noqa: BLE001
                 log.warning("Quote collection failed for %s: %s", supplier["name"], exc)
-                payload = {
+                return {
                     "supplier_id": supplier["id"],
                     "supplier_name": supplier["name"],
                     "observed_at": utcnow_naive().isoformat(),
@@ -107,6 +111,22 @@ class OilWatchApp:
                     "notes": str(exc),
                     "raw_payload": {},
                 }
+
+        if workers == 1 or len(suppliers) < 2:
+            payloads = [quote_one(supplier) for supplier in suppliers]
+        else:
+            # Each quote is a browser launch of 10-30s, so a sequential run
+            # scaled linearly with the supplier count. Several run at once, but
+            # the pool is capped: there is no per-supplier rate limiting, and a
+            # wide fan-out risks the CAPTCHA/bot heuristics the connectors
+            # already work around. ``map`` keeps results in supplier order.
+            with ThreadPoolExecutor(max_workers=min(workers, len(suppliers))) as pool:
+                payloads = list(pool.map(quote_one, suppliers))
+
+        results: list[dict[str, Any]] = []
+        for supplier, payload in zip(suppliers, payloads):
+            # Recorded here, in the one thread, so concurrent quotes cannot
+            # contend for the single SQLite file.
             self.db.record_quote(payload)
 
             # Errors are worth a warning; the routine manual_action_required

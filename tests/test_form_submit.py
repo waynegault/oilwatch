@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from oilwatch.form_submit import SUPPLIER_FORMS, _resolve_field, submit_request
+from oilwatch.waiting import wait_until
 
 
 class _Element:
@@ -53,6 +54,35 @@ class _Driver:
     def find_elements(self, _by, selector: str) -> list[_Element]:
         wanted = self._name_from(selector)
         return [e for e in self._elements if e.get_attribute("name") == wanted]
+
+
+class WaitUntilTests(unittest.TestCase):
+    """The bounded poll that replaced submit_request's flat sleeps."""
+
+    def _wait(self, condition, **kwargs):
+        with patch("oilwatch.waiting.time.sleep"):
+            return wait_until(condition, **kwargs)
+
+    def test_it_returns_as_soon_as_the_condition_holds(self) -> None:
+        calls = []
+
+        def condition() -> bool:
+            calls.append(1)
+            return len(calls) >= 3
+
+        self.assertTrue(self._wait(condition))
+        self.assertEqual(len(calls), 3)  # it stopped polling once true
+
+    def test_it_gives_up_and_reports_when_the_condition_never_holds(self) -> None:
+        self.assertFalse(self._wait(lambda: False, timeout_s=1.0))
+
+    def test_a_condition_that_raises_is_not_fatal(self) -> None:
+        """A not-yet-present element raises; that is the normal case for a poll."""
+
+        def condition() -> bool:
+            raise LookupError("not in the DOM yet")
+
+        self.assertFalse(self._wait(condition, timeout_s=0.5))
 
 
 class ResolveFieldTests(unittest.TestCase):

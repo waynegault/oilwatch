@@ -4,6 +4,7 @@ import base64
 import json
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -167,6 +168,18 @@ class ManagerApiTests(unittest.TestCase):
         stored = self.manager.get_credentials("scottish_fuels")
         assert stored is not None
         self.assertEqual(stored["password"], password)
+
+    def test_created_at_is_a_real_timestamp(self) -> None:
+        """A field named created_at must hold a time, not a random token.
+
+        It used to be ``secrets.token_hex(8)``, which nothing could read a
+        creation time out of.
+        """
+        self.manager.set_credentials("valueoils", "hunter2")
+
+        saved = json.loads(self.path.read_text(encoding="utf-8"))["credentials"]
+        # Raises ValueError if it is not an ISO-8601 timestamp.
+        self.assertIsInstance(datetime.fromisoformat(saved["valueoils"]["created_at"]), datetime)
 
     def test_list_and_has_credentials(self) -> None:
         self.assertFalse(self.manager.has_credentials("valueoils"))

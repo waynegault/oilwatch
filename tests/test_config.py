@@ -38,6 +38,8 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.home.label, "Home")
         self.assertEqual(settings.radius_miles, 50)
         self.assertEqual(settings.quote_quantity_liters, 1000)
+        # Absent from the file, so the loader's own default applies.
+        self.assertEqual(settings.quote_max_workers, 4)
         self.assertEqual(settings.search_queries, ["heating oil Aberdeenshire"])
         self.assertEqual(settings.scheduler.quote_interval_hours, 24)
 

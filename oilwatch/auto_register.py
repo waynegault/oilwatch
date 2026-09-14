@@ -279,7 +279,14 @@ class AccountRegistrar:
         except Exception as exc:  # noqa: BLE001
             log.debug("registration on %s raised: %s", form.name, exc)
             result["status"] = "manual_review"
-            result["message"] = f"Auto-registration encountered issues. Credentials stored: {password}"
+            # No password here: this message is printed and may be logged, and
+            # the credential is encrypted at rest (see oilwatch.credentials).
+            # The generated password stays in the structured result for the
+            # manual sign-in it exists to enable.
+            result["message"] = (
+                "Auto-registration encountered issues. Credentials stored; "
+                "sign in manually if the account was created."
+            )
         finally:
             # Whatever happened, the account may exist now, so the password is
             # kept for a manual sign-in, and the browser is closed on every path,

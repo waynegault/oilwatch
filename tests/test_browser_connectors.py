@@ -265,8 +265,12 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "valueoils_browser")
-        self.assertAlmostEqual(result.price_per_liter, 1.039, places=4)
-        self.assertAlmostEqual(result.total_price, 1090.95, places=2)
+        # 103.90p/L ex-VAT -> £1.0390 -> +5% VAT, rounded to the app-wide 4 dp
+        # -> £1.0909/L, and the stored total is price_per_liter * litres (the
+        # app-wide invariant) -> £1090.90.
+        self.assertAlmostEqual(result.price_per_liter, 1.0909, places=4)
+        self.assertAlmostEqual(result.total_price, 1090.9, places=2)
+        self.assertAlmostEqual(result.total_price, result.price_per_liter * 1000, places=2)
         self.assertEqual(usage.selected, ["domestic"])
         self.assertEqual(fuel.selected, ["kerosene"])
         self.assertEqual(postcode.filled, ["AB21 0YA"])
@@ -364,14 +368,15 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
         result = _quote(self.connector, page)
 
         self.assertEqual(result.status, "ok")
-        self.assertAlmostEqual(result.price_per_liter, 1.55, places=4)
+        # £1.55/L ex-VAT -> +5% VAT -> £1.6275/L.
+        self.assertAlmostEqual(result.price_per_liter, 1.6275, places=4)
 
 
 class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.connector = HomeFuelsDirectBrowserConnector()
 
-    def test_extracts_pence_per_litre_and_applies_20pc_vat(self) -> None:
+    def test_extracts_pence_per_litre_and_applies_5pc_vat(self) -> None:
         postcode, quantity, button = FakeElement(), FakeElement(), FakeElement(tag="BUTTON")
         page = FakeAsyncPage(
             content="Our price today: 138 pence per litre",
@@ -381,8 +386,12 @@ class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "homefuels_direct_browser")
-        self.assertAlmostEqual(result.price_per_liter, 1.38, places=4)
-        self.assertAlmostEqual(result.total_price, 1656.0, places=2)
+        # 138p/L ex-VAT -> £1.38 -> +5% domestic VAT -> £1.449/L, and the stored
+        # total is price_per_liter * litres (the app-wide invariant). HomeFuels
+        # was wrongly applying 20% on top of an already-inclusive figure.
+        self.assertAlmostEqual(result.price_per_liter, 1.449, places=4)
+        self.assertAlmostEqual(result.total_price, 1449.0, places=2)
+        self.assertAlmostEqual(result.total_price, result.price_per_liter * 1000, places=2)
         self.assertEqual(postcode.filled, ["AB21 0YA"])
 
     def test_falls_back_to_http_when_no_price_is_shown(self) -> None:
@@ -442,7 +451,8 @@ class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
         result = _quote(self.connector, page)
 
         self.assertEqual(result.status, "ok")
-        self.assertAlmostEqual(result.price_per_liter, 1.23, places=4)
+        # £1.23/L ex-VAT -> +5% VAT -> £1.2915/L.
+        self.assertAlmostEqual(result.price_per_liter, 1.2915, places=4)
 
     def test_an_extraction_error_falls_back_without_blaming_the_browser(self) -> None:
         sentinel = object()

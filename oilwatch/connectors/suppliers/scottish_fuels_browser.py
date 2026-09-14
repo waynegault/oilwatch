@@ -37,7 +37,8 @@ from oilwatch.credentials import get_supplier_credentials
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
-from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total, pence_to_pounds
+from oilwatch.pricing import inclusive_price_and_total, pence_to_pounds
+from oilwatch.waiting import wait_until
 
 log = get_logger("connectors.scottish_fuels")
 
@@ -77,7 +78,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             driver = auth.launch(headless=False)
             try:
                 driver.get(self.quote_url)
-                time.sleep(6)
+                self._wait_for_quote_form(driver)
 
                 if self.is_login_page(driver.current_url):
                     # The session cookie lasts only ~15 minutes, so an expired
@@ -113,7 +114,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                             "scottish_fuels` by hand.",
                         )
                     driver.get(self.quote_url)
-                    time.sleep(6)
+                    self._wait_for_quote_form(driver)
                     if self.is_login_page(driver.current_url):
                         return self._manual(
                             supplier,
@@ -149,7 +150,9 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                 # Get Quote
                 button = driver.find_element(By.XPATH, "//button[contains(., 'Get Quote')]")
                 driver.execute_script("arguments[0].click();", button)
-                time.sleep(15)
+                # Wait for the fresh quote (or a mid-quote redirect) rather than
+                # a flat 15s: the result is on the page well before that.
+                self._wait_for_quote_result(driver)
 
                 body_text = driver.find_element(By.TAG_NAME, "body").text
                 final_url = driver.current_url
@@ -185,7 +188,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             )
             return self._manual(supplier, quantity_liters, "Could not find a price on the quote result page.")
 
-        price_per_liter = apply_vat(ex_vat_price, DOMESTIC_VAT_RATE)
+        price_per_liter, total_price = inclusive_price_and_total(ex_vat_price, quantity_liters)
         sku_note = "" if chosen_sku == configured_sku else f" (configured {configured_sku}, used {chosen_sku})"
         return QuoteResult(
             supplier_id=int(supplier["id"]),
@@ -194,7 +197,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             quantity_liters=quantity_liters,
             status="ok",
             price_per_liter=price_per_liter,
-            total_price=inclusive_total(price_per_liter, quantity_liters),
+            total_price=total_price,
             source="scottish_fuels_browser",
             notes=(
                 f"Fresh quote from Scottish Fuels for {quantity_liters}L "
@@ -282,6 +285,46 @@ class ScottishFuelsBrowserConnector(BaseConnector):
         if not values:
             return None
         return pence_to_pounds(min(values))
+
+    def _wait_for_quote_form(self, driver) -> None:
+        """Wait for the quote form (or a bounced sign-in page) to render.
+
+        Replaces a flat 6s sleep: the fuel-type radio and quantity control are
+        the readiness signal, and a redirect to the account page counts too, so
+        an expired session is noticed at once rather than after the full wait.
+        """
+        from selenium.webdriver.common.by import By
+
+        wait_until(
+            lambda: self.is_login_page(driver.current_url)
+            or bool(
+                driver.find_elements(
+                    By.CSS_SELECTOR,
+                    "input[name='productSelection'], input[name='quantity']",
+                )
+            ),
+            what="the Scottish Fuels quote form",
+        )
+
+    def _wait_for_quote_result(self, driver) -> None:
+        """Wait until the fresh quote (or a mid-quote redirect) is on the page.
+
+        Replaces a flat 15s sleep. The result is a server-rendered price, so the
+        page text is the readiness signal; a redirect back to sign-in is the
+        other way this ends, and is reported by the caller.
+        """
+        wait_until(
+            lambda: self.is_login_page(driver.current_url)
+            or self.parse_ppl(self._body_text(driver)) is not None,
+            what="the Scottish Fuels quote result",
+        )
+
+    @staticmethod
+    def _body_text(driver) -> str:
+        """The rendered body text, read through the driver's own finder."""
+        from selenium.webdriver.common.by import By
+
+        return driver.find_element(By.TAG_NAME, "body").text
 
     def _manual(self, supplier: dict[str, Any], quantity_liters: int, notes: str) -> QuoteResult:
         contact = ", ".join(p for p in [supplier.get("phone"), supplier.get("email"), supplier.get("website")] if p)

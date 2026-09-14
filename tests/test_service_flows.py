@@ -7,11 +7,33 @@ run for real without touching the repo's data. The root itself lives in
 
 from __future__ import annotations
 
+import threading
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
 from oilwatch.models import QuoteResult, SupplierCandidate, utcnow_naive
 from tests.app_fixture import OVERRIDES, AppTestCase
+
+
+def _recording_quote(threads: set[str]):
+    """A ``quote_supplier`` stand-in that records which threads ran it."""
+
+    def quote(supplier, quantity, postcode=None, prefer_browser=False):
+        threads.add(threading.current_thread().name)
+        # Hold the worker briefly so a second task can start on another thread
+        # while this one is still busy.
+        time.sleep(0.05)
+        return QuoteResult(
+            supplier_id=int(supplier["id"]),
+            supplier_name=supplier["name"],
+            observed_at=utcnow_naive(),
+            quantity_liters=quantity,
+            status="manual_action_required",
+            source="manual",
+        )
+
+    return quote
 
 
 class SetupTests(AppTestCase):
@@ -58,6 +80,40 @@ class QuoteTests(AppTestCase):
         self.assertTrue(all(r["status"] == "error" for r in results))
         self.assertIn("site down", results[0]["notes"])
         notify.assert_called_once()
+
+    def test_quote_all_quotes_suppliers_concurrently(self) -> None:
+        """The per-supplier browser launches are fanned out, not serialised.
+
+        Each quote is a browser launch of 10-30s, so a sequential run scaled
+        linearly with the supplier count. The cap is ``quote_max_workers``; this
+        pins that more than one worker is actually used.
+        """
+        self._init()
+        threads: set[str] = set()
+        with patch.object(self.app.quotes, "quote_supplier", side_effect=_recording_quote(threads)):
+            self.app.quote_all()
+
+        self.assertGreater(len(threads), 1, "quote_all should quote on more than one worker")
+
+    def test_quote_all_can_be_pinned_to_one_worker(self) -> None:
+        """``max_workers=1`` is the escape hatch back to strictly sequential."""
+        self._init()
+        threads: set[str] = set()
+        with patch.object(self.app.quotes, "quote_supplier", side_effect=_recording_quote(threads)):
+            self.app.quote_all(max_workers=1)
+
+        self.assertEqual(len(threads), 1)
+
+    def test_quote_all_keeps_the_supplier_order_of_its_results(self) -> None:
+        """Concurrency must not reorder results — ``map`` is ordered."""
+        self._init()
+        with patch.object(self.app.quotes, "quote_supplier", side_effect=_recording_quote(set())):
+            results = self.app.quote_all()
+
+        self.assertEqual(
+            [r["supplier_name"] for r in results],
+            [s["name"] for s in self.app.suppliers()],
+        )
 
     def test_quote_all_does_not_notify_when_nothing_failed(self) -> None:
         self._init()
