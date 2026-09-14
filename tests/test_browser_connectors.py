@@ -376,23 +376,24 @@ class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.connector = HomeFuelsDirectBrowserConnector()
 
-    def test_extracts_pence_per_litre_and_applies_5pc_vat(self) -> None:
-        postcode, quantity, button = FakeElement(), FakeElement(), FakeElement(tag="BUTTON")
-        page = FakeAsyncPage(
-            content="Our price today: 138 pence per litre",
-            elements=[("postcode", postcode), ("quantity", quantity), ('has-text("Price")', button)],
-        )
+    def test_reads_the_live_price_span_and_applies_5pc_vat(self) -> None:
+        """The live figure is a public, server-rendered pence value in a span.
+
+        The page reads "…<span id=\"currentLivePrice\">112.87</span> pence /
+        litre". It is read directly rather than by driving the enquiry form,
+        whose postcode control is not interactable.
+        """
+        page = FakeAsyncPage(elements=[("#currentLivePrice", FakeElement(text="112.87"))])
+
         result = _quote(self.connector, page)
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "homefuels_direct_browser")
-        # 138p/L ex-VAT -> £1.38 -> +5% domestic VAT -> £1.449/L, and the stored
-        # total is price_per_liter * litres (the app-wide invariant). HomeFuels
-        # was wrongly applying 20% on top of an already-inclusive figure.
-        self.assertAlmostEqual(result.price_per_liter, 1.449, places=4)
-        self.assertAlmostEqual(result.total_price, 1449.0, places=2)
+        # 112.87p/L ex-VAT -> £1.1287 -> +5% domestic VAT -> £1.1851/L, and the
+        # stored total follows from the per-litre price (the app-wide invariant).
+        self.assertAlmostEqual(result.price_per_liter, 1.1851, places=4)
+        self.assertAlmostEqual(result.total_price, 1185.1, places=2)
         self.assertAlmostEqual(result.total_price, result.price_per_liter * 1000, places=2)
-        self.assertEqual(postcode.filled, ["AB21 0YA"])
 
     def test_falls_back_to_http_when_no_price_is_shown(self) -> None:
         sentinel = object()
@@ -432,36 +433,10 @@ class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
         self.assertIs(result, sentinel)
         self.assertEqual(fallback.await_args.args[3], "browser died")
 
-    def test_the_price_can_come_from_a_price_element(self) -> None:
-        """The page text often carries no price; the price elements do."""
-        page = FakeAsyncPage(
-            content="<html>Call us for today's price</html>",
-            selector_all=[
-                (
-                    "price",
-                    [
-                        FakeElement(text=""),  # an empty container
-                        FakeElement(text="POA"),  # a container with no price in it
-                        FakeElement(text="£1.23 per litre"),
-                    ],
-                )
-            ],
-        )
-
-        result = _quote(self.connector, page)
-
-        self.assertEqual(result.status, "ok")
-        # £1.23/L ex-VAT -> +5% VAT -> £1.2915/L.
-        self.assertAlmostEqual(result.price_per_liter, 1.2915, places=4)
-
-    def test_an_extraction_error_falls_back_without_blaming_the_browser(self) -> None:
+    def test_a_span_without_a_figure_falls_back_to_http(self) -> None:
+        """A 'Loading…' span must not be mistaken for a price."""
         sentinel = object()
-        page = FakeAsyncPage(content="whatever")
-
-        async def boom() -> str:
-            raise RuntimeError("page detached")
-
-        page.content = boom
+        page = FakeAsyncPage(elements=[("#currentLivePrice", FakeElement(text="Loading…"))])
         with patch.object(
             HomeFuelsDirectBrowserConnector, "_fallback_to_http", new=AsyncMock(return_value=sentinel)
         ) as fallback:
