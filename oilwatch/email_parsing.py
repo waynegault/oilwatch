@@ -95,6 +95,17 @@ _TOTAL_FOR_QUANTITY = re.compile(
     re.IGNORECASE,
 )
 
+# ValueOils' quote email carries the same delivery-options table as its site,
+# including the standard option's total: "Order Quantity: 1000 Litres …
+# Standard Delivery - Estimated … £1,229.55". That total includes VAT *and* the
+# commission the pence figure beside it omits, so it is preferred — otherwise
+# the email row undercuts the browser connector that reads the real total.
+_STANDARD_TOTAL_FOR_QUANTITY = re.compile(
+    r"Order Quantity:\s*(?P<litres>[\d,]+)\s*Litres[\s\S]{0,400}?"
+    r"Standard Delivery[\s\S]{0,200}?£\s*(?P<total>[\d,]+\.\d{2})",
+    re.IGNORECASE,
+)
+
 
 def extract_ppl(text: str) -> float | None:
     """Extract the price per litre (GBP, ex-VAT) from an email body.
@@ -113,6 +124,15 @@ def extract_ppl(text: str) -> float | None:
 
     Returns ``None`` if no price is found.
     """
+    # ValueOils' standard-delivery total includes the commission its pence
+    # figure omits; prefer it too, returning an ex-VAT figure for the caller.
+    valueoils_match = _STANDARD_TOTAL_FOR_QUANTITY.search(text)
+    if valueoils_match:
+        litres = float(valueoils_match.group("litres").replace(",", ""))
+        if litres > 0:
+            inc_vat = float(valueoils_match.group("total").replace(",", "")) / litres
+            return round(inc_vat / (1 + DOMESTIC_VAT_RATE), 4)
+
     # BoilerJuice's own service charge sits in the stated total and nowhere
     # else, so the accompanying "Price per litre ... ppl" understates what you
     # actually pay. Prefer the total, returning an ex-VAT figure so the caller's

@@ -23,7 +23,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 592, all passing offline |
+| Tests | 593, all passing offline |
 | Database | 27 suppliers, 245 quotes, 0 orders |
 
 ---
@@ -96,7 +96,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 592 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 593 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,

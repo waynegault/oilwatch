@@ -50,6 +50,24 @@ class ExtractPplTests(unittest.TestCase):
         )
         self.assertEqual(extract_ppl(text), 1.029)
 
+    def test_valueoils_standard_total_beats_the_pence_beside_it(self) -> None:
+        """The email's Standard Delivery total includes VAT and the commission.
+
+        The pence figure beside it excludes both, so reading the pence undercut
+        the browser connector that reads the real total (£1,187.55, not the
+        pence-based £1,177.10).
+        """
+        text = (
+            "Order Quantity: 1000 Litres Heating Oil Quote: All Delivery Options "
+            "Delivery Option Fuel PPL Ex. VAT Total You Pay "
+            "Standard Delivery - Estimated Delivery by Tuesday 29th Sep 2026 "
+            "115.10p £1,229.55 Buy Now "
+            "Express Delivery 7 (+£29.90) 115.10p £1,259.45 Buy Now"
+        )
+        # £1,229.55 for 1000L inc VAT+commission -> 1.1710/L ex-VAT equivalent,
+        # which the caller uplifts back to ~£1.2295/L.
+        self.assertAlmostEqual(extract_ppl(text), 1.171, places=4)
+
 
 class SupplierMappingsTests(unittest.TestCase):
     def test_supplier_domains_present(self) -> None:
