@@ -185,7 +185,8 @@ class BrowserAuth:
         password: str,
         *,
         wait_before_submit: float = 5.0,
-        wait_after_submit: float = 10.0,
+        wait_after_submit: float = 30.0,
+        attempts: int = 2,
     ) -> bool:
         """Sign in on an already-open driver. Returns True when authenticated.
 
@@ -194,12 +195,44 @@ class BrowserAuth:
         before that fires silently reloads the login page — indistinguishable
         from wrong credentials — so the wait below is load-bearing.
 
+        One submit is not trusted to have worked. The token can be judged
+        untrusted and the page simply reload, and a freshly established Magento
+        session can take longer than a single pause to show its signed-in
+        marker; either reads as a failure from here. So the attempt is made
+        again on a fresh navigation (a new token each time), and the marker is
+        *polled* for the whole ``wait_after_submit`` rather than checked once.
+
         Split out from :meth:`automated_login` so a connector that finds its
         session expired can re-use the browser it already has open: the session
         cookie here lasts only ~15 minutes, so re-authenticating mid-run is
         routine rather than exceptional.
         """
+        for attempt in range(1, attempts + 1):
+            if self._attempt_sign_in(
+                driver, url, email, password, wait_before_submit, wait_after_submit
+            ):
+                return True
+            if attempt < attempts:
+                log.warning("sign-in attempt %d did not take; retrying once", attempt)
+        log.warning("sign-in did not take after %d attempt(s)", attempts)
+        return False
+
+    def _attempt_sign_in(
+        self,
+        driver,
+        url: str,
+        email: str,
+        password: str,
+        wait_before_submit: float,
+        wait_after_submit: float,
+    ) -> bool:
+        """One fill-and-submit round; True when the signed-in marker appears."""
         driver.get(url)
+        # A login URL for a session that is already live redirects to the
+        # account page. That both short-circuits a needless sign-in and stops a
+        # retry from fighting one that in fact succeeded, just slowly.
+        if self.is_authenticated(driver):
+            return True
 
         email_field = self._find_first(driver, EMAIL_SELECTORS)
         password_field = self._find_first(driver, PASSWORD_SELECTORS)
@@ -226,8 +259,25 @@ class BrowserAuth:
         if not self._submit_sign_in(driver, submit, password_field):
             raise RuntimeError(f"Could not activate the Sign In button on {url}")
 
-        time.sleep(wait_after_submit)
-        return self.is_authenticated(driver)
+        return self._wait_until_authenticated(driver, wait_after_submit)
+
+    @classmethod
+    def _wait_until_authenticated(
+        cls, driver, timeout: float, *, interval: float = 0.5
+    ) -> bool:
+        """Poll for the signed-in marker for up to ``timeout`` seconds.
+
+        Bounded by a *count* of polls rather than the wall clock, so a caller —
+        or a test — that stubs out ``sleep`` cannot turn the wait into a busy
+        spin that still runs the full timeout in real time.
+        """
+        polls = max(1, int(timeout / interval))
+        for poll in range(polls):
+            if cls.is_authenticated(driver):
+                return True
+            if poll < polls - 1:
+                time.sleep(interval)
+        return False
 
     @staticmethod
     def _submit_sign_in(driver, button, password_field) -> bool:
@@ -310,7 +360,7 @@ class BrowserAuth:
         password: str,
         *,
         wait_before_submit: float = 5.0,
-        wait_after_submit: float = 10.0,
+        wait_after_submit: float = 30.0,
         headless: bool = False,
     ) -> bool:
         """Launch a browser, sign in with stored credentials, save the session.

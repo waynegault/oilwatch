@@ -110,9 +110,16 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                             supplier,
                             quantity_liters,
                             "Session expired and the automatic sign-in did not take "
-                            "(likely a CAPTCHA challenge). Run `oilwatch login "
-                            "scottish_fuels` by hand.",
+                            "after retrying. Run `oilwatch login scottish_fuels` by "
+                            "hand.",
                         )
+                    # Refresh the saved cookie backup too. The persistent profile
+                    # already holds the session, but the file is what
+                    # ``has_session()`` reports, and a stale one is a trap later.
+                    try:
+                        auth.save_cookies()
+                    except Exception as exc:  # noqa: BLE001 - the profile still holds the session
+                        log.debug("could not refresh the saved cookies after re-login: %s", exc)
                     driver.get(self.quote_url)
                     self._wait_for_quote_form(driver)
                     if self.is_login_page(driver.current_url):

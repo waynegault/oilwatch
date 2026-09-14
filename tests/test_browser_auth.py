@@ -286,6 +286,40 @@ class SignInTests(unittest.TestCase):
 
         self.assertEqual(self.driver.urls, [self.URL])
 
+    def test_sign_in_retries_when_the_first_submit_does_not_take(self) -> None:
+        """One untrusted reCAPTCHA token must not cost the session: it retries."""
+        outcomes = iter([False, True])
+        with patch.object(
+            BrowserAuth, "_attempt_sign_in", side_effect=lambda *a, **k: next(outcomes)
+        ) as attempt:
+            self.assertTrue(self.auth.sign_in(self.driver, self.URL, "o@e.test", "pw"))
+
+        self.assertEqual(attempt.call_count, 2)
+        self.assertIs(attempt.call_args.args[0], self.driver)
+
+    def test_sign_in_gives_up_after_the_configured_attempts(self) -> None:
+        with patch.object(BrowserAuth, "_attempt_sign_in", return_value=False) as attempt:
+            self.assertFalse(self.auth.sign_in(self.driver, self.URL, "o@e.test", "pw"))
+
+        self.assertEqual(attempt.call_count, 2)
+
+    def test_the_authenticated_wait_returns_as_soon_as_the_marker_appears(self) -> None:
+        with (
+            patch("oilwatch.browser_auth.time.sleep"),
+            patch.object(BrowserAuth, "is_authenticated", side_effect=[False, False, True]),
+        ):
+            self.assertTrue(BrowserAuth._wait_until_authenticated(self.driver, 5.0, interval=0.5))
+
+    def test_the_authenticated_wait_gives_up_after_bounded_polls(self) -> None:
+        """Bounded by a poll count, so a stubbed sleep cannot spin the timeout."""
+        with (
+            patch("oilwatch.browser_auth.time.sleep"),
+            patch.object(BrowserAuth, "is_authenticated", return_value=False) as check,
+        ):
+            self.assertFalse(BrowserAuth._wait_until_authenticated(self.driver, 1.0, interval=0.5))
+
+        self.assertEqual(check.call_count, 2)  # 1.0s / 0.5s, plus the final check
+
     def test_sign_in_reports_missing_login_fields(self) -> None:
         with patch("oilwatch.browser_auth.time.sleep"), patch.object(BrowserAuth, "_find_first", return_value=None):
             with self.assertRaises(RuntimeError) as ctx:
