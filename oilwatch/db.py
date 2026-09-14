@@ -350,6 +350,52 @@ class Database:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def not_refreshed_quotes(self, max_age_days: int | None = None) -> list[dict[str, Any]]:
+        """Newest successful quote for each supplier whose *latest* try failed.
+
+        The mirror of :meth:`stale_quotes` for the other way a figure can be
+        older than it reads: a supplier that gave a price earlier but whose most
+        recent attempt returned none — a quote portal session that expired, a
+        site that timed out. The stored price is still inside the window, so it
+        keeps being compared as if it were current; this names it so a report can
+        say "last quoted at 09:16, not refreshed since" rather than presenting
+        the earlier figure as the run's own result.
+
+        Returns ``[]`` when no window is set: unbounded, every row is in play and
+        the distinction stops being meaningful.
+        """
+        if max_age_days is None:
+            return []
+        cutoff = (utcnow_naive() - timedelta(days=max_age_days)).isoformat()
+        with closing(self.connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT s.name AS supplier_name, s.website,
+                       ok.observed_at AS observed_at, ok.price_per_liter,
+                       attempt.observed_at AS last_attempt_at,
+                       attempt.status AS last_attempt_status,
+                       attempt.notes AS last_attempt_note
+                FROM suppliers s
+                JOIN (
+                    SELECT supplier_id, MAX(observed_at) AS max_attempt
+                    FROM quotes GROUP BY supplier_id
+                ) a ON a.supplier_id = s.id
+                JOIN quotes attempt
+                  ON attempt.supplier_id = s.id AND attempt.observed_at = a.max_attempt
+                JOIN (
+                    SELECT supplier_id, MAX(observed_at) AS max_ok
+                    FROM quotes WHERE status = 'ok' GROUP BY supplier_id
+                ) o ON o.supplier_id = s.id
+                JOIN quotes ok
+                  ON ok.supplier_id = s.id AND ok.observed_at = o.max_ok
+                WHERE attempt.status <> 'ok'
+                  AND ok.observed_at >= ?
+                ORDER BY ok.observed_at ASC
+                """,
+                (cutoff,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def record_discount(self, record: dict[str, Any]) -> int:
         """Store one discount offer captured from a supplier email.
 

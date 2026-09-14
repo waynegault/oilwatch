@@ -172,6 +172,27 @@ class OilWatchApp:
             for row in self.db.stale_quotes(max_age_days=self.settings.max_quote_age_days)
         ]
 
+    def _not_refreshed_suppliers(self) -> list[dict[str, Any]]:
+        """Suppliers still priced inside the window but not re-quoted since.
+
+        A supplier whose latest attempt failed keeps the price it gave earlier —
+        the window is a day — so the comparison can otherwise mix the current
+        run's quotes with an older figure and present it as today's. Naming them
+        lets a report say which prices are older than the run behind them.
+        """
+        return [
+            {
+                "name": row["supplier_name"],
+                "website": row["website"],
+                "price_per_liter": row["price_per_liter"],
+                "last_quote_at": row["observed_at"],
+                "last_attempt_at": row["last_attempt_at"],
+                "last_attempt_status": row["last_attempt_status"],
+                "last_attempt_note": row["last_attempt_note"],
+            }
+            for row in self.db.not_refreshed_quotes(max_age_days=self.settings.max_quote_age_days)
+        ]
+
     def _with_effective_prices(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Attach the best applicable discount code and the resulting price.
 
@@ -217,6 +238,7 @@ class OilWatchApp:
         return self.analytics.latest_market_snapshot(
             self._with_effective_prices(self._current_quotes()),
             excluded_suppliers=self._excluded_suppliers(),
+            not_refreshed_suppliers=self._not_refreshed_suppliers(),
         )
 
     def current_prices(self) -> list[dict[str, Any]]:
@@ -228,6 +250,7 @@ class OilWatchApp:
         snapshot = self.analytics.latest_market_snapshot(
             self._with_effective_prices(self._current_quotes()),
             excluded_suppliers=self._excluded_suppliers(),
+            not_refreshed_suppliers=self._not_refreshed_suppliers(),
         )
         trend = self.analytics.price_trend(self.db.all_quotes())
         return {

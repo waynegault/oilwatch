@@ -27,6 +27,7 @@ class AnalyticsService:
     def latest_market_snapshot(
         latest_quotes: list[dict[str, Any]],
         excluded_suppliers: list[dict[str, Any]] | None = None,
+        not_refreshed_suppliers: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """The market as the owner would compare it: suppliers, plus the benchmark.
 
@@ -36,6 +37,11 @@ class AnalyticsService:
 
         ``excluded_suppliers`` names the suppliers a recency window dropped, so
         a thin market reads as "not re-quoted yet" rather than looking empty.
+
+        ``not_refreshed_suppliers`` names the suppliers being compared on a price
+        from an *earlier* run, because their latest attempt returned none. Those
+        prices are still inside the window and so still count, but they are not
+        this run's result and must not be read as one.
         """
         priced = [row for row in latest_quotes if row["price_per_liter"] is not None]
 
@@ -59,6 +65,7 @@ class AnalyticsService:
                 "quotes_considered": 0,
                 "benchmark": benchmark,
                 "excluded_suppliers": list(excluded_suppliers or []),
+                "not_refreshed_suppliers": list(not_refreshed_suppliers or []),
             }
 
         def effective_of(row: dict[str, Any]) -> float:
@@ -92,6 +99,9 @@ class AnalyticsService:
             "benchmark": benchmark,
             # And the suppliers the recency window held back, by name.
             "excluded_suppliers": list(excluded_suppliers or []),
+            # Suppliers still compared, but on a price from an earlier run: their
+            # latest attempt gave none, so the figure is not this run's.
+            "not_refreshed_suppliers": list(not_refreshed_suppliers or []),
         }
 
     @staticmethod

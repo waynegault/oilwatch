@@ -195,6 +195,63 @@ class DatabaseTests(unittest.TestCase):
             [q["supplier_name"] for q in self.db.stale_quotes(max_age_days=1)], ["Older"]
         )
 
+    def test_not_refreshed_quotes_names_a_supplier_whose_last_try_failed(self) -> None:
+        """A price still inside the window, but not from the latest run.
+
+        Scottish Fuels' shape: a good quote this morning, then an attempt later
+        that returned no price. The morning figure still counts, so it has to be
+        flagged rather than dropped.
+        """
+        now = utcnow_naive()
+        failed = self.db.upsert_supplier(
+            self._supplier("Stale Attempt", "https://stale.example.com")
+        )
+        fresh = self.db.upsert_supplier(self._supplier("Fresh", "https://fresh.example.com"))
+        for supplier_id, when, status, price, notes in (
+            (failed, (now - timedelta(hours=2)).isoformat(), "ok", 1.10, ""),
+            (
+                failed,
+                (now - timedelta(hours=1)).isoformat(),
+                "manual_action_required",
+                None,
+                "session expired",
+            ),
+            (fresh, now.isoformat(), "ok", 1.05, ""),
+        ):
+            self.db.record_quote(
+                {
+                    "supplier_id": supplier_id,
+                    "observed_at": when,
+                    "quantity_liters": 1000,
+                    "status": status,
+                    "price_per_liter": price,
+                    "total_price": None if price is None else price * 1000,
+                    "currency": "GBP",
+                    "source": "test",
+                    "notes": notes,
+                    "raw_payload": {},
+                }
+            )
+
+        rows = self.db.not_refreshed_quotes(max_age_days=1)
+
+        self.assertEqual([r["supplier_name"] for r in rows], ["Stale Attempt"])
+        # The figure being compared, and the failed attempt that qualifies it.
+        self.assertEqual(rows[0]["price_per_liter"], 1.10)
+        self.assertEqual(rows[0]["observed_at"], (now - timedelta(hours=2)).isoformat())
+        self.assertEqual(rows[0]["last_attempt_status"], "manual_action_required")
+        self.assertEqual(rows[0]["last_attempt_note"], "session expired")
+
+        # It is flagged, not dropped: the price is still offered.
+        self.assertIn(
+            "Stale Attempt",
+            [q["supplier_name"] for q in self.db.latest_quotes(max_age_days=1)],
+        )
+        # A supplier whose newest row is a success is not flagged.
+        self.assertNotIn("Fresh", [r["supplier_name"] for r in rows])
+        # Unbounded, there is no window and so nothing to distinguish.
+        self.assertEqual(self.db.not_refreshed_quotes(), [])
+
     def test_mark_missing_suppliers_inactive(self) -> None:
         self.db.upsert_supplier(self._supplier("A", "https://a.example.com"))
         self.db.upsert_supplier(self._supplier("B", "https://b.example.com"))

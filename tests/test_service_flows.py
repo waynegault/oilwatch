@@ -10,6 +10,7 @@ from __future__ import annotations
 import threading
 import time
 import unittest
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from oilwatch.models import QuoteResult, SupplierCandidate, utcnow_naive
@@ -140,6 +141,41 @@ class ReportingTests(AppTestCase):
         snapshot = self.app.cheapest()
         self.assertIsInstance(snapshot, dict)
         self.assertEqual(self.app.current_prices(), [])
+
+    def test_cheapest_flags_a_supplier_whose_latest_attempt_failed(self) -> None:
+        """A price from an earlier run is named, not passed off as this run's.
+
+        Scottish Fuels' shape: a good quote, then an attempt that returned no
+        price. The good quote still counts (the window is a day), so it is
+        flagged alongside the market rather than silently shown as current.
+        """
+        ids = self._init()
+        now = utcnow_naive()
+        for observed, status, price in (
+            ((now - timedelta(hours=2)).isoformat(), "ok", 1.10),
+            ((now - timedelta(hours=1)).isoformat(), "manual_action_required", None),
+        ):
+            self.app.db.record_quote(
+                {
+                    "supplier_id": ids["Scottish Fuels"],
+                    "observed_at": observed,
+                    "quantity_liters": 1000,
+                    "status": status,
+                    "price_per_liter": price,
+                    "total_price": None if price is None else price * 1000,
+                    "currency": "GBP",
+                    "source": "scottish_fuels_browser",
+                    "notes": "session expired and the automatic sign-in did not take",
+                    "raw_payload": {},
+                }
+            )
+
+        flagged = self.app.cheapest()["not_refreshed_suppliers"]
+
+        self.assertEqual([row["name"] for row in flagged], ["Scottish Fuels"])
+        self.assertEqual(flagged[0]["price_per_liter"], 1.10)
+        self.assertEqual(flagged[0]["last_attempt_status"], "manual_action_required")
+        self.assertIn("session expired", flagged[0]["last_attempt_note"])
 
     def test_status_includes_the_snapshot_trend_and_last_purchase(self) -> None:
         self._init()
