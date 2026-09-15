@@ -23,8 +23,8 @@ It is a working system, not a prototype:
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 593, all passing offline |
-| Database | 27 suppliers, 245 quotes, 0 orders |
+| Tests | 615, all passing offline |
+| Database | 27 suppliers, 524 quotes, 0 orders (2026-09-15) |
 
 ---
 
@@ -96,7 +96,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 593 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 615 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -105,11 +105,11 @@ monitoring, and end-to-end app wiring.
 
 ---
 
-## Database (as of 2026-09-11)
+## Database (as of 2026-09-15)
 
 - **Path:** `data/oilwatch.sqlite`
-- **Suppliers:** 26 (17 `active`, the rest historical)
-- **Quotes:** 244
+- **Suppliers:** 27 (18 `active`, the rest historical)
+- **Quotes:** 524
 - **Orders:** 0
 
 **Added 2026-09-10 — purchases can be recorded.** The `orders` table was
@@ -122,7 +122,7 @@ than guessed. `oilwatch purchases` and the read-only MCP `purchases` tool read
 them back, and `status` carries the last one. Nothing in this path drives a
 browser or contacts a supplier — recording is kept separate from buying.
 
-Quote timestamps span **2007-01-26 → 2026-09-11**, because
+Quote timestamps span **2007-01-26 → 2026-09-15**, because
 `import-spreadsheet` loaded the historical workbook. Recent automated runs
 (2026-09-09 22:19–22:40 and 2026-09-10 00:13) produced priced `ok` quotes for
 Scottish Fuels, Rix, Regency Oils, Connon Bros, Johnson Oils, HomeFuels Direct,
@@ -193,6 +193,35 @@ suppliers whose only priced row came from the spreadsheet import won on
   a `config/settings.json` key, which keeps the test suite and interactive runs
   out of the log: a hand-run `oilwatch status` still logs to its console only.
 
+**Fixed 2026-09-15 — the Scottish Fuels sign-in, and what actually breaks it.**
+The automatic sign-in is *intermittent*, and every failure simply read "the
+sign-in did not take", so there was nothing to act on. A Chrome DevTools
+performance log showed what is really happening: clicking Sign In often
+**submits nothing at all** — `button#send2` returns in 0.1 s, the URL never
+changes, and **no POST ever reaches `/customer/account/loginPost/`**. The site's
+own submit handler swallows the event, so "did not take" meant *nothing was
+submitted*, not *the credentials were rejected*. Two consequences were fixed.
+`_submit_sign_in()` used to return `True` as soon as an interaction did not
+*raise*, which left its Enter and JavaScript-click fallbacks unreachable in
+exactly the case they exist for; it now plants a page marker and requires the
+page to actually navigate before believing a submit, falling through to the next
+interaction when it does not. And page loads were unbounded — a sign-in stalled
+past 15 minutes — so `launch()` now sets a 60 s page-load timeout. A failure is
+now self-describing: landed URL, title, whether the login form is still present,
+the reCAPTCHA field *lengths* (never token values) and the page text. **The
+site-side intermittency itself is not fixed** — expect `manual_action_required`
+for this supplier sometimes, from the CLI as much as from MCP. The served login
+page carries three forms and three submit buttons; field selection was checked
+live and is correct.
+
+**Fixed 2026-09-15 — `api-discover` ignored an explicit `--url`.** Given both
+`--url` and `--supplier-id`, the supplier row overwrote the URL, silently
+discarding the flag the user had just typed; the row is now consulted only when
+no URL was given. This surfaced from `tests/test_untested_modules.py`, added to
+close the last uncovered handler paths: the `phone-script` call-sheet loop and
+its `--output` export, `--supplier-id` resolution, `register`'s summary and its
+`--output` save, and `login-email`'s reporting.
+
 ### MCP / OpenClaw integration
 
 The server is registered in OpenClaw (`~/.openclaw/openclaw.json`) as
@@ -212,6 +241,25 @@ reports **9 tools, resources, prompts**, and `openclaw mcp doctor` reports
 `serverInfo: {"name":"oilwatch","version":"0.1.0"}` — the package's own version,
 not the MCP framework's (which is what it reported before the server declared
 one).
+
+**Fixed 2026-09-15 — `refresh_prices` over MCP, which used to hang for ever.**
+Called through mcporter it returned **zero output** and timed out twice, even at
+900 s, with no DB mtime change — the failure that had made the CLI look like the
+only working door, and that got written up elsewhere as "the MCP route is a dead
+end". The cause was in this repository, not the transport: `BrowserAuth.launch()`
+passed `use_subprocess=False` to `undetected-chromedriver`, whose
+`start_detached()` starts Chrome through a **`multiprocessing` spawn child** and
+then blocks on `reader.recv()` **with no timeout and without ever closing its own
+copy of the pipe** — so a helper that misbehaved produced an infinite hang rather
+than an error. Inside the long-running threaded server that helper never booted
+Python at all (no `_multiprocessing.pyd` loaded, ~0.03 s CPU, no output), so no
+Chrome was ever started and the whole sweep wedged on the first supplier. The
+same sweep in a plain process always completed in ~35 s. `use_subprocess=True` —
+uc's own default — starts Chrome with a plain `subprocess.Popen`, removing the
+multiprocessing child entirely. Verified through this same stdio server:
+`refresh_prices` returned in **67 s** with a full quote list, Scottish Fuels
+included, and wrote it to the database. `tests/test_browser_auth.py` pins the
+launch mode, the page-load bound and the submit verification.
 
 **Superseded:** until 2026-09-12 this was a streamable-HTTP endpoint OpenClaw
 dialled at `http://172.28.144.1:8000/mcp` — the WSL **NAT gateway**, because WSL

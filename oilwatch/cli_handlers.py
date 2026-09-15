@@ -116,7 +116,10 @@ def _cmd_phone_script(app: OilWatchApp, args: argparse.Namespace) -> None:
 
 def _cmd_api_discover(app: OilWatchApp, args: argparse.Namespace) -> None:
     url = args.url
-    if args.supplier_id:
+    # Only look the supplier up when no URL was given: an explicit --url is a
+    # deliberate choice, and letting the row overwrite it silently ignored the
+    # flag the user had just typed.
+    if not url and args.supplier_id:
         supplier = app.db.get_supplier(args.supplier_id)
         if supplier:
             url = supplier.get("website", "")

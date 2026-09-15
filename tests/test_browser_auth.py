@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.keys import Keys
 
-from oilwatch.browser_auth import BrowserAuth, detect_chrome_major_version
+from oilwatch.browser_auth import PAGE_LOAD_TIMEOUT_S, BrowserAuth, detect_chrome_major_version
 
 
 class FakeChromeOptions:
@@ -26,7 +26,7 @@ class FakeUC:
     ChromeOptions = FakeChromeOptions
 
     def __init__(self) -> None:
-        self.Chrome = MagicMock(return_value="DRIVER")
+        self.Chrome = MagicMock(return_value=MagicMock(name="driver"))
 
 
 class FakeElement:
@@ -72,6 +72,9 @@ class FakeDriver:
         self.added: list = []
         self.scripts: list[str] = []
         self.quit_calls = 0
+        #: What a script reports back. The sign-in diagnostic reads its page
+        #: state from one, so a test can dictate what it sees.
+        self.script_result: object = None
 
     def get(self, url: str) -> None:
         self.urls.append(url)
@@ -89,10 +92,11 @@ class FakeDriver:
         if self.quit_raises:
             raise RuntimeError("browser already gone")
 
-    def execute_script(self, script: str, *args) -> None:
+    def execute_script(self, script: str, *args):
         self.scripts.append(script)
         if args and hasattr(args[0], "apply_dom_script"):
             args[0].apply_dom_script(script, *args[1:])
+        return self.script_result
 
     def find_elements(self, by: str, selector: str) -> list:
         if self._elements_by_selector is not None:
@@ -138,6 +142,61 @@ class FakeField:
             self.value = ""
         elif "arguments[0].value = arguments[1]" in script:
             self.value = args[0]
+
+
+class FakePageBody:
+    """The page body, as Selenium reports it (``.text`` only)."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+class RecaptchaPageDriver:
+    """A page whose reCAPTCHA fields hold real tokens.
+
+    The production probe is JavaScript, so this stands in for the browser and
+    answers as that script does: it reports the *lengths* of the values on the
+    page, which is the contract the caller depends on. ``scripts`` keeps the
+    probe script it was handed, so a test can check what was asked for.
+    """
+
+    url = "https://quote.scottishfuels.co.uk/customer/account/login/"
+
+    def __init__(
+        self,
+        recaptcha_tokens: list[str] | None = None,
+        form_tokens: list[str] | None = None,
+    ) -> None:
+        self.recaptcha_tokens = recaptcha_tokens or []
+        self.form_tokens = form_tokens or []
+        self.scripts: list[str] = []
+        self.current_url = self.url
+        self.title = "Customer Login | Scottish Fuels"
+
+    def find_element(self, by: str, value: str) -> FakePageBody:
+        return FakePageBody("CUSTOMER LOGIN\nEmail or account number\nPassword\nSign In")
+
+    def find_elements(self, by: str, selector: str) -> list:
+        return []
+
+    def execute_script(self, script: str, *args):
+        self.scripts.append(script)
+        return {
+            "recaptcha": [len(token) for token in self.recaptcha_tokens],
+            "token": [len(token) for token in self.form_tokens],
+            "forms": 1,
+        }
+
+
+class UnreadableDriver:
+    """A browser that has already gone: every read raises.
+
+    The sign-in diagnostic runs precisely when the browser is misbehaving, so it
+    has to survive this rather than mask the failure it exists to report.
+    """
+
+    def __getattr__(self, name: str):
+        raise WebDriverException("no such window: target window already closed")
 
 
 class BrowserAuthTests(unittest.TestCase):
@@ -196,10 +255,16 @@ class LaunchTests(unittest.TestCase):
         with patch("oilwatch.browser_auth.detect_chrome_major_version", return_value=131):
             driver = self.auth.launch(headless=False)
 
-        self.assertEqual(driver, "DRIVER")
+        self.assertIs(driver, self.uc.Chrome.return_value)
         kwargs = self.uc.Chrome.call_args.kwargs
         self.assertEqual(kwargs["version_main"], 131)
-        self.assertFalse(kwargs["use_subprocess"])
+        # Chrome must be started with a plain subprocess. uc's multiprocessing
+        # helper never reports back inside the long-running MCP server, and its
+        # wait has no timeout, so the sweep used to hang for ever.
+        self.assertTrue(kwargs["use_subprocess"])
+        # A page load must be bounded, or a stalled third-party script blocks a
+        # sign-in indefinitely.
+        driver.set_page_load_timeout.assert_called_once_with(PAGE_LOAD_TIMEOUT_S)
         preferences = json.loads((self.auth.profile_dir / "Default" / "Preferences").read_text())
         self.assertTrue(preferences["profile"]["exited_cleanly"])
 
@@ -347,6 +412,68 @@ class SignInTests(unittest.TestCase):
                 self.auth.sign_in(self.driver, self.URL, "owner@example.test", "pw")
         self.assertIn("activate", str(ctx.exception))
 
+    def test_a_sign_in_that_takes_is_reported_as_successful(self) -> None:
+        with (
+            patch("oilwatch.browser_auth.time.sleep"),
+            patch.object(BrowserAuth, "_find_first", return_value=FakeField()),
+            patch.object(BrowserAuth, "_set_field_value"),
+            patch.object(BrowserAuth, "_submit_sign_in", return_value=True),
+            patch.object(BrowserAuth, "_wait_until_authenticated", return_value=True),
+        ):
+            took = self.auth._attempt_sign_in(
+                self.driver, self.URL, "owner@example.test", "pw", 0.0, 0.0
+            )
+
+        self.assertTrue(took)
+
+    def test_a_sign_in_that_does_not_take_records_what_the_page_showed(self) -> None:
+        """A bare "did not take" leaves the next fix a guess, so the page is named."""
+        self.driver.current_url = self.URL
+        self.driver.title = "Customer Login | Scottish Fuels"
+        self.driver.script_result = {"recaptcha": [0], "token": [0], "forms": 1}
+
+        with (
+            patch("oilwatch.browser_auth.time.sleep"),
+            patch.object(BrowserAuth, "_find_first", return_value=FakeField()),
+            patch.object(BrowserAuth, "_set_field_value"),
+            patch.object(BrowserAuth, "_submit_sign_in", return_value=True),
+            patch.object(BrowserAuth, "_wait_until_authenticated", return_value=False),
+            self.assertLogs("oilwatch.browser_auth", level="WARNING") as captured,
+        ):
+            took = self.auth._attempt_sign_in(
+                self.driver, self.URL, "owner@example.test", "pw", 0.0, 0.0
+            )
+
+        self.assertFalse(took)
+        logged = "\n".join(captured.output)
+        self.assertIn("sign-in did not take", logged)
+        self.assertIn(self.URL, logged)
+        self.assertIn("still_on_login_form=True", logged)
+        self.assertIn("'recaptcha': [0]", logged)
+
+    def test_the_sign_in_diagnostic_measures_tokens_instead_of_logging_them(self) -> None:
+        """A reCAPTCHA token is a single-use credential, so only its length is safe."""
+        token = "03AGdBq26-single-use-recaptcha-token"
+        driver = RecaptchaPageDriver(recaptcha_tokens=[token], form_tokens=[""])
+
+        with self.assertLogs("oilwatch.browser_auth", level="WARNING") as captured:
+            BrowserAuth._log_sign_in_failure(driver, self.URL)
+
+        logged = "\n".join(captured.output)
+        self.assertIn(f"'recaptcha': [{len(token)}]", logged)
+        self.assertNotIn(token, logged)
+        self.assertIn(".length", driver.scripts[0])  # the probe measures, it does not copy
+        self.assertIn("CUSTOMER LOGIN", logged)  # the page text is recorded too
+
+    def test_the_sign_in_diagnostic_survives_a_dead_browser(self) -> None:
+        """It runs when the browser is misbehaving, so it must not mask the failure."""
+        with self.assertLogs("oilwatch.browser_auth", level="WARNING") as captured:
+            BrowserAuth._log_sign_in_failure(UnreadableDriver(), self.URL)
+
+        logged = "\n".join(captured.output)
+        self.assertIn(self.URL, logged)
+        self.assertIn("<unreadable", logged)
+
     def test_automated_login_saves_cookies_only_on_success(self) -> None:
         self.auth.launch = MagicMock(return_value=self.driver)
         self.auth.close = MagicMock()
@@ -386,8 +513,58 @@ class ElementHelpersTests(unittest.TestCase):
 
     def test_submit_uses_a_plain_click_first(self) -> None:
         button = MagicMock()
-        self.assertTrue(BrowserAuth._submit_sign_in(FakeDriver(), button, MagicMock()))
+        driver = FakeDriver()
+        driver.script_result = False  # the click submitted: the page navigated
+
+        self.assertTrue(BrowserAuth._submit_sign_in(driver, button, MagicMock()))
+
         button.click.assert_called_once_with()
+
+    def test_a_click_that_submits_nothing_falls_through_to_enter(self) -> None:
+        """A click that does not raise is not evidence that anything submitted."""
+        button = MagicMock()
+        password = MagicMock()
+        driver = FakeDriver()
+
+        with patch.object(BrowserAuth, "_page_moved_on", side_effect=[False, True]) as moved:
+            self.assertTrue(BrowserAuth._submit_sign_in(driver, button, password))
+
+        self.assertEqual(moved.call_count, 2)  # the click did nothing, so Enter was tried
+        button.click.assert_called_once()
+        password.send_keys.assert_called_once()
+
+    def test_submitting_nothing_at_all_is_reported(self) -> None:
+        button = MagicMock()
+        password = MagicMock()
+        driver = FakeDriver()
+
+        with (
+            patch.object(BrowserAuth, "_page_moved_on", return_value=False),
+            self.assertLogs("oilwatch.browser_auth", level="WARNING") as captured,
+        ):
+            self.assertFalse(BrowserAuth._submit_sign_in(driver, button, password))
+
+        self.assertIn("no Sign In interaction submitted", "\n".join(captured.output))
+
+    def test_the_submit_marker_surviving_means_nothing_was_submitted(self) -> None:
+        driver = FakeDriver()
+        driver.script_result = True  # the marker is still on the page: no navigation
+
+        with patch("oilwatch.browser_auth.time.sleep"):
+            self.assertFalse(BrowserAuth._page_moved_on(driver))
+
+    def test_a_navigation_clears_the_submit_marker(self) -> None:
+        driver = FakeDriver()
+        driver.script_result = False
+
+        self.assertTrue(BrowserAuth._page_moved_on(driver))
+
+    def test_a_page_torn_down_by_a_navigation_counts_as_submitted(self) -> None:
+        """A navigation destroys the execution context, so a raise means it moved."""
+        driver = FakeDriver()
+        driver.execute_script = MagicMock(side_effect=WebDriverException("context destroyed"))
+
+        self.assertTrue(BrowserAuth._page_moved_on(driver))
 
     def test_submit_falls_back_to_enter_then_javascript(self) -> None:
         button = MagicMock()
@@ -397,7 +574,7 @@ class ElementHelpersTests(unittest.TestCase):
         driver = FakeDriver()
 
         self.assertTrue(BrowserAuth._submit_sign_in(driver, button, password))
-        self.assertTrue(driver.scripts)  # the JS click was the last resort
+        self.assertIn("arguments[0].click();", " ".join(driver.scripts))  # the last resort
 
     def test_set_field_value_leaves_a_correct_field_alone(self) -> None:
         field = FakeField(value="owner@example.test")
@@ -437,7 +614,7 @@ class ElementHelpersTests(unittest.TestCase):
         self.assertTrue(BrowserAuth._submit_sign_in(driver, button, password))
 
         password.send_keys.assert_called_once()
-        self.assertEqual(driver.scripts, [])  # the JavaScript click was not needed
+        self.assertNotIn("arguments[0].click();", " ".join(driver.scripts))
 
     def test_submit_reports_failure_when_nothing_activates_the_button(self) -> None:
         button = MagicMock()

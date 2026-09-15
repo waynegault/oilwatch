@@ -109,8 +109,17 @@ store_supplier_credentials(
 | Regency Oils / Connon Bros / Johnson Oils | `FuelsoftConnector` | ✅ Ready |
 | HomeFuels Direct | `HomeFuelsDirectBrowserConnector` | ✅ Ready |
 | Rix | `RixBrowserConnector` | ✅ Ready |
-| Scottish Fuels | `ScottishFuelsBrowserConnector` | ✅ Ready |
+| Scottish Fuels | `ScottishFuelsBrowserConnector` | ⚠️ Ready — sign-in is intermittent |
 | ValueOils | `ValueOilsBrowserConnector` | ✅ Working |
+
+Scottish Fuels is the one supplier whose quote needs an authenticated session,
+and its sign-in is **intermittent**: the site's own submit handler often swallows
+the Sign In click, so nothing is posted and the attempt fails with no error from
+the page. The connector verifies that the form was actually submitted, retries on
+a fresh navigation, and logs what the page showed when it still fails — so expect
+`manual_action_required` for this supplier sometimes (see PROGRESS.md,
+2026-09-15). It runs **headful** on purpose: reCAPTCHA scores a headless browser
+too low.
 
 ### How It Works
 
@@ -259,9 +268,21 @@ The API discovery tool found these endpoints:
 **Symptom:** "Login failed" or "Invalid credentials"
 
 **Solutions:**
-1. Check credentials in `config/supplier_credentials.json`
+1. Check the credentials were ever stored — `oilwatch register` writes them, and
+   the store is DPAPI-encrypted, so it cannot simply be read as text
 2. Manually verify login works with stored credentials
+   (`.venv\Scripts\python -m oilwatch.cli login <supplier>`)
 3. Supplier may have changed login form - update connector
+
+**Scottish Fuels specifically:** its sign-in is intermittent and the credentials
+are usually not the problem. A Chrome DevTools capture showed the site's own
+submit handler swallowing the click, so **no POST is sent at all** — the page
+simply sits there. A failed attempt logs `sign-in did not take` with the landed
+URL, whether the login form is still present, the reCAPTCHA field *lengths* and
+the page text; read that before changing anything. The session cookie lasts about
+15 minutes, so a mid-sweep re-sign-in is routine rather than exceptional, and
+`.venv\Scripts\python -m oilwatch.cli login scottish_fuels` still re-establishes
+a session by hand when needed.
 
 ### Price Extraction Fails
 
@@ -284,7 +305,11 @@ The API discovery tool found these endpoints:
   the next save
 
 ### Browser Automation
-- Runs in headless mode by default
+- Playwright connectors run in headless mode by default; the Selenium ones
+  (`browser_auth`, and therefore Scottish Fuels) run **headful** deliberately,
+  because reCAPTCHA scores a headless browser too low
+- Page loads are bounded (`PAGE_LOAD_TIMEOUT_S`), so a stalled third-party script
+  fails the step instead of blocking the run indefinitely
 - User-agent spoofed to avoid bot detection
 - A persistent Chrome profile (`--user-data-dir`) is what carries the login
   session between runs; cookies are also written to JSON as a backup, but nothing
@@ -327,11 +352,14 @@ oilwatch/
 ## Quick Reference
 
 ```powershell
-# View stored credentials
-cat config/supplier_credentials.json
+# Stored credentials are DPAPI-encrypted, so they cannot be read as text; set
+# them with `oilwatch register` and check the store through oilwatch.credentials
 
-# Test browser quote (ValueOils)
-.venv\Scripts\python -m oilwatch.cli quote 2 --postcode "AB21 0YA"
+# Test browser quote (Scottish Fuels) — this one needs the stored session
+.venv\Scripts\python -m oilwatch.cli quote 1 --postcode "AB21 0YA" --browser
+
+# Re-establish that session by hand if the automatic sign-in will not take
+.venv\Scripts\python -m oilwatch.cli login scottish_fuels
 
 # Discover APIs
 .venv\Scripts\python -m oilwatch.cli api-discover --supplier-id 1

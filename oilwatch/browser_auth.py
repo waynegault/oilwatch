@@ -28,6 +28,7 @@ import platform
 import time
 import winreg
 from pathlib import Path
+from typing import Any
 
 from oilwatch.logging_setup import get_logger
 
@@ -52,6 +53,21 @@ SUBMIT_SELECTORS = (
     "button[type='submit']",
     "input[type='submit']",
 )
+
+#: Seconds a single page load may take before it is treated as a failure.
+#: Measured loads on this site run 2-25s; the bound exists so a stalled
+#: third-party script cannot block a sign-in indefinitely.
+PAGE_LOAD_TIMEOUT_S = 60
+
+#: Planted on the page before a Sign In interaction. A navigation discards it,
+#: so its survival is the only local evidence that nothing was submitted.
+_SUBMIT_MARKER_FLAG = "__oilwatchSubmitMark"
+_SUBMIT_MARKER_JS = f"window.{_SUBMIT_MARKER_FLAG} = true;"
+#: How long a submission may take to start before it is judged not to have
+#: happened. Generous on purpose: repeating a submit that was merely slow is
+#: worse than waiting, so this is a ceiling, not an expectation.
+SUBMIT_SETTLE_S = 8.0
+SUBMIT_POLL_S = 0.25
 
 # undetected-chromedriver imports distutils, which was removed from the stdlib
 # in Python 3.12+. Importing setuptools first provides the distutils shim.
@@ -139,7 +155,14 @@ class BrowserAuth:
         self._reset_preferences()
         kwargs: dict[str, object] = {
             "options": self._options(headless),
-            "use_subprocess": False,
+            # uc's ``use_subprocess=False`` starts Chrome through a
+            # multiprocessing helper and then waits on a pipe for the pid with
+            # no timeout. Inside a long-running threaded server — the MCP one —
+            # that helper never reports back, so ``recv()`` blocks for ever and
+            # the whole price sweep hangs with no error at all. ``True`` is uc's
+            # own default and starts Chrome with a plain subprocess, so a launch
+            # that fails says so instead of hanging.
+            "use_subprocess": True,
             "suppress_welcome": True,
         }
         # Pin chromedriver to the installed Chrome, as Ancestry does: a mismatched
@@ -149,6 +172,12 @@ class BrowserAuth:
         if chrome_major is not None:
             kwargs["version_main"] = chrome_major
         self.driver = uc.Chrome(**kwargs)
+        # Every step of this flow is a page load, and a third-party script that
+        # never finishes would otherwise block one for as long as it likes — a
+        # sign-in that stalled past 15 minutes was observed. Bounding the load
+        # turns that into an error the caller already reports. Measured loads on
+        # this site run 2-25s, so this is headroom rather than a budget.
+        self.driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT_S)
         return self.driver
 
     def cookies_path(self) -> Path:
@@ -246,6 +275,7 @@ class BrowserAuth:
         self._set_field_value(driver, password_field, password)
 
         time.sleep(wait_before_submit)  # let the reCAPTCHA token populate
+        log.debug("reCAPTCHA state before submitting: %s", self._recaptcha_state(driver))
 
         submit = self._find_first(driver, SUBMIT_SELECTORS)
         if submit is None:
@@ -259,7 +289,70 @@ class BrowserAuth:
         if not self._submit_sign_in(driver, submit, password_field):
             raise RuntimeError(f"Could not activate the Sign In button on {url}")
 
-        return self._wait_until_authenticated(driver, wait_after_submit)
+        if self._wait_until_authenticated(driver, wait_after_submit):
+            return True
+
+        # A bare "did not take" cannot tell a rejected credential from a
+        # reCAPTCHA token that never populated from a click the page ignored, so
+        # the page is described instead — as a failed price parse is.
+        self._log_sign_in_failure(driver, url)
+        return False
+
+    @staticmethod
+    def _recaptcha_state(driver) -> dict[str, Any]:
+        """What reCAPTCHA has actually put on the page — lengths, never values.
+
+        reCAPTCHA delivers its token into a ``g-recaptcha-response`` field, so
+        that is what says whether the widget has minted anything yet; an empty
+        one is the whole diagnostic. Only lengths are reported: the token is a
+        single-use credential.
+        """
+        return driver.execute_script(
+            """
+            const lengths = (sel) => Array.from(document.querySelectorAll(sel))
+                .map(e => (e.value || '').length);
+            return {
+                recaptcha: lengths("textarea[name='g-recaptcha-response'], #g-recaptcha-response"),
+                token: lengths("input[name='token']"),
+                forms: document.querySelectorAll("form").length,
+            };
+            """
+        )
+
+    @classmethod
+    def _log_sign_in_failure(cls, driver, url: str) -> None:
+        """Record what the page actually showed when a sign-in did not take."""
+        from selenium.webdriver.common.by import By
+
+        def safe(read, default):
+            try:
+                return read()
+            except Exception as exc:  # noqa: BLE001 - diagnostics must not hide the real error
+                return f"<unreadable: {exc}>"
+
+        body = safe(lambda: driver.find_element(By.TAG_NAME, "body").text, "") or ""
+        log.warning(
+            "sign-in did not take. requested=%s landed=%s title=%r "
+            "still_on_login_form=%s recaptcha=%s recaptcha_widgets=%s; "
+            "page text follows:\n%s",
+            url,
+            safe(lambda: driver.current_url, "<unreadable>"),
+            safe(lambda: driver.title, "<unreadable>"),
+            safe(
+                lambda: cls._find_first(driver, EMAIL_SELECTORS, timeout=0) is not None,
+                "<unreadable>",
+            ),
+            safe(lambda: cls._recaptcha_state(driver), "<unreadable>"),
+            safe(
+                lambda: len(
+                    driver.find_elements(
+                        By.CSS_SELECTOR, ".g-recaptcha, iframe[src*='recaptcha']"
+                    )
+                ),
+                "<unreadable>",
+            ),
+            body[:2000],
+        )
 
     @classmethod
     def _wait_until_authenticated(
@@ -279,28 +372,60 @@ class BrowserAuth:
                 time.sleep(interval)
         return False
 
-    @staticmethod
-    def _submit_sign_in(driver, button, password_field) -> bool:
-        """Activate Sign In using the most human interaction available."""
+    @classmethod
+    def _submit_sign_in(cls, driver, button, password_field) -> bool:
+        """Activate Sign In, and insist that something was actually submitted.
+
+        A click that does not raise has not necessarily submitted anything: the
+        page's own handler can swallow the event and leave the login form
+        sitting there, with no request sent and no error to see. Trusting the
+        absence of an exception therefore leaves the Enter and JavaScript-click
+        fallbacks unreachable in exactly the case they exist for, so each
+        interaction must be followed by the page actually moving on. The settle
+        time is deliberately generous: an interaction whose submission is
+        merely slow must be judged to have worked rather than repeated.
+        """
         from selenium.common.exceptions import WebDriverException
         from selenium.webdriver.common.keys import Keys
 
-        try:
-            button.click()
-            return True
-        except WebDriverException as exc:
-            log.debug("plain click on Sign In failed (%s); trying Enter", exc)
-        try:
-            password_field.send_keys(Keys.ENTER)
-            return True
-        except WebDriverException as exc:
-            log.debug("Enter in the password field failed (%s); falling back to JS click", exc)
-        try:
-            driver.execute_script("arguments[0].click();", button)
-            return True
-        except WebDriverException as exc:
-            log.debug("JS click on Sign In failed too: %s", exc)
-            return False
+        interactions = (
+            ("click", lambda: button.click()),
+            ("Enter in the password field", lambda: password_field.send_keys(Keys.ENTER)),
+            ("JavaScript click", lambda: driver.execute_script("arguments[0].click();", button)),
+        )
+        for name, interact in interactions:
+            try:
+                driver.execute_script(_SUBMIT_MARKER_JS)
+                interact()
+            except WebDriverException as exc:
+                log.debug("%s on Sign In failed: %s", name, exc)
+                continue
+            if cls._page_moved_on(driver):
+                return True
+            log.debug("%s on Sign In did not submit the form; trying the next", name)
+        log.warning("no Sign In interaction submitted the login form")
+        return False
+
+    @classmethod
+    def _page_moved_on(cls, driver, *, settle_s: float = SUBMIT_SETTLE_S) -> bool:
+        """Whether the page navigated since the submit marker was planted.
+
+        A navigation tears down the page's execution context, so a script that
+        raises here is evidence the page moved rather than evidence of failure.
+        Bounded by a poll *count*, so a stubbed sleep cannot spin the wait.
+        """
+        from selenium.common.exceptions import WebDriverException
+
+        polls = max(1, int(settle_s / SUBMIT_POLL_S))
+        for poll in range(polls):
+            try:
+                if not driver.execute_script(f"return Boolean({_SUBMIT_MARKER_FLAG});"):
+                    return True
+            except WebDriverException:
+                return True
+            if poll < polls - 1:
+                time.sleep(SUBMIT_POLL_S)
+        return False
 
     @staticmethod
     def _set_field_value(
