@@ -15,7 +15,7 @@ OilWatch solves the problem of finding the best price for domestic heating oil (
 | Feature | Description | Status |
 |---------|-------------|--------|
 | **Supplier Discovery** | Finds local suppliers via web search, filters by 50-mile radius | ✅ Complete |
-| **Automated Quotes** | HTTP scraping + browser automation extract live prices | ✅ 8 suppliers live |
+| **Automated Quotes** | HTTP scraping + browser automation extract live prices | ✅ 10 suppliers reached automatically |
 | **Price Comparison** | Compares all suppliers, identifies cheapest option | ✅ Complete |
 | **Historical Tracking** | Stores quote history for trend analysis | ✅ Complete |
 | **Market Charts** | Generates price movement charts over time | ✅ Complete |
@@ -24,23 +24,25 @@ OilWatch solves the problem of finding the best price for domestic heating oil (
 
 ### Current Automation Status
 
-Verified 2026-09-10: a single `quote-all` run collected live prices from **8
-suppliers** through named connectors. Prices move daily, so this records *how*
-each supplier is reached rather than what it charges — run `oilwatch cheapest`
-for today's figures.
+Each supplier below was collected live on **2026-09-15**. Prices move daily, so
+this records *how* each supplier is reached rather than what it charges — run
+`oilwatch cheapest` for today's figures. The full list, including the
+phone/email-only suppliers and the connector each domain resolves to, is in
+`user-guide.md` §6 and §9.
 
 | Supplier | Reached by | Notes |
 |----------|-----------|-------|
 | **ValueOils** | HTTP scrape (`valueoils_auto`) | Regional price table |
 | **HomeFuels Direct** | HTTP scrape (`homefuels_live_price`) | Live price element |
 | **Fueltool** | HTTP scrape (`fueltool`) | UK-average benchmark, not a local supplier |
-| **Rix** | Browser (`rix_browser`) | Remix quote tool |
+| **Highland Fuels** | HTTP scrape (`highland_fuels`) | IQO XML quote API — needs the postcode |
+| **Rix** | Browser (`rix_browser`) | Remix quote tool; its form requires a phone number |
 | **Regency Oils** | Browser (`fuelsoft`) | Fuelsoft WEBPLUS |
 | **Connon Bros** | Browser (`fuelsoft`) | Fuelsoft WebOrdering |
 | **Johnson Oils** | Browser (`fuelsoft`) | Fuelsoft WebOrdering |
-| **Highland Fuels** | HTTP scrape (`highland_fuels`) | IQO XML quote API |
-| **Scottish Fuels** | Browser (`scottish_fuels_browser`) + email replies | Needs a live login session — see Known Issues |
-| **Oilfast Insch, Turriff, Carnegie, Brogan** | Phone / email | No scrapable quote; see `oilwatch phone-script` |
+| **Scottish Fuels** | Browser (`scottish_fuels_browser`) + email replies | Session lasts ~15 min; re-signs in automatically |
+| **BoilerJuice** | Browser (`boilerjuice_browser`) + email replies | Broker/aggregator; quotes by email too |
+| **Oilfast Insch, Turriff, Carnegie, Compass, Nationwide, Crown, Gleaner** | Phone / email | No scrapable quote; see `oilwatch phone-script` |
 
 Brogan Fuels trades as part of Scottish Fuels, so the Scottish Fuels figure
 covers it. Where a supplier replies to an enquiry by email, `oilwatch
@@ -344,53 +346,21 @@ Grouped by *how* each supplier is reached rather than by what it charges today �
 run `oilwatch cheapest` for current figures. Hardcoded prices used to live here
 and rotted within weeks.
 
-### Automated (live prices collected)
+The supplier-by-supplier detail — the connector each domain resolves to, its
+endpoint, and the contact details the phone and enquiry flows use — is in
+**`user-guide.md` §6 and §9**. In short:
 
-| # | Supplier | Reached by | Website |
-|---|----------|-----------|---------|
-| 1 | ValueOils | HTTP scrape (`valueoils_auto`) | https://www.valueoils.com/Quote.aspx |
-| 2 | HomeFuels Direct | HTTP scrape (`homefuels_live_price`) | https://homefuelsdirect.co.uk/home/heating-oil-prices/aberdeenshire |
-| 3 | Fueltool — *UK-average benchmark, not a local supplier* | HTTP scrape (`fueltool`) | https://www.fueltool.co.uk/ |
-| 4 | Rix | Browser (`rix_browser`) | https://www.rix.co.uk/locations/aberdeen-depot |
-| 5 | Regency Oils | Browser (`fuelsoft`) | https://www.regencyoils.com/ |
-| 6 | Connon Bros | Browser (`fuelsoft`) | https://connon.fuelsoft.co.uk/ |
-| 7 | Johnson Oils | Browser (`fuelsoft`) | https://oilweb.johnstonfuels.co.uk/ |
-| 8 | Highland Fuels | HTTP scrape (`highland_fuels`, IQO XML) | https://www.highlandfuels.co.uk/home-heating |
-| 9 | Scottish Fuels | Browser (`scottish_fuels_browser`) plus email replies | https://quote.scottishfuels.co.uk/quote/ |
+- **HTTP scrape:** ValueOils, HomeFuels Direct, Fueltool, Highland Fuels.
+- **Browser, driving the supplier's own form:** Rix, Regency Oils, Connon Bros,
+  Johnson Oils, Scottish Fuels, BoilerJuice.
+- **Enquiry form, then emailed reply:** Gleaner Oils (wpforms), Oilfast Insch,
+  Compass Fuels (EasyOil), Nationwide Fuels, Crown Oil.
+- **Phone only:** Turriff Fuels (01888 562706), Carnegie Fuels (01356 648 648,
+  info@carnegiefuels.co.uk — its online ordering is suspended by its own
+  notice), Brogan Fuels (0345 300 8844, domestic@brogans.co.uk).
 
-Scottish Fuels needs a live login session: `/quote/` answers 302 to its account
-page once the session lapses, and the connector reports that rather than failing
-obscurely. Re-establish it with `oilwatch login scottish_fuels`.
-
-BoilerJuice has a browser connector that is written but not yet collecting a
-price. Supplier accounts, where required, live in
-`config/supplier_credentials.json` (gitignored).
-
-### Quote by enquiry form, then email
-
-These have no scrapeable price page. `oilwatch submit-requests` fills the form;
-`oilwatch monitor-email` then records the reply price and deletes the message.
-Each also has a phone number available through `oilwatch phone-script`.
-
-| Supplier | Form platform |
-|----------|---------------|
-| Gleaner Oils | wpforms |
-| Oilfast Insch | enquiry form |
-| Compass Fuels | EasyOil |
-| Nationwide Fuels | enquiry form |
-| Crown Oil | enquiry form |
-
-### Phone only
-
-| Supplier | Phone | Email |
-|----------|-------|-------|
-| Turriff Fuels | 01888 562706 | — |
-| Carnegie Fuels | 01356 648 648 | info@carnegiefuels.co.uk |
-| Brogan Fuels | 0345 300 8844 | domestic@brogans.co.uk |
-
-Carnegie's online ordering is suspended by its own notice, which points
-customers at phone/email. Brogan Fuels trades as part of Scottish Fuels, so the
-Scottish Fuels figure covers it.
+Supplier accounts, where required, live in `config/supplier_credentials.json`
+(gitignored). Scottish Fuels needs a live session; see §7 of the user guide.
 
 ---
 
@@ -471,12 +441,11 @@ envelope looks like this (`blob` is base64-encoded binary ciphertext):
 
 ```
 Oil Price Webscraper/
-├── README.md                    # This file
+├── README.md                    # This file - overview, install, CLI/MCP reference
+├── user-guide.md                # Day-to-day use, supplier reference, sign-in, agent brief
+├── inspection.md                # Repeatable audit checklist for this repo
 ├── ROADMAP.md                   # Development roadmap
 ├── PROGRESS.md                  # Current progress status
-├── BROWSER_AUTOMATION.md        # Browser automation guide
-├── SUPPLIER_CONNECTORS.md       # Supplier connectors and contacts
-├── OPENCLAW_AGENT_PROMPT.md     # Brief for an agent driving OilWatch
 ├── pyproject.toml               # Package configuration
 ├── config/
 │   ├── settings.example.json    # Copy to settings.json (gitignored)
@@ -597,10 +566,9 @@ python -m oilwatch.cli phone-script --postcode "AB21 0YA"
 
 | Document | Purpose |
 |----------|---------|
-| `README.md` | This file - overview and quick start |
-| `BROWSER_AUTOMATION.md` | Browser automation details |
-| `SUPPLIER_CONNECTORS.md` | Supplier connectors and contact details |
-| `OPENCLAW_AGENT_PROMPT.md` | Brief to hand an agent (OpenClaw / Hal) that uses OilWatch |
+| `README.md` | This file - overview, install, CLI and MCP reference |
+| `user-guide.md` | Day-to-day use: prices, ordering, the supplier reference, accounts and sign-in, troubleshooting, and the brief to hand an AI agent |
+| `inspection.md` | Repeatable audit checklist for this repository |
 | `ROADMAP.md` | Future development plans |
 | `PROGRESS.md` | Current implementation status |
 
@@ -612,7 +580,7 @@ MIT License
 
 ---
 
-**Last Updated:** 2026-09-10
+**Last Updated:** 2026-09-15
 **Version:** 0.1.0
 **Location:** Hatton of Fintray, Aberdeenshire, Scotland (AB21 0YA)
 
