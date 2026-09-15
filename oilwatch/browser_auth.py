@@ -240,6 +240,11 @@ class BrowserAuth:
             if self._attempt_sign_in(
                 driver, url, email, password, wait_before_submit, wait_after_submit
             ):
+                # Say so. The failure paths below log loudly, so silence here was
+                # read as "the sign-in did not take" even when it had — the token
+                # being empty and the first two interactions being ignored are
+                # normal noise on the way to a success.
+                log.info("%s: signed in", self.name)
                 return True
             if attempt < attempts:
                 log.warning("sign-in attempt %d did not take; retrying once", attempt)
@@ -401,6 +406,7 @@ class BrowserAuth:
                 log.debug("%s on Sign In failed: %s", name, exc)
                 continue
             if cls._page_moved_on(driver):
+                log.debug("%s on Sign In submitted the form", name)
                 return True
             log.debug("%s on Sign In did not submit the form; trying the next", name)
         log.warning("no Sign In interaction submitted the login form")
