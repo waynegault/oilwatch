@@ -50,6 +50,15 @@ LOGIN_PAGE_MARKERS = ("/customer/account/login", "/login")
 # Labels that identify a kerosene-type product when the configured SKU is gone.
 KEROSENE_LABELS = ("kerosene", "heating oil", "premium")
 
+#: A rendered quote line, e.g.
+#: ``Premium Kerosene 1000 116.99p (Excl. VAT) £1169.90 £58.50 £1228.40`` —
+#: quantity, ex-VAT pence per litre, then ex-VAT / VAT / inc-VAT totals.
+QUOTE_ROW_RE = re.compile(
+    r"(\d+)\s+(\d+(?:\.\d{1,2})?)p\s*\(Excl\.?\s*VAT\)\s+"
+    r"£([\d,]+\.\d{2})\s+£([\d,]+\.\d{2})\s+£([\d,]+\.\d{2})",
+    re.IGNORECASE,
+)
+
 
 class ScottishFuelsBrowserConnector(BaseConnector):
     quote_url = "https://quote.scottishfuels.co.uk/quote/"
@@ -148,10 +157,12 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                 )
                 time.sleep(0.5)
 
-                # quantity
-                qty = driver.find_element(By.CSS_SELECTOR, "input[name='quantity']")
-                qty.clear()
-                qty.send_keys(str(quantity_liters))
+                # quantity. The control arrives pre-filled with the order size,
+                # and the page's own validation rewrites an emptied one to its
+                # 500 L minimum — so it is never cleared. Clearing it silently
+                # turned every 1000 L quote into a 500 L one, which was then
+                # still reported, and priced, as 1000 L.
+                self.set_quantity(driver, quantity_liters)
                 time.sleep(0.5)
 
                 # Get Quote
@@ -183,7 +194,8 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                 "Not signed in. Run `oilwatch login scottish_fuels` once to establish a session.",
             )
 
-        ex_vat_price = self.parse_ppl(body_text)
+        quoted = self.parse_quote_row(body_text)
+        ex_vat_price = (quoted or {}).get("price_ex_vat") or self.parse_ppl(body_text)
         if ex_vat_price is None:
             # Say what the page actually held. A parse that quietly reports "no
             # price" is indistinguishable from a page that has none, and the
@@ -195,26 +207,40 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             )
             return self._manual(supplier, quantity_liters, "Could not find a price on the quote result page.")
 
-        price_per_liter, total_price = inclusive_price_and_total(ex_vat_price, quantity_liters)
+        # What the site states, not what we multiply out: its own inclusive
+        # total for the quantity it quoted, with the per-litre rate derived from
+        # that so the two can never disagree.
+        quoted_quantity = (quoted or {}).get("quantity") or quantity_liters
+        if quoted and quoted["inc_vat_total"] > 0:
+            total_price = quoted["inc_vat_total"]
+            price_per_liter = round(total_price / quoted_quantity, 4)
+        else:
+            price_per_liter, total_price = inclusive_price_and_total(ex_vat_price, quoted_quantity)
         sku_note = "" if chosen_sku == configured_sku else f" (configured {configured_sku}, used {chosen_sku})"
+        basis = f"{quoted_quantity}L"
+        if quoted_quantity != quantity_liters:
+            basis += f" (asked for {quantity_liters}L; the site quoted {quoted_quantity}L)"
         return QuoteResult(
             supplier_id=int(supplier["id"]),
             supplier_name=supplier["name"],
             observed_at=self.now(),
-            quantity_liters=quantity_liters,
+            quantity_liters=quoted_quantity,
             status="ok",
             price_per_liter=price_per_liter,
             total_price=total_price,
             source="scottish_fuels_browser",
             notes=(
-                f"Fresh quote from Scottish Fuels for {quantity_liters}L "
-                f"(ex-VAT £{ex_vat_price:.4f}/L, inc-VAT £{price_per_liter:.4f}/L). "
+                f"Fresh quote from Scottish Fuels for {basis} "
+                f"(ex-VAT £{ex_vat_price:.4f}/L, inc-VAT £{price_per_liter:.4f}/L; "
+                f"site total £{total_price:.2f} inc VAT). "
                 f"Postcode: {postcode}. Product SKU: {chosen_sku}{sku_note}."
             ),
             raw_payload={
                 "quote_url": self.quote_url,
                 "postcode": postcode,
                 "price_ex_vat": ex_vat_price,
+                "quoted_quantity": quoted_quantity,
+                "inc_vat_total": total_price,
                 "product_sku": chosen_sku,
                 "configured_product_sku": configured_sku,
                 "product_options": options,
@@ -292,6 +318,54 @@ class ScottishFuelsBrowserConnector(BaseConnector):
         if not values:
             return None
         return pence_to_pounds(min(values))
+
+    @staticmethod
+    def parse_quote_row(text: str) -> dict[str, float] | None:
+        """The site's own quote line: the quantity, rate and totals it states.
+
+        Read so the figure reported is what Scottish Fuels actually quoted —
+        including its own inclusive total for the quantity it quoted — rather
+        than our multiplication of a per-litre rate by the quantity we asked
+        for. ``None`` when no full row is present, and the per-litre parse is
+        used instead.
+        """
+        match = QUOTE_ROW_RE.search(text)
+        if not match:
+            return None
+        quantity, ppl, ex_vat, vat, inc_vat = match.groups()
+        return {
+            "quantity": int(quantity),
+            "price_ex_vat": pence_to_pounds(float(ppl)),
+            "ex_vat_total": float(ex_vat.replace(",", "")),
+            "vat": float(vat.replace(",", "")),
+            "inc_vat_total": float(inc_vat.replace(",", "")),
+        }
+
+    @staticmethod
+    def set_quantity(driver, quantity_liters: int) -> int | None:
+        """Set the order size without emptying the field, and say what stuck.
+
+        The control arrives pre-filled, and this page rewrites an emptied one to
+        its own 500 L minimum, so clearing it changes what is being quoted. It
+        is therefore only touched when it differs from what was asked, and then
+        through the DOM with the events the page listens for. Returns the value
+        the control holds afterwards — the page clamps to its own min/max/step —
+        or ``None`` when there is no quantity control at all.
+        """
+        from selenium.webdriver.common.by import By
+
+        control = driver.find_element(By.CSS_SELECTOR, "input[name='quantity']")
+        wanted = str(quantity_liters)
+        if (control.get_attribute("value") or "") != wanted:
+            driver.execute_script(
+                "arguments[0].value = arguments[1];"
+                "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));"
+                "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
+                control,
+                wanted,
+            )
+        current = control.get_attribute("value") or ""
+        return int(current) if current.isdigit() else None
 
     def _wait_for_quote_form(self, driver) -> None:
         """Wait for the quote form (or a bounced sign-in page) to render.

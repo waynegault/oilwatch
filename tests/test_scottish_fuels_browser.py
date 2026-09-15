@@ -71,7 +71,7 @@ class FakeDriver:
         self.urls: list[str] = []
         self.scripts: list[str] = []
         self.gets = 0
-        self.quantity = FakeWebElement()
+        self.quantity = FakeWebElement(value="1000")
         self.radios = radios if radios is not None else [FakeRadio("3302", "Kerosene 28s")]
 
     def get(self, url: str) -> None:
@@ -93,6 +93,10 @@ class FakeDriver:
             if radio.label_lookup_fails:
                 raise RuntimeError("stale element reference")
             return radio.label
+        if args and "arguments[0].value = arguments[1]" in script:
+            # The DOM set the connector uses instead of clear()+send_keys().
+            args[0]._value = args[1]
+            return None
         if args and "click" in script and self._after_quote_url:
             # Submitting the quote is what bounces a dead session to sign-in.
             self.current_url = self._after_quote_url
@@ -146,9 +150,53 @@ class ScottishFuelsBrowserConnectorTests(unittest.TestCase):
         self.assertAlmostEqual(result.price_per_liter, 1.0608, places=4)
         self.assertEqual(result.raw_payload["product_sku"], "3302")
         self.assertEqual(result.raw_payload["configured_product_sku"], "451")
-        self.assertEqual(driver.quantity.sent, ["1000"])
+        # The quantity control arrives pre-filled. Clearing it made the page
+        # rewrite it to its own 500 L minimum, so a 1000 L order was quoted as
+        # 500 L and still reported as 1000 L. It must be left alone.
+        self.assertEqual(driver.quantity.cleared, 0)
+        self.assertEqual(driver.quantity.sent, [])
         self.assertEqual(driver.urls[0], QUOTE_URL)
         self.auth.close.assert_called_once()
+
+    def test_the_sites_own_totals_are_used_for_the_quote(self) -> None:
+        """The number reported is what Scottish Fuels quoted, not our sum."""
+        driver = FakeDriver(
+            body_text=(
+                "Your quote\n"
+                "Premium Kerosene 1000 116.99p (Excl. VAT) £1169.90 £58.50 £1228.40\n"
+                "Logout"
+            )
+        )
+        result = self._quote(driver)
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.quantity_liters, 1000)
+        self.assertAlmostEqual(result.price_per_liter, 1.2284, places=4)
+        self.assertAlmostEqual(result.total_price, 1228.40, places=2)
+
+    def test_a_different_quoted_quantity_is_reported_not_relabelled(self) -> None:
+        """If the site quotes 500 L, saying 1000 L would be a wrong answer."""
+        driver = FakeDriver(
+            body_text="Premium Kerosene 500 116.99p (Excl. VAT) £584.95 £29.25 £614.20\nLogout"
+        )
+        result = self._quote(driver)
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.quantity_liters, 500)
+        self.assertAlmostEqual(result.total_price, 614.20, places=2)
+        self.assertIn("asked for 1000L", result.notes)
+
+    def test_a_prefilled_quantity_that_differs_is_set_through_the_dom(self) -> None:
+        driver = FakeDriver(
+            body_text="Premium Kerosene 1000 116.99p (Excl. VAT) £1169.90 £58.50 £1228.40\nLogout"
+        )
+        driver.quantity._value = "500"  # a stale/prefilled value
+        result = self._quote(driver)
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(driver.quantity.get_attribute("value"), "1000")
+        self.assertEqual(driver.quantity.cleared, 0)
+        self.assertEqual(driver.quantity.sent, [])
 
     def test_logged_out_page_is_manual(self) -> None:
         result = self._quote(FakeDriver(body_text="Please sign in to continue"))
