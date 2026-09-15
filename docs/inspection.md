@@ -24,7 +24,7 @@ In scope for every audit pass:
 - `*.bat` launchers — `oilwatch_env.bat`, `start_mcp_server.bat`,
   `start_scheduler.bat`, `monitor_email.bat`
 - `pyproject.toml` — dependencies, coverage floor, console scripts
-- `README.md`, `user-guide.md`, `inspection.md`, `PROGRESS.md`, `ROADMAP.md`
+- `README.md`, `user-guide.md`, `docs/inspection.md`, `PROGRESS.md`, `ROADMAP.md`
 - `data/oilwatch.sqlite` and `data/oilwatch.log` — generated, gitignored: read
   for content, never commit
 - `.gitignore`
