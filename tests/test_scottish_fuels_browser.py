@@ -11,7 +11,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from oilwatch.connectors.suppliers.scottish_fuels_browser import ScottishFuelsBrowserConnector
+from oilwatch.connectors.suppliers.scottish_fuels_browser import (
+    ScottishFuelsBrowserConnector,
+)
 
 SUPPLIER = {"id": 3, "name": "Scottish Fuels", "website": "https://scottishfuels.co.uk"}
 QUOTE_URL = "https://quote.scottishfuels.co.uk/quote/"
@@ -147,7 +149,9 @@ class ScottishFuelsBrowserConnectorTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "scottish_fuels_browser")
         # 101.03p ex-VAT -> £1.0103 -> +5% VAT -> £1.0608.
-        self.assertAlmostEqual(result.price_per_liter, 1.0608, places=4)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.0608, places=4)
         self.assertEqual(result.raw_payload["product_sku"], "3302")
         self.assertEqual(result.raw_payload["configured_product_sku"], "451")
         # The quantity control arrives pre-filled. Clearing it made the page
@@ -171,8 +175,12 @@ class ScottishFuelsBrowserConnectorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.quantity_liters, 1000)
-        self.assertAlmostEqual(result.price_per_liter, 1.2284, places=4)
-        self.assertAlmostEqual(result.total_price, 1228.40, places=2)
+        price_per_liter = result.price_per_liter
+        total_price = result.total_price
+        assert price_per_liter is not None
+        assert total_price is not None
+        self.assertAlmostEqual(price_per_liter, 1.2284, places=4)
+        self.assertAlmostEqual(total_price, 1228.40, places=2)
 
     def test_a_different_quoted_quantity_is_reported_not_relabelled(self) -> None:
         """If the site quotes 500 L, saying 1000 L would be a wrong answer."""
@@ -183,7 +191,9 @@ class ScottishFuelsBrowserConnectorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.quantity_liters, 500)
-        self.assertAlmostEqual(result.total_price, 614.20, places=2)
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, 614.20, places=2)
         self.assertIn("asked for 1000L", result.notes)
 
     def test_a_prefilled_quantity_that_differs_is_set_through_the_dom(self) -> None:
