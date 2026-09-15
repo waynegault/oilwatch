@@ -159,20 +159,32 @@ suppliers whose only priced row came from the spreadsheet import won on
   not from the headline `ppl`, which is ex-VAT and omits the charge.
 - **Phone-only:** Oilfast Insch, Turriff Fuels, Brogan Fuels, Carnegie Fuels,
   Compass Fuels, Gleaner Oils, Highland Fuels.
-- **Scheduled:** the per-user Startup entry `OilWatch Scheduler.bat` runs
-  `start_scheduler.bat` -> `oilwatch schedule` at logon, so quotes, discovery and
-  the email sweep all follow `config/settings.json` (quotes daily, discovery
-  weekly, email hourly on weekdays); `monitor_email.bat` runs one email sweep by
-  hand. The hourly email task is kept alongside the scheduler as a fallback: the
-  sweep is idempotent, so a double run costs nothing, while the scheduler is a
-  single process that stops everything if it dies. **Resolved 2026-09-13:** a
+- **On demand, not on a timer (changed 2026-09-15).** Prices are refreshed when
+  someone asks for them — `oilwatch quote-all --browser`, `refresh_prices` over
+  MCP, or an agent turn — rather than on a schedule. The scheduler's per-user
+  Startup entry (`…\Startup\OilWatch Scheduler.bat`) was therefore renamed to
+  `.disabled`, at Wayne's direction: *"we should only start the scheduler when we
+  want new prices … on a cli or agent request basis, not a scheduled basis."* The
+  capability is unchanged, so `oilwatch schedule` and `start_scheduler.bat`
+  remain for a deliberate run, where quotes follow `config/settings.json`
+  (daily), discovery weekly, and the email sweep hourly on weekdays.
+  **Resolved 2026-09-15:** the entry had been enabled (`StartupApproved` `02`)
+  and no `oilwatch schedule` process was running; it was found while checking
+  something else, and the policy above settled it. Note that an empty
+  `data/oilwatch.log` proves nothing about whether the scheduler ran — a file
+  opened in append mode does not move its mtime, so only a *written* record does.
+- **The email sweep is still scheduled, and is a separate mechanism.** Its own
+  Task Scheduler entry (`OilWatch Email Monitor`, hourly, 08:00-18:00 Mon-Fri) is
+  unaffected by the scheduler decision above; `monitor_email.bat` runs one sweep
+  by hand. It is kept as a fallback: the sweep is idempotent, so a double run
+  costs nothing. **Resolved 2026-09-13:** a
   second, redundant task (`Oilwatch Monitor Email`, daily at 08:00) was deleted —
   its `/TR` was byte-identical to the hourly task's, so the hourly run already
   covered it. The surviving fallback is `Oilwatch Email Monitor`; the two
   near-identical names are worth reading twice for that reason. **Resolved
   2026-09-13:** both sweeps were then confined to **08:00-18:00 Mon-Fri**, because
   heating-oil suppliers are shut at weekends and overnight, so those runs could
-  only read an inbox the next in-window run reads anyway. The scheduler's job is
+  only read an inbox the next in-window run reads anyway. The sweep's job is
   a weekday cron rather than an open interval (`oilwatch/scheduler.py`, built
   from `email_monitor_start_hour` / `_end_hour` / `_days`); the task is a weekly
   Mon-Fri trigger with `Interval PT1H` and `Duration PT11H`. The sweep is a poll,
@@ -184,8 +196,8 @@ suppliers whose only priced row came from the spreadsheet import won on
   `ONLOGON` (Access denied), which is why logon autostart uses the Startup
   folder; and its `/TR` path must be quoted for the shell — `\"…\"` under
   `cmd.exe`, `'"…"'` under PowerShell — or it splits at the first space.
-  **Logged 2026-09-13:** both unattended runs now write a rotating log to
-  `data/oilwatch.log` (1 MB, 3 backups), because Task Scheduler and the
+  **Logged 2026-09-13:** the unattended runs write a rotating log to
+  `data/oilwatch.log` (1 MB, 3 backups), because Task Scheduler and a
   minimised Startup window leave no console to read a failure from. The path is
   written once, in `oilwatch_env.bat`, which both launchers call — a copy in each
   is the same drift the settings pair is guarded against, and `tests/test_docs.py`

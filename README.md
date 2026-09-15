@@ -159,10 +159,14 @@ purchase cannot be filed against the wrong one.
 ### Automation Commands
 
 ```powershell
-# Run continuous scheduler (daily quotes, weekly discovery)
+# Run the scheduler by hand for a while (daily quotes, weekly discovery).
+# Nothing starts it automatically: prices are refreshed on demand, so this is
+# opt-in.
 python -m oilwatch.cli schedule --postcode "AB21 0YA"
 
-# Start MCP server for AI agent integration (it also starts automatically at logon)
+# Serve the MCP tools over streamable HTTP, for a client that dials a URL.
+# OpenClaw does not need this - it spawns the server over stdio on demand - and
+# nothing starts it automatically at logon either way.
 python -m oilwatch.mcp_server
 ```
 
@@ -447,7 +451,7 @@ envelope looks like this (`blob` is base64-encoded binary ciphertext):
 | **Selector drift** | A supplier redesign silently breaks a scraper | Connectors fall back to `manual_action_required` and report what they saw; update the connector |
 | **CAPTCHA on registration** | Accounts can't be fully auto-created | One-off manual sign-in |
 | **Phone-only suppliers** | Oilfast, Turriff and Carnegie cannot be quoted automatically | `oilwatch phone-script` |
-| **Price freshness** | Stored prices age | `oilwatch quote-all`, or the daily scheduler; `cheapest` ignores quotes older than `max_quote_age_days` (code default 30; this install sets 1, because a quote stands at most a day) and lists them as `excluded_suppliers` |
+| **Price freshness** | Stored prices age | Refresh on demand — `oilwatch quote-all`, `refresh_prices` over MCP, or an agent turn; nothing is scheduled to do it; `cheapest` ignores quotes older than `max_quote_age_days` (code default 30; this install sets 1, because a quote stands at most a day) and lists them as `excluded_suppliers` |
 
 ### Technical Debt
 

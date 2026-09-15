@@ -47,6 +47,11 @@ average. So "what are prices today?" means *refresh, then read*. If a read comes
 back thin, or carries an `excluded_suppliers` list, that means the market has not
 been re-quoted today: it is a **stale snapshot, not a scrape failure**.
 
+**Nothing refreshes these on a schedule** — there is no background job keeping
+prices current (that is deliberate: prices are fetched on request). So if the
+dates are old, the refresh is yours to make, and reporting a day-old price
+without saying so is the one way to get this wrong.
+
 ## How to report a price to Wayne
 
 - **Always give the supplier's ordering URL (its `website`) next to the price**,
