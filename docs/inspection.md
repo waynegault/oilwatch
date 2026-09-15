@@ -108,10 +108,10 @@ OilWatch must never buy anything, and must not damage the host or the database.
 | 3.3 | 🔍 Schema changes are additive | Read `db.init_schema` | Migrations use `ALTER TABLE ... ADD COLUMN` and backfill, never a rewrite |
 | 3.4 | 🔧 Browser automation is opt-in | `grep -n "prefer_browser" oilwatch/connectors/suppliers/__init__.py` | Default is HTTP; a browser connector runs only when asked |
 | 3.5 | 🔍 Concurrency is capped | `grep -n "quote_max_workers" oilwatch/config.py oilwatch/service.py` | The pool is capped (default 4); no per-supplier rate limiting exists, so the cap is the guard |
-| 3.6 | 🔧 A pre-filled form control is never cleared | `grep -rn "\.clear()" oilwatch/connectors/` | Zero on a pre-filled quantity/postcode control — clearing it lets the page rewrite the value (§15.4) |
+| 3.6 | 🔧 A pre-filled form control is never cleared | `grep -rn "\.clear()" oilwatch/` | Each hit is either followed by a DOM assign with `input`/`change` events (`browser_auth._set_field_value`) or sits on a field whose value we own (`form_submit`). Clearing a site-prefilled control lets its validation rewrite the value (§15.4) |
 | 3.7 | 🔍 DB writes happen in one thread | Read `service.quote_all` | Quotes are recorded after the pool, in the calling thread, so concurrent workers cannot contend for the file |
 | 3.8 | 🔍 Backups are gitignored | Confirm any `*.sqlite.bak*` was renamed to `*.sqlite` | The ignore rule is `*.sqlite`, so a `.bak` suffix is NOT ignored and could be committed |
-| 3.9 | 🔍 Nothing is scheduled at logon | `dir "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"` | No live OilWatch entry: prices refresh on request, by design |
+| 3.9 | 🔍 Nothing is scheduled at logon | `dir /b "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"` (write the literal path if the shell rejects `%`) | No live OilWatch entry: prices refresh on request, by design |
 
 ## 4. Correctness — High
 
@@ -187,7 +187,7 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | 9.1 | 🔍 Documented counts match the code | `.venv\Scripts\python.exe -m unittest tests.test_docs -v` | Passes. `test_docs.py` reads the MCP tool count, the CLI subcommand count, the test count and the module count back out of the code |
 | 9.2 | 🔧 Counts are updated when code changes | Add a tool, a command or a test | Update `PROGRESS.md` and `ROADMAP.md` in the same commit, or the suite fails |
 | 9.3 | 🔍 The README index matches the files present | Compare the README's file tree and Support & Documentation table with `dir /b *.md` | Every listed document exists; no deleted document is still listed |
-| 9.4 | 🔧 No prices in prose | `grep -rnE "£1\.[0-9]{3}" *.md` | No hardcoded prices — they rot within weeks; link to `oilwatch cheapest` instead |
+| 9.4 | 🔧 No prices in the guide or README | `grep -rnE "£1\.[0-9]{3}" README.md user-guide.md` | No hardcoded prices — they rot within weeks; link to `oilwatch cheapest` instead. `PROGRESS.md` and `ROADMAP.md` are exempt: they are a dated record, and a price there is history, not a claim about today |
 | 9.5 | 🔍 The agent brief is current | `grep -n "openclaw mcp probe" user-guide.md` | The brief (user-guide.md §14) states the tool count and the refresh cost |
 | 9.6 | 🔍 Connector documentation matches the registries | Compare `user-guide.md` §9's domain table with `_SUPPLIER_CONNECTORS` | The same domains, the same connector names |
 | 9.7 | 🔍 Every document ends with a newline | `tail -c 1 README.md` | Ends in `0a` |
