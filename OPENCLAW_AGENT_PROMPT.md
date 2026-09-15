@@ -101,6 +101,12 @@ PYTHONUNBUFFERED=1 .venv/Scripts/python.exe -m oilwatch.cli quote-all --browser
 
 - **Never pass a `/mnt/c/...` path as an *argument*** to the Windows python: WSL
   interop translates the executable path but not argument paths. `-m` needs none.
+- **A client that builds the stdio command by splitting it on spaces cannot use
+  this path.** The repo lives under `Oil Price Webscraper`, so a client that
+  word-splits the command sees `.../Projects/Oil` and fails with
+  `spawn .../Projects/Oil ENOENT`. Give such a client a space-free wrapper (a
+  launcher that execs this venv's `python -m oilwatch.mcp_server --stdio`)
+  rather than the raw path.
 - The MCP server is **spawned per session over stdio** — there is no port to
   check and no server to start. If the tools look unhealthy,
   `openclaw mcp probe oilwatch` should report **9 tools**.
