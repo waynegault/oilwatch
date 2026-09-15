@@ -174,10 +174,21 @@ suppliers whose only priced row came from the spreadsheet import won on
   `data/oilwatch.log` proves nothing about whether the scheduler ran — a file
   opened in append mode does not move its mtime, so only a *written* record does.
 - **The email sweep is still scheduled, and is a separate mechanism.** Its own
-  Task Scheduler entry (`OilWatch Email Monitor`, hourly, 08:00-18:00 Mon-Fri) is
-  unaffected by the scheduler decision above; `monitor_email.bat` runs one sweep
-  by hand. It is kept as a fallback: the sweep is idempotent, so a double run
-  costs nothing. **Resolved 2026-09-13:** a
+  Task Scheduler entry (`OilWatch Email Monitor`, hourly, **08:00-23:00
+  Mon-Fri**) is unaffected by the scheduler decision above; `monitor_email.bat`
+  runs one sweep by hand. It is kept as a fallback: the sweep is idempotent, so a
+  double run costs nothing. **Changed 2026-09-15:** asked whether the on-demand
+  principle should cover it too, Wayne kept it scheduled but widened the weekday
+  window to 23:00 — a supplier's reply to a quote request arrives whenever the
+  supplier chooses, so polling is the only way to notice it without a human
+  looking, and holding the window open past the working day is what lets an
+  evening reply be recorded the same day. The change was to the repetition
+  `Duration` only (`PT11H` → `PT15H`), leaving the hourly interval, the weekly
+  Mon-Fri schedule and the action untouched; the previous definition was exported
+  before the edit. ⚠️ The task is registered **`Stop On Battery Mode, No Start On
+  Batteries`**, so on battery an unattended sweep silently does not run — reported
+  to Wayne rather than changed, since whether to poll on battery is his call.
+  **Resolved 2026-09-13:** a
   second, redundant task (`Oilwatch Monitor Email`, daily at 08:00) was deleted —
   its `/TR` was byte-identical to the hourly task's, so the hourly run already
   covered it. The surviving fallback is `Oilwatch Email Monitor`; the two
@@ -187,7 +198,8 @@ suppliers whose only priced row came from the spreadsheet import won on
   only read an inbox the next in-window run reads anyway. The sweep's job is
   a weekday cron rather than an open interval (`oilwatch/scheduler.py`, built
   from `email_monitor_start_hour` / `_end_hour` / `_days`); the task is a weekly
-  Mon-Fri trigger with `Interval PT1H` and `Duration PT11H`. The sweep is a poll,
+  Mon-Fri trigger with `Interval PT1H` and `Duration PT15H` (`PT11H` until the
+  2026-09-15 widening above). The sweep is a poll,
   so a reply arriving outside the window is still recorded at its own
   `receivedDateTime` when the next in-window run finds it — but one arriving
   after Friday's last sweep lands ~2.6 days old and so falls outside the 1-day

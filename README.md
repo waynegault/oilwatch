@@ -414,7 +414,7 @@ Scottish Fuels figure covers it.
     "quote_interval_hours": 24,
     "email_monitor_interval_hours": 1,
     "email_monitor_start_hour": 8,
-    "email_monitor_end_hour": 18,
+    "email_monitor_end_hour": 23,
     "email_monitor_days": "mon-fri"
   }
 }
