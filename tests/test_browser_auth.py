@@ -6,12 +6,17 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.keys import Keys
 
-from oilwatch.browser_auth import PAGE_LOAD_TIMEOUT_S, BrowserAuth, detect_chrome_major_version
+from oilwatch.browser_auth import (
+    PAGE_LOAD_TIMEOUT_S,
+    BrowserAuth,
+    detect_chrome_major_version,
+)
 
 
 class FakeChromeOptions:
@@ -69,6 +74,8 @@ class FakeDriver:
         self.quit_raises = quit_raises
         self.add_cookie_raises = add_cookie_raises
         self.urls: list[str] = []
+        self.current_url: str = ""
+        self.title: str = ""
         self.added: list = []
         self.scripts: list[str] = []
         self.quit_calls = 0
@@ -122,8 +129,11 @@ class FakeField:
 
     def clear(self) -> None:
         self.cleared += 1
-        if not self.refuses:
-            self.value = ""
+        if self.refuses:
+            # Selenium raises on an element it cannot interact with, and a field
+            # the page will not let us blank is exactly that.
+            raise WebDriverException("element not interactable")
+        self.value = ""
 
     def send_keys(self, *keys) -> None:
         for key in keys:
@@ -243,17 +253,23 @@ class LaunchTests(unittest.TestCase):
         self.auth = BrowserAuth("scottish_fuels", profile_root=Path(self.tmp.name))
 
     def test_headless_options_disable_autofill_and_pin_the_profile(self) -> None:
-        joined = " ".join(self.auth._options(headless=True).args)
+        # _options is typed as the real uc.ChromeOptions; this suite patches uc,
+        # so what it returns is FakeChromeOptions.
+        options = cast(FakeChromeOptions, self.auth._options(headless=True))
+        joined = " ".join(options.args)
         self.assertIn("--headless=new", joined)
         self.assertIn(f"--user-data-dir={self.auth.profile_dir}", joined)
         self.assertIn("AutofillServerCommunication", joined)
 
     def test_headful_options_have_no_headless_flag(self) -> None:
-        self.assertNotIn("--headless=new", " ".join(self.auth._options(headless=False).args))
+        options = cast(FakeChromeOptions, self.auth._options(headless=False))
+        self.assertNotIn("--headless=new", " ".join(options.args))
 
     def test_launch_resets_preferences_and_pins_the_chrome_version(self) -> None:
         with patch("oilwatch.browser_auth.detect_chrome_major_version", return_value=131):
-            driver = self.auth.launch(headless=False)
+            # launch() is typed as returning uc.Chrome; the fake uc is patched in
+            # for this suite, so what comes back is a MagicMock.
+            driver = cast(MagicMock, self.auth.launch(headless=False))
 
         self.assertIs(driver, self.uc.Chrome.return_value)
         kwargs = self.uc.Chrome.call_args.kwargs
@@ -281,13 +297,21 @@ class CookieTests(unittest.TestCase):
         self.auth = BrowserAuth("scottish_fuels", profile_root=Path(self.tmp.name))
         self.auth.profile_dir.mkdir(parents=True, exist_ok=True)
 
+    def _use_driver(self, driver: FakeDriver) -> None:
+        """Point the auth at a fake driver.
+
+        ``BrowserAuth.driver`` is typed as ``uc.Chrome``; these tests drive it
+        with a fake, and the flows only use the subset both provide.
+        """
+        self.auth.driver = driver  # type: ignore[assignment]
+
     def test_has_session_tracks_the_cookie_file(self) -> None:
         self.assertFalse(self.auth.has_session())
         self.auth.cookies_path().write_text("[]", encoding="utf-8")
         self.assertTrue(self.auth.has_session())
 
     def test_save_writes_the_driver_cookies(self) -> None:
-        self.auth.driver = FakeDriver(cookies=[{"name": "session", "value": "abc"}])
+        self._use_driver(FakeDriver(cookies=[{"name": "session", "value": "abc"}]))
         path = self.auth.save_cookies()
         self.assertEqual(json.loads(path.read_text()), [{"name": "session", "value": "abc"}])
 
@@ -297,30 +321,30 @@ class CookieTests(unittest.TestCase):
     def test_load_adds_every_applicable_cookie(self) -> None:
         self.auth.cookies_path().write_text(json.dumps([{"name": "a"}, {"name": "b"}]), encoding="utf-8")
         driver = FakeDriver()
-        self.auth.driver = driver
+        self._use_driver(driver)
         self.auth.load_cookies()
         self.assertEqual(driver.added, [{"name": "a"}, {"name": "b"}])
 
     def test_load_skips_a_cookie_for_another_domain(self) -> None:
         self.auth.cookies_path().write_text(json.dumps([{"name": "a"}]), encoding="utf-8")
         driver = FakeDriver(add_cookie_raises=True)
-        self.auth.driver = driver
+        self._use_driver(driver)
         self.auth.load_cookies()  # must not raise
         self.assertEqual(driver.added, [])
 
     def test_load_without_a_cookie_file_is_a_noop(self) -> None:
-        self.auth.driver = FakeDriver()
+        self._use_driver(FakeDriver())
         self.auth.load_cookies()
 
     def test_close_quits_and_clears_the_driver(self) -> None:
         driver = FakeDriver()
-        self.auth.driver = driver
+        self._use_driver(driver)
         self.auth.close()
         self.assertEqual(driver.quit_calls, 1)
         self.assertIsNone(self.auth.driver)
 
     def test_close_survives_a_dead_browser(self) -> None:
-        self.auth.driver = FakeDriver(quit_raises=True)
+        self._use_driver(FakeDriver(quit_raises=True))
         self.auth.close()
         self.assertIsNone(self.auth.driver)
 
@@ -386,9 +410,12 @@ class SignInTests(unittest.TestCase):
         self.assertEqual(check.call_count, 2)  # 1.0s / 0.5s, plus the final check
 
     def test_sign_in_reports_missing_login_fields(self) -> None:
-        with patch("oilwatch.browser_auth.time.sleep"), patch.object(BrowserAuth, "_find_first", return_value=None):
-            with self.assertRaises(RuntimeError) as ctx:
-                self.auth.sign_in(self.driver, self.URL, "owner@example.test", "pw")
+        with (
+            patch("oilwatch.browser_auth.time.sleep"),
+            patch.object(BrowserAuth, "_find_first", return_value=None),
+            self.assertRaises(RuntimeError) as ctx,
+        ):
+            self.auth.sign_in(self.driver, self.URL, "owner@example.test", "pw")
         self.assertIn("login fields", str(ctx.exception))
 
     def test_sign_in_reports_a_missing_submit_button(self) -> None:
@@ -396,9 +423,9 @@ class SignInTests(unittest.TestCase):
             patch("oilwatch.browser_auth.time.sleep"),
             patch.object(BrowserAuth, "_find_first", side_effect=[FakeField(), FakeField(), None]),
             patch.object(BrowserAuth, "_set_field_value"),
+            self.assertRaises(RuntimeError) as ctx,
         ):
-            with self.assertRaises(RuntimeError) as ctx:
-                self.auth.sign_in(self.driver, self.URL, "owner@example.test", "pw")
+            self.auth.sign_in(self.driver, self.URL, "owner@example.test", "pw")
         self.assertIn("Sign In button", str(ctx.exception))
 
     def test_sign_in_reports_a_button_that_will_not_activate(self) -> None:
@@ -407,9 +434,9 @@ class SignInTests(unittest.TestCase):
             patch.object(BrowserAuth, "_find_first", return_value=FakeField()),
             patch.object(BrowserAuth, "_set_field_value"),
             patch.object(BrowserAuth, "_submit_sign_in", return_value=False),
+            self.assertRaises(RuntimeError) as ctx,
         ):
-            with self.assertRaises(RuntimeError) as ctx:
-                self.auth.sign_in(self.driver, self.URL, "owner@example.test", "pw")
+            self.auth.sign_in(self.driver, self.URL, "owner@example.test", "pw")
         self.assertIn("activate", str(ctx.exception))
 
     def test_a_sign_in_that_takes_is_reported_as_successful(self) -> None:
@@ -584,11 +611,36 @@ class ElementHelpersTests(unittest.TestCase):
         self.assertEqual(driver.scripts, [], "an already-correct field is not touched")
 
     def test_set_field_value_raises_when_the_field_will_not_stick(self) -> None:
-        with patch("oilwatch.browser_auth.time.sleep"):
-            with self.assertRaises(RuntimeError):
-                BrowserAuth._set_field_value(
-                    FakeDriver(), FakeField(value="wrong", refuses=True), "owner@example.test"
-                )
+        with (
+            patch("oilwatch.browser_auth.time.sleep"),
+            self.assertRaises(RuntimeError),
+        ):
+            BrowserAuth._set_field_value(
+                FakeDriver(), FakeField(value="wrong", refuses=True), "owner@example.test"
+            )
+
+    def test_set_field_value_survives_a_clear_that_raises(self) -> None:
+        """The clear() handler must not be a NameError in disguise.
+
+        ``_set_field_value`` catches ``WebDriverException`` from ``clear()`` and
+        carries on, because the DOM assignment above it has already blanked the
+        field. The name was not in scope — the import sat inside
+        ``_submit_sign_in`` — so the handler raised ``NameError`` instead, and
+        nothing exercised it because this fake's ``clear()`` never raised.
+        """
+        field = FakeField(value="stored@example.com", refuses=True)
+
+        with (
+            patch("oilwatch.browser_auth.time.sleep"),
+            self.assertLogs("oilwatch.browser_auth", level="DEBUG") as captured,
+            self.assertRaises(RuntimeError),
+        ):
+            BrowserAuth._set_field_value(FakeDriver(), field, "owner@example.test")
+
+        self.assertTrue(
+            any("WebDriver clear failed" in line for line in captured.output),
+            f"a refused clear should be logged, not raised: {captured.output}",
+        )
 
     def test_set_field_value_replaces_an_autofilled_value(self) -> None:
         """The doubled-username bug: autofill's value is replaced, not added to."""

@@ -15,7 +15,6 @@ a drive letter that may not always be mapped:
 from __future__ import annotations
 
 import re
-from datetime import date
 from pathlib import Path
 from typing import Any
 

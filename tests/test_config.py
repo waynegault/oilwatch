@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from oilwatch.config import CHECKOUT_ROOT, load_settings, load_supplier_overrides
+from oilwatch.config import load_settings, load_supplier_overrides
 
 
 class ConfigTests(unittest.TestCase):

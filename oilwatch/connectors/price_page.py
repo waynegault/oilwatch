@@ -3,8 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-import httpx
-
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.http import build_client
 from oilwatch.models import QuoteResult

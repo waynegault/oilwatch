@@ -9,7 +9,6 @@ flow below, and each supplier is described by a :class:`RegistrationForm`.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,7 +19,6 @@ from playwright.async_api import Browser, Page, Playwright, async_playwright
 
 from oilwatch.credentials import (
     generate_supplier_password,
-    get_credential_manager,
     store_supplier_credentials,
 )
 from oilwatch.identity import load_contact

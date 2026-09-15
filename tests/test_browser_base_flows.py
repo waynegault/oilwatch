@@ -21,7 +21,6 @@ from tests.fake_async_page import (
     FakeBrowser,
     FakeContext,
     FakeRequest,
-    FakeResponse,
     FakeRoute,
 )
 

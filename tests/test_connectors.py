@@ -38,7 +38,10 @@ class PricePageConnectorTests(unittest.TestCase):
         }
 
     def test_quote_normalises_pence(self) -> None:
-        with patch("oilwatch.connectors.price_page.httpx.Client") as Client:
+        # Patch where httpx is actually used: price_page builds its client
+        # through oilwatch.http, so patching a name on the connector mocks
+        # nothing.
+        with patch("oilwatch.http.httpx.Client") as Client:
             Client.return_value.get.return_value = fake_response("Kerosene 155.80p/L delivered today")
             result = PricePageConnector().quote(self.supplier, 1000, {})
         self.assertEqual(result.status, "ok")
@@ -47,7 +50,7 @@ class PricePageConnectorTests(unittest.TestCase):
 
     def test_quote_applies_vat_when_configured(self) -> None:
         self.supplier["connector_config"]["vat_rate"] = 0.05
-        with patch("oilwatch.connectors.price_page.httpx.Client") as Client:
+        with patch("oilwatch.http.httpx.Client") as Client:
             Client.return_value.get.return_value = fake_response("Kerosene 155.80p/L delivered today")
             result = PricePageConnector().quote(self.supplier, 1000, {})
         self.assertEqual(result.price_per_liter, 1.6359)

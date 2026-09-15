@@ -454,6 +454,8 @@ class BrowserAuth:
         Deliberately never puts the value in an error message: one of the two
         callers is passing a password.
         """
+        from selenium.common.exceptions import WebDriverException
+
         for _ in range(attempts):
             if (element.get_attribute("value") or "") == value:
                 return  # already correct; leave the page's state alone

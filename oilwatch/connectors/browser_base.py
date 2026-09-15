@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
