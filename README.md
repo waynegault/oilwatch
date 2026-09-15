@@ -472,6 +472,7 @@ Oil Price Webscraper/
 ├── PROGRESS.md                  # Current progress status
 ├── BROWSER_AUTOMATION.md        # Browser automation guide
 ├── SUPPLIER_CONNECTORS.md       # Supplier connectors and contacts
+├── OPENCLAW_AGENT_PROMPT.md     # Brief for an agent driving OilWatch
 ├── pyproject.toml               # Package configuration
 ├── config/
 │   ├── settings.example.json    # Copy to settings.json (gitignored)
@@ -595,6 +596,7 @@ python -m oilwatch.cli phone-script --postcode "AB21 0YA"
 | `README.md` | This file - overview and quick start |
 | `BROWSER_AUTOMATION.md` | Browser automation details |
 | `SUPPLIER_CONNECTORS.md` | Supplier connectors and contact details |
+| `OPENCLAW_AGENT_PROMPT.md` | Brief to hand an agent (OpenClaw / Hal) that uses OilWatch |
 | `ROADMAP.md` | Future development plans |
 | `PROGRESS.md` | Current implementation status |
 

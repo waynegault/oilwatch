@@ -28,13 +28,17 @@ There are two doors onto the same engine. Use them like this.
 ## The one that costs minutes — call it deliberately
 
 **`refresh_prices`** scrapes every supplier with browser automation. It takes
-roughly **1–3 minutes** (the MCP request timeout is 300 s), opens real browser
-windows, and **fails per-supplier** — a CAPTCHA, a site change, a shut depot.
-Partial results are normal and are not an error.
+roughly **1–3 minutes** (the MCP request timeout is 300 s), drives real browsers
+(one of them a visible window), and **fails per-supplier** — a CAPTCHA, a site
+change, a shut depot. Partial results are normal and are not an error.
 
 - Do **not** call it in a loop.
 - Do **not** call it just to look at a price.
 - Call it when the quotes are stale — see below.
+- If the call does hit the 300 s timeout, do **not** assume the scrape failed:
+  read `current_prices` and look at the `observed_at` dates to see what actually
+  landed, and only then decide whether to run it again. Optionally pass a
+  `postcode`; otherwise the configured delivery address is used.
 
 ## Freshness: quotes are good for about a day
 
