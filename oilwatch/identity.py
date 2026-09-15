@@ -30,6 +30,13 @@ ENV_KEYS = {
     "postcode": "OILWATCH_POSTCODE",
 }
 
+#: The checkout holding ``config/`` and ``data/``. Derived from this file rather
+#: than the process working directory: the MCP server is spawned by another
+#: program and does not inherit the repository as its cwd, so resolving the
+#: contact from ``Path.cwd()`` silently emptied the identity — a registration
+#: note with a blank email, and a default quote postcode of "".
+_DEFAULT_ROOT = Path(__file__).resolve().parents[1]
+
 
 @dataclass(frozen=True, slots=True)
 class Contact:
@@ -60,7 +67,7 @@ def _settings_postcode(base: Path) -> str:
 
 
 def _resolve(root: Path | None) -> Contact:
-    base = root or Path.cwd()
+    base = root or _DEFAULT_ROOT
     from_file: dict[str, str] = {}
     path = base / "config" / "contact.json"
     if path.exists():
@@ -89,7 +96,10 @@ def load_contact(root: Path | None = None, *, refresh: bool = False) -> Contact:
     """Return the configured :class:`Contact`.
 
     Cached, because connectors ask for it per quote. Pass ``root`` to read a
-    specific checkout (tests do), or ``refresh=True`` to re-read.
+    specific checkout (tests do), or ``refresh=True`` to re-read. Without
+    ``root`` the checkout is found from the package's own location rather than
+    the working directory, so a process spawned from elsewhere — the MCP server
+    — resolves the same identity.
     """
     global _cached
     if root is not None or refresh or _cached is None:

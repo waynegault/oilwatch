@@ -73,6 +73,30 @@ class LoadContactTests(unittest.TestCase):
             contact = load_contact(self.root)
         self.assertEqual(contact, Contact())
 
+    def test_identity_does_not_depend_on_the_working_directory(self) -> None:
+        """A spawned process does not inherit the repository as its cwd.
+
+        The MCP server is launched by another program, so resolving
+        ``config/contact.json`` from ``Path.cwd()`` silently emptied the
+        identity: a registration note with a blank email, and a default quote
+        postcode of "". It is found from the package's own location instead.
+        """
+        decoy = tempfile.TemporaryDirectory()
+        self.addCleanup(decoy.cleanup)
+        (Path(decoy.name) / "config").mkdir()
+        (Path(decoy.name) / "config" / "contact.json").write_text(
+            json.dumps({"email": "decoy@example.com"}), encoding="utf-8"
+        )
+
+        previous = os.getcwd()
+        self.addCleanup(os.chdir, previous)
+        os.chdir(decoy.name)
+
+        with patch.dict(os.environ, {}, clear=True):
+            contact = load_contact(refresh=True)
+
+        self.assertNotEqual(contact.email, "decoy@example.com")
+
 
 class NoHardcodedIdentityTests(unittest.TestCase):
     def test_package_contains_no_personal_identity(self) -> None:
