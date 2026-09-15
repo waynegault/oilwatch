@@ -80,7 +80,7 @@ Establish a baseline before changing anything.
 | 1.7 | 🔍 Python version | `python --version` | 3.12 or newer (`requires-python = ">=3.12"`) |
 | 1.8 | 🔍 No BOM in source | `grep -rlP '^\xEF\xBB\xBF' oilwatch/ tests/` | No matches — a BOM breaks the first import |
 | 1.9 | 🔍 The checkers are installed | `.venv\Scripts\python.exe -m pip install -e ".[dev]"` | `ruff` and `pyright` are available; both are declared in the `dev` extra so a fresh checkout can run this checklist |
-| 1.10 | 🔍 Record the lint/type baseline | `.venv\Scripts\python.exe -m ruff check . --statistics` and `.venv\Scripts\python.exe -m pyright` | Note the counts. The repo carries a backlog, so the goal of a pass is that you do not *add* to it — not that it reaches zero |
+| 1.10 | 🔍 Record the lint/type baseline | `.venv\Scripts\python.exe -m ruff check . --statistics` and `.venv\Scripts\python.exe -m pyright` | Note the counts. The set of rules is pinned in `pyproject.toml` `[tool.ruff.lint]` — an explicit `select` with `ignore = ["DTZ", "PYI", "RUF100"]` and the reason written beside each — so a Ruff upgrade cannot silently change what "clean" means. The repo still carries a backlog: a pass aims not to *add* to it, not to reach zero |
 
 ## 2. Security — Critical
 
@@ -181,7 +181,7 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | 8.4 | 🔧 Suppressions are justified | `grep -rn "noqa" oilwatch/` | Each carries a rule code and a reason; a blanket suppression is not a fix |
 | 8.5 | 🔍 No trailing whitespace in changed files | `grep -rnP " +$" <changed files>` | Clean |
 | 8.6 | 🔍 Type hints on public functions | Spot-read `oilwatch/service.py` | Requests and returns annotated; `from __future__ import annotations` at the top of each module |
-| 8.7 | 🔧 Ruff is clean on the files you touched | `.venv\Scripts\python.exe -m ruff check <changed files>` | Zero findings. Ruff's defaults here are broad — it flagged `I001`, `SIM117`, `UP037`, `RUF012`, `BLE001`, `DTZ*` — so a changed file should be clean, or carry a justified `# noqa: <rule> - <reason>` |
+| 8.7 | 🔧 Ruff is clean on the files you touched | `.venv\Scripts\python.exe -m ruff check <changed files>` | Zero findings. Which rules count is pinned in `pyproject.toml`, not inherited from Ruff's defaults — those widened between releases. A violation is fixed, or silenced with `# noqa: <rule> - <reason>`; never by widening the ignore list |
 | 8.8 | 🔧 Pyright is clean on the files you touched | `.venv\Scripts\python.exe -m pyright --pythonpath .venv\Scripts\python.exe <changed files>` | Zero errors on those files. Pylance *is* Pyright, so this is the engine the editor runs. The test tree as a whole still reports fake-assigned-to-a-real-typed-attribute errors; chase those only in files you touch |
 
 ## 9. Documentation & Guards — Medium

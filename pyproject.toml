@@ -50,3 +50,40 @@ show_missing = true
 fail_under = 94
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 
+[tool.ruff]
+target-version = "py312"
+# Not a formatting standard. E501 is deliberately not selected — 666 lines in this
+# repo exceed 88 and the longest is 198 (a long string in notify.py) — so this only
+# governs when I001 wraps an import.
+line-length = 100
+
+[tool.ruff.lint]
+# Pinned explicitly rather than inherited. Ruff's defaults widened between
+# releases (0.16 reports I001/SIM/UP/RUF/PYI/DTZ without being asked), so "clean"
+# changed meaning under us. A rule is listed because a failure is worth acting on,
+# and left out with the reason written down.
+select = [
+  "E4", "E7", "E9",       # pycodestyle errors, excluding E501
+  "F",                    # pyflakes — F821 is what found the sign-in NameError
+  "I", "UP",              # import sorting, pyupgrade
+  "B", "BLE",             # bugbear; BLE001 is this codebase's own noqa convention
+  "C4", "SIM", "FURB",
+  "RUF010", "RUF012",     # explicit conversions, mutable class defaults
+  "S110",                 # try/except/pass — the one bandit rule worth acting on
+  "PLE0604", "PLW1510",
+]
+ignore = [
+  # Naive datetimes are the design: one household, naive times throughout
+  # (see models.utcnow_naive), stored as naive text. tz-aware is the exception.
+  "DTZ",
+  # PYI* targets stub files; these modules are implementation.
+  "PYI",
+  # An unused suppression is section 8.4's business, not a lint rule's.
+  "RUF100",
+]
+# Deliberately absent: W (its W293 fires 105 times, most of them inside the
+# call-sheet string literals in telephone.py, where --fix would silently rewrite
+# the document those strings emit); E501; the PLR* complexity thresholds; and
+# S101/PLC0415 (assert is idiomatic in tests, and Playwright/Selenium must stay
+# lazily imported — see connectors/suppliers/__init__.py).
+
