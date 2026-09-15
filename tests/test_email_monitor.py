@@ -66,7 +66,9 @@ class ExtractPplTests(unittest.TestCase):
         )
         # £1,229.55 for 1000L inc VAT+commission -> 1.1710/L ex-VAT equivalent,
         # which the caller uplifts back to ~£1.2295/L.
-        self.assertAlmostEqual(extract_ppl(text), 1.171, places=4)
+        ppl = extract_ppl(text)
+        assert ppl is not None
+        self.assertAlmostEqual(ppl, 1.171, places=4)
 
 
 class SupplierMappingsTests(unittest.TestCase):
@@ -167,7 +169,9 @@ class BoilerJuiceQuoteTests(unittest.TestCase):
     )
 
     def test_uses_the_total_you_pay_not_the_headline_ppl(self) -> None:
-        self.assertAlmostEqual(extract_ppl(self.BODY), 1.58899 / 1.05, places=4)
+        ppl = extract_ppl(self.BODY)
+        assert ppl is not None
+        self.assertAlmostEqual(ppl, 1.58899 / 1.05, places=4)
 
     def test_the_derived_total_reproduces_the_suppliers_own(self) -> None:
         ex_vat = extract_ppl(self.BODY)

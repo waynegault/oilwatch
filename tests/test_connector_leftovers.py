@@ -45,8 +45,12 @@ class HighlandFuelsTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "highland_fuels")
         # £1,146.60 for 1000L inc VAT -> £1.1466/L.
-        self.assertAlmostEqual(result.price_per_liter, 1.1466, places=4)
-        self.assertAlmostEqual(result.total_price, 1146.6, places=2)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.1466, places=4)
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, 1146.6, places=2)
         body = request.call_args.kwargs["content"]
         self.assertIn("<Product>043</Product>", body)
         self.assertIn("<PostCode>AB21 0YA</PostCode>", body)
@@ -115,7 +119,9 @@ class BoilerJuiceQuoteTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         # 1.08/L ex-VAT -> 1.134/L inc-VAT.
-        self.assertAlmostEqual(result.price_per_liter, 1.134, places=4)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.134, places=4)
 
 
 if __name__ == "__main__":

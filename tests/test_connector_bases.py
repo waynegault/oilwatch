@@ -39,8 +39,12 @@ class SyncBrowserConnectorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "stub")
-        self.assertAlmostEqual(result.price_per_liter, 1.155, places=4)  # 1.10 + 5% VAT
-        self.assertAlmostEqual(result.total_price, 1155.0, places=2)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.155, places=4)  # 1.10 + 5% VAT
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, 1155.0, places=2)
         self.assertIn("Stub page", result.notes)
         self.assertIn("AB21 0YA", result.notes)
 

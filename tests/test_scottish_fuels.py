@@ -64,12 +64,18 @@ class ProductSkuChoiceTests(unittest.TestCase):
 
 class ParsePriceTests(unittest.TestCase):
     def test_parses_both_known_phrasings(self) -> None:
-        self.assertAlmostEqual(Connector.parse_ppl("101.03p per litre (Excl. VAT)"), 1.0103)
-        self.assertAlmostEqual(Connector.parse_ppl("101.03p (Excl. VAT)"), 1.0103)
+        per_litre = Connector.parse_ppl("101.03p per litre (Excl. VAT)")
+        plain = Connector.parse_ppl("101.03p (Excl. VAT)")
+        assert per_litre is not None
+        assert plain is not None
+        self.assertAlmostEqual(per_litre, 1.0103)
+        self.assertAlmostEqual(plain, 1.0103)
 
     def test_returns_the_cheapest_of_several(self) -> None:
         text = "104.00p (Excl. VAT) and also 101.03p (Excl. VAT)"
-        self.assertAlmostEqual(Connector.parse_ppl(text), 1.0103)
+        cheapest = Connector.parse_ppl(text)
+        assert cheapest is not None
+        self.assertAlmostEqual(cheapest, 1.0103)
 
     def test_returns_none_when_no_price_present(self) -> None:
         self.assertIsNone(Connector.parse_ppl("No prices on this page"))

@@ -34,8 +34,12 @@ class FueltoolConnectorTests(unittest.TestCase):
             result = FueltoolConnector().quote(self.supplier, 1000, {})
         self.assertEqual(result.status, "ok")
         # 98.73p ex-VAT -> £0.9873 -> 5% VAT -> ~£1.0367 inclusive.
-        self.assertAlmostEqual(result.price_per_liter, 1.0367, places=4)
-        self.assertAlmostEqual(result.total_price, 1036.7, places=1)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.0367, places=4)
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, 1036.7, places=1)
 
     def test_no_price_returns_manual_action(self) -> None:
         with patch("oilwatch.connectors.suppliers.fueltool.httpx.Client") as Client:

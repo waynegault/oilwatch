@@ -58,8 +58,12 @@ class ValueOilsConnectorTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         # £997.86 for 900L inc VAT + commission -> £1.1087/L.
         self.assertEqual(result.raw_payload["tier_total"], 997.86)
-        self.assertAlmostEqual(result.price_per_liter, 1.1087, places=4)
-        self.assertAlmostEqual(result.total_price, 1108.7, places=2)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.1087, places=4)
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, 1108.7, places=2)
 
     def test_no_price_returns_manual_action(self) -> None:
         with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as Client:
@@ -97,8 +101,12 @@ class HomeFuelsDirectConnectorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         # 99.15 pence ex-VAT -> £0.9915 -> 5% VAT -> ~£1.0411 inclusive.
-        self.assertAlmostEqual(result.price_per_liter, 1.0411, places=4)
-        self.assertAlmostEqual(result.total_price, 1041.1, places=1)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.0411, places=4)
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, 1041.1, places=1)
 
     def test_no_parseable_price_returns_manual_action_not_fabricated(self) -> None:
         with patch("oilwatch.connectors.suppliers.homefuels_direct.httpx.Client") as Client:
@@ -126,7 +134,9 @@ class HomeFuelsDirectConnectorTests(unittest.TestCase):
             result = HomeFuelsDirectConnector().quote(self.supplier, 1000, {})
 
         self.assertEqual(result.status, "ok")
-        self.assertAlmostEqual(result.price_per_liter, 1.0411, places=4)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.0411, places=4)
 
     def test_an_unexpected_failure_is_reported_as_an_error(self) -> None:
         with patch("oilwatch.connectors.suppliers.homefuels_direct.httpx.Client") as Client:

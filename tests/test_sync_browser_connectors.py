@@ -195,7 +195,9 @@ class FuelsoftConnectorTests(unittest.TestCase):
         self.assertEqual(result.source, "fuelsoft")
         # £1,146.60 inc VAT for 1000L -> £1.1466/L (the standard option's total).
         self.assertEqual(result.raw_payload["standard_price_per_liter"], 1.1466)
-        self.assertAlmostEqual(result.price_per_liter, 1.1466, places=4)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.1466, places=4)
         self.assertIn(("goto", self.QUOTE_URL), page.calls)
 
     def test_navigation_failure_falls_back_to_manual(self) -> None:
@@ -236,7 +238,9 @@ class RixBrowserConnectorTests(unittest.TestCase):
         self.assertEqual(result.source, "rix_browser")
         self.assertEqual(result.raw_payload["results_url"], "https://fuelquote.rix.co.uk/your-quote/123")
         # £1,274.18 for 1000L is the Standard option, not the £1,253.18 Economy.
-        self.assertAlmostEqual(result.price_per_liter, 1.2742, places=4)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.2742, places=4)
 
     def test_navigation_failure_falls_back_to_manual(self) -> None:
         page = FakePage(fail_goto=True)

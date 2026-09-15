@@ -109,7 +109,9 @@ class HTTPFormConnectorTests(unittest.TestCase):
             Client.return_value.request.return_value = fake_response('{"price_per_liter": 1.42}')
             result = HTTPFormConnector().quote(supplier, 1000, {"postcode": "AB21 0YA"})
 
-        self.assertAlmostEqual(result.price_per_liter, 1.491, places=4)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.491, places=4)
 
     def test_fields_render_the_templates_and_leave_the_rest_alone(self) -> None:
         """quote_fields holds templates and literal values; only strings are formatted."""

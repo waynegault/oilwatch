@@ -71,8 +71,12 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "boilerjuice_browser")
         # 0.85/L ex-VAT -> 0.8925/L inc-VAT; 1000L = £892.50.
-        self.assertAlmostEqual(result.price_per_liter, 0.8925, places=4)
-        self.assertAlmostEqual(result.total_price, 892.5, places=2)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 0.8925, places=4)
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, 892.5, places=2)
 
     def test_the_standard_delivery_total_is_read(self) -> None:
         """The standard option by its tag, not the cheapest of the options."""
@@ -93,8 +97,12 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         result = _quote(self.connector, page)
 
         self.assertEqual(result.status, "ok")
-        self.assertAlmostEqual(result.price_per_liter, 1.1957, places=4)
-        self.assertAlmostEqual(result.total_price, 1195.70, places=2)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.1957, places=4)
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, 1195.70, places=2)
 
     def test_no_price_is_manual_not_fabricated(self) -> None:
         result = _quote(self.connector, FakeAsyncPage(content="<html>no price here</html>"))
@@ -214,7 +222,9 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         # 0.85/L ex-VAT -> 0.8925/L inc-VAT.
-        self.assertAlmostEqual(result.price_per_liter, 0.8925, places=4)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 0.8925, places=4)
 
     def test_an_extraction_error_leaves_the_quote_for_manual_action(self) -> None:
         page = FakeAsyncPage(content="whatever")
@@ -287,8 +297,12 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
         # £1,187.55 for 1000L is already inc VAT and commission -> £1.1875/L,
         # and the stored total follows from it (the app-wide invariant).
         self.assertEqual(result.raw_payload["standard_delivery_total"], 1187.55)
-        self.assertAlmostEqual(result.price_per_liter, 1.1875, places=4)
-        self.assertAlmostEqual(result.total_price, result.price_per_liter * 1000, places=2)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.1875, places=4)
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, price_per_liter * 1000, places=2)
         self.assertEqual(postcode.filled, ["AB21 0YA"])
         self.assertEqual(quantity.filled, ["1000"])
         self.assertEqual(button.clicked, 1)
@@ -296,7 +310,9 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
     def test_it_reads_the_standard_option_not_express(self) -> None:
         result = _quote(self.connector, self._page())
         self.assertEqual(result.raw_payload["standard_delivery_total"], 1187.55)
-        self.assertNotAlmostEqual(result.price_per_liter, 1.2175, places=4)  # not Express 7
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertNotAlmostEqual(price_per_liter, 1.2175, places=4)  # not Express 7
 
     def test_falls_back_to_http_when_no_price_is_shown(self) -> None:
         sentinel = object()
@@ -390,9 +406,13 @@ class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
         self.assertEqual(result.source, "homefuels_direct_browser")
         # 112.87p/L ex-VAT -> £1.1287 -> +5% domestic VAT -> £1.1851/L, and the
         # stored total follows from the per-litre price (the app-wide invariant).
-        self.assertAlmostEqual(result.price_per_liter, 1.1851, places=4)
-        self.assertAlmostEqual(result.total_price, 1185.1, places=2)
-        self.assertAlmostEqual(result.total_price, result.price_per_liter * 1000, places=2)
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        self.assertAlmostEqual(price_per_liter, 1.1851, places=4)
+        total_price = result.total_price
+        assert total_price is not None
+        self.assertAlmostEqual(total_price, 1185.1, places=2)
+        self.assertAlmostEqual(total_price, price_per_liter * 1000, places=2)
 
     def test_falls_back_to_http_when_no_price_is_shown(self) -> None:
         sentinel = object()
