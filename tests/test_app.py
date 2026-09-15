@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from oilwatch.config import CHECKOUT_ROOT
 from oilwatch.models import utcnow_naive
 from oilwatch.service import OilWatchApp
 
@@ -261,6 +263,25 @@ class QuoteFailureLoggingTests(unittest.TestCase):
             any("Exploding" in message for message in captured.output),
             f"expected the supplier to be named in the log: {captured.output}",
         )
+
+
+class DefaultRootTests(unittest.TestCase):
+    def test_the_app_defaults_to_the_checkout_not_the_working_directory(self) -> None:
+        """A process started elsewhere still opens this checkout.
+
+        The CLI builds ``OilWatchApp()`` with no root, so a cwd default meant the
+        same command run from another directory read a different install — or
+        failed outright when that directory had no ``config/settings.json``.
+        """
+        decoy = tempfile.TemporaryDirectory()
+        self.addCleanup(decoy.cleanup)
+        previous = os.getcwd()
+        self.addCleanup(os.chdir, previous)
+        os.chdir(decoy.name)
+
+        app = OilWatchApp()
+
+        self.assertEqual(app.root, CHECKOUT_ROOT)
 
 
 if __name__ == "__main__":

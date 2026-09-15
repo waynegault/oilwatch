@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from oilwatch.analytics import AnalyticsService
-from oilwatch.config import Settings, load_settings, load_supplier_overrides
+from oilwatch.config import CHECKOUT_ROOT, Settings, load_settings, load_supplier_overrides
 from oilwatch.db import Database
 from oilwatch.discovery import DiscoveryService
 from oilwatch.geo import GeoService
@@ -19,7 +19,11 @@ log = get_logger("service")
 
 class OilWatchApp:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or Path.cwd()
+        # The checkout, not the process working directory: the CLI builds this
+        # with no root, and a cwd default meant the same command run from another
+        # directory read a different install — or failed outright when that
+        # directory had no config/settings.json.
+        self.root = root or CHECKOUT_ROOT
         self.settings: Settings = load_settings(self.root)
         self.db = Database(self.settings.database_path)
         self.geo = GeoService()
