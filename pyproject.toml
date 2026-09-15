@@ -35,7 +35,7 @@ oilwatch-mcp = "oilwatch.mcp_server:main"
 packages = ["oilwatch"]
 
 [project.optional-dependencies]
-dev = ["coverage>=7"]
+dev = ["coverage>=7", "ruff>=0.16", "pyright>=1.1"]
 
 [tool.coverage.run]
 source = ["oilwatch"]

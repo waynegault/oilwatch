@@ -79,6 +79,8 @@ Establish a baseline before changing anything.
 | 1.6 | 🔍 Record the checkout root | `.venv\Scripts\python.exe -c "from oilwatch.config import CHECKOUT_ROOT; print(CHECKOUT_ROOT)"` | Prints the repository root, not the current directory |
 | 1.7 | 🔍 Python version | `python --version` | 3.12 or newer (`requires-python = ">=3.12"`) |
 | 1.8 | 🔍 No BOM in source | `grep -rlP '^\xEF\xBB\xBF' oilwatch/ tests/` | No matches — a BOM breaks the first import |
+| 1.9 | 🔍 The checkers are installed | `.venv\Scripts\python.exe -m pip install -e ".[dev]"` | `ruff` and `pyright` are available; both are declared in the `dev` extra so a fresh checkout can run this checklist |
+| 1.10 | 🔍 Record the lint/type baseline | `.venv\Scripts\python.exe -m ruff check . --statistics` and `.venv\Scripts\python.exe -m pyright` | Note the counts. The repo carries a backlog, so the goal of a pass is that you do not *add* to it — not that it reaches zero |
 
 ## 2. Security — Critical
 
@@ -179,6 +181,8 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | 8.4 | 🔧 Suppressions are justified | `grep -rn "noqa" oilwatch/` | Each carries a rule code and a reason; a blanket suppression is not a fix |
 | 8.5 | 🔍 No trailing whitespace in changed files | `grep -rnP " +$" <changed files>` | Clean |
 | 8.6 | 🔍 Type hints on public functions | Spot-read `oilwatch/service.py` | Requests and returns annotated; `from __future__ import annotations` at the top of each module |
+| 8.7 | 🔧 Ruff is clean on the files you touched | `.venv\Scripts\python.exe -m ruff check <changed files>` | Zero findings. Ruff's defaults here are broad — it flagged `I001`, `SIM117`, `UP037`, `RUF012`, `BLE001`, `DTZ*` — so a changed file should be clean, or carry a justified `# noqa: <rule> - <reason>` |
+| 8.8 | 🔧 Pyright is clean on the files you touched | `.venv\Scripts\python.exe -m pyright --pythonpath .venv\Scripts\python.exe <changed files>` | Zero errors on those files. Pylance *is* Pyright, so this is the engine the editor runs. The test tree as a whole still reports fake-assigned-to-a-real-typed-attribute errors; chase those only in files you touch |
 
 ## 9. Documentation & Guards — Medium
 
@@ -203,6 +207,7 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | 10.5 | 🔧 A test that pinned wrong behaviour is inverted | Search the suite for the old assertion | When a defect is fixed, the test asserting the defect is rewritten, not deleted |
 | 10.6 | 🔧 New behaviour has a regression test | Diff the test files | Every fix in the change carries a test that fails against the old code |
 | 10.7 | 🔍 The doc-guard tests pass | `.venv\Scripts\python.exe -m unittest tests.test_docs` | Passes; the counts were updated with the change |
+| 10.8 | 🔧 A lint auto-fix is verified, not trusted | `.venv\Scripts\python.exe -m ruff check . --select F401 --fix` then the full suite | `--fix` infers intent from syntax alone. Removing an "unused" import turned two green tests red: the import was the patch anchor (`price_page.httpx` **is** the httpx module, so the tests reach `httpx` through it). Always re-run the suite after an auto-fix |
 
 ## 11. MCP & AI Agent Access — High
 
@@ -268,5 +273,9 @@ Hard-won rules from a real audit pass. Each is a check, not an anecdote.
 | 15.8 | 🔧 Update guarded counts with the change | `.venv\Scripts\python.exe -m unittest tests.test_docs` | Passes. Adding a test or a tool without updating `PROGRESS.md`/`ROADMAP.md` fails the suite |
 | 15.9 | 🔧 Keep the repo path free of surprises for clients | `grep -n "Oil Price Webscraper" user-guide.md` | The space trap is documented, because a client that word-splits the stdio command cannot use the raw path |
 | 15.10 | 🔍 Read the recorded failure before changing code | `.venv\Scripts\python.exe -m oilwatch.cli status` | The `last_attempt_note` names what each connector actually got. Six "broken" suppliers were one input defect, not six connector bugs |
+| 15.11 | 🔧 An "unused" import may be a patch anchor | `grep -rn "<module>\.<name>" tests/` before deleting it | An import can be unused in the source and still load-bearing: a test that patches `thatmodule.name` needs the name to exist there. `F401` cannot see that, and removing `price_page.httpx` broke two tests. If it is only an anchor, fix the *test* to patch the module that really uses it |
+| 15.12 | 🔧 A fake that never raises hides the handler it feeds | Grep the fake for the method the code guards | `_set_field_value` caught `WebDriverException` without importing it — a `NameError` inside the handler — and no test ever reached it because the fake's `clear()` could not raise. Make the fake raise, and the branch is both covered and pinned |
+| 15.13 | 🔧 Suppress once, at the boundary | Inspect assignments of a fake to a real-typed attribute | Six assignments of a fake driver to `BrowserAuth.driver` became one helper with one owned `# type: ignore[assignment]`, and a fake whose type is annotated as the real class is narrowed with one `cast(...)` at the call. A suppression repeated per site hides which of them is the real exception |
+| 15.14 | 🔧 Verify with the tool, never by reasoning | Run the checker that reported the finding, on the files you touched | A diagnostic fixed by inspection cannot be claimed gone. Install the tool (`.venv\Scripts\python.exe -m pip install -e ".[dev]"`) and re-run it: Pylance is Pyright, so `pyright` reproduces the editor exactly |
 
 <!-- end of file -->
