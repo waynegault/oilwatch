@@ -5,6 +5,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+#: The checkout that holds ``config/`` and ``data/``. Derived from this file
+#: rather than the process working directory: the MCP server is spawned by
+#: another program and does not inherit the repository as its cwd, so anything
+#: resolved from ``Path.cwd()`` silently came back empty — a registration note
+#: with a blank email, a ``""`` postcode, and a credential store looked for in
+#: the wrong directory.
+CHECKOUT_ROOT = Path(__file__).resolve().parents[1]
+
 
 @dataclass(slots=True)
 class HomeConfig:
@@ -63,7 +71,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def load_settings(root: Path | None = None) -> Settings:
-    base = root or Path.cwd()
+    base = root or CHECKOUT_ROOT
     data = _read_json(base / "config" / "settings.json")
     return Settings(
         database_path=base / data["database_path"],
@@ -86,7 +94,7 @@ def load_settings(root: Path | None = None) -> Settings:
 
 
 def load_supplier_overrides(root: Path | None = None) -> list[dict[str, Any]]:
-    base = root or Path.cwd()
+    base = root or CHECKOUT_ROOT
     path = base / "config" / "supplier_overrides.json"
     if not path.exists():
         return []

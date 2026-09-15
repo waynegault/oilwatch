@@ -4,8 +4,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from oilwatch.config import load_settings, load_supplier_overrides
+from oilwatch.config import CHECKOUT_ROOT, load_settings, load_supplier_overrides
 
 
 class ConfigTests(unittest.TestCase):
@@ -42,6 +43,17 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.quote_max_workers, 4)
         self.assertEqual(settings.search_queries, ["heating oil Aberdeenshire"])
         self.assertEqual(settings.scheduler.quote_interval_hours, 24)
+
+    def test_settings_default_to_the_checkout_root(self) -> None:
+        """A process spawned elsewhere still reads this checkout's settings.
+
+        The MCP server is launched by another program, so a default of
+        ``Path.cwd()`` would read whichever directory it happened to inherit.
+        """
+        self._write_settings()
+        with patch("oilwatch.config.CHECKOUT_ROOT", self.root):
+            loaded = load_settings()
+        self.assertEqual(loaded.home.label, "Home")
 
     def test_load_settings_reads_the_supplier_config(self) -> None:
         settings = {

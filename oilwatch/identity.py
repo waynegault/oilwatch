@@ -21,7 +21,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from oilwatch.config import load_settings
+from oilwatch.config import CHECKOUT_ROOT, load_settings
 
 ENV_KEYS = {
     "name": "OILWATCH_NAME",
@@ -29,13 +29,6 @@ ENV_KEYS = {
     "phone": "OILWATCH_PHONE",
     "postcode": "OILWATCH_POSTCODE",
 }
-
-#: The checkout holding ``config/`` and ``data/``. Derived from this file rather
-#: than the process working directory: the MCP server is spawned by another
-#: program and does not inherit the repository as its cwd, so resolving the
-#: contact from ``Path.cwd()`` silently emptied the identity — a registration
-#: note with a blank email, and a default quote postcode of "".
-_DEFAULT_ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +60,7 @@ def _settings_postcode(base: Path) -> str:
 
 
 def _resolve(root: Path | None) -> Contact:
-    base = root or _DEFAULT_ROOT
+    base = root or CHECKOUT_ROOT
     from_file: dict[str, str] = {}
     path = base / "config" / "contact.json"
     if path.exists():

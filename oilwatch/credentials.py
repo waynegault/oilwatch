@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from oilwatch import secretstore
+from oilwatch.config import CHECKOUT_ROOT
 from oilwatch.identity import load_contact
 from oilwatch.models import utcnow_naive
 
@@ -53,7 +54,11 @@ class CredentialManager:
 
     def __init__(self, config_path: Path | None = None, *, encrypt: bool | None = None) -> None:
         if config_path is None:
-            config_path = Path.cwd() / "config" / "supplier_credentials.json"
+            # The checkout's store, not the process working directory: the MCP
+            # server is spawned from elsewhere, and a cwd-relative store meant a
+            # spawned run generated a fresh password into the wrong directory
+            # instead of reading the account it was supposed to sign in with.
+            config_path = CHECKOUT_ROOT / "config" / "supplier_credentials.json"
         self.config_path = config_path
         self._credentials: dict[str, dict[str, Any]] = {}
         self._encrypted = False

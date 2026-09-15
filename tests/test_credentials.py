@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime
@@ -9,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from oilwatch import secretstore
+from oilwatch.config import CHECKOUT_ROOT
 from oilwatch.credentials import (
     ENVELOPE_FORMAT,
     ENVELOPE_KEY,
@@ -190,10 +192,25 @@ class ManagerApiTests(unittest.TestCase):
         self.assertTrue(self.manager.has_credentials("valueoils"))
         self.assertEqual(self.manager.list_suppliers(), ["valueoils"])
 
-    def test_the_default_config_path_sits_under_config(self) -> None:
+    def test_the_default_store_does_not_follow_the_working_directory(self) -> None:
+        """A spawned process does not inherit the repository as its cwd.
+
+        A cwd-relative store made an MCP-spawned quote run miss the saved
+        account and generate a new password into the wrong directory instead of
+        signing in with the one it had.
+        """
+        decoy = tempfile.TemporaryDirectory()
+        self.addCleanup(decoy.cleanup)
+        previous = os.getcwd()
+        self.addCleanup(os.chdir, previous)
+        os.chdir(decoy.name)
+
         with patch("oilwatch.credentials.secretstore.available", return_value=False):
             manager = CredentialManager()
-        self.assertEqual(manager.config_path, Path.cwd() / "config" / "supplier_credentials.json")
+
+        self.assertEqual(
+            manager.config_path, CHECKOUT_ROOT / "config" / "supplier_credentials.json"
+        )
 
     def test_the_module_wrappers_store_and_read_credentials(self) -> None:
         with patch("oilwatch.credentials._default_manager", self.manager):
