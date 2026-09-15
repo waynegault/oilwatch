@@ -207,13 +207,16 @@ When a connector first attempts login and fails, it will:
    .venv\Scripts\python -m oilwatch.cli quote 1 --postcode "AB21 0YA"
    ```
 
-2. Note the generated password from the output or `config/supplier_credentials.json`
+2. The password is generated and stored encrypted; it is **not** printed in the
+   run's output, because that output is returned to the caller, saved with the
+   quote and logged. The `manual_action_required` note names the command that
+   reads it back from `config/supplier_credentials.json` when you need it.
 
 3. Register manually:
    - Go to supplier website
    - Click "Register" or "Sign Up"
    - Use email: `you@example.com`
-   - Use the generated password
+   - Use the generated password (read from the store, as above)
 
 4. Future quote attempts will automatically log in
 
@@ -303,6 +306,9 @@ a session by hand when needed.
   on this machine
 - The file is gitignored; legacy plain-JSON files are read and re-encrypted on
   the next save
+- The registration note a connector returns (`manual_action_required`) never
+  contains the password: notes are returned to the caller, written into the
+  `quotes` table and logged, so a password there would be broadcast three ways
 
 ### Browser Automation
 - Playwright connectors run in headless mode by default; the Selenium ones

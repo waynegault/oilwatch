@@ -125,7 +125,12 @@ class BrowserConnectorBaseTests(unittest.TestCase):
 
         self.assertEqual(result.status, "manual_action_required")
         self.assertIn("owner@example.test", result.notes)
-        self.assertIn("Secret!123", result.notes)
+        self.assertIn(self.connector.login_url, result.notes)
+        # This note is returned to the caller, saved with the quote and logged,
+        # so the password must never be in it — and the owner must still be told
+        # where to read it. A password here leaked into all three at once.
+        self.assertNotIn(self.creds["password"], result.notes)
+        self.assertIn("supplier_credentials.json", result.notes)
 
     def test_no_register_link_becomes_an_error(self) -> None:
         result = asyncio.run(

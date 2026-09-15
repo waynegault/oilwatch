@@ -366,22 +366,39 @@ class BrowserConnector(BaseConnector, ABC):
         )
     
     def _build_registration_instructions(self, creds: dict[str, str], error: str = "") -> str:
-        """Build instructions for manual registration."""
+        """Instructions for manual registration, without repeating the password.
+
+        This note is returned to the caller, written into the quotes table and
+        logged, so it is a broadcast surface rather than a private channel: a
+        password in it leaks into tool output, the database and the log file at
+        once. The generated password therefore stays in the encrypted credential
+        store and only its location is named here. The email is the owner's own
+        configured address, not a secret, so it stays for the "which account is
+        this?" answer.
+        """
         return (
             f"{self.supplier_name.upper()} - Account Registration Required\n\n"
             f"LOGIN ATTEMPT FAILED: {error}\n\n"
-            f"CREDENTIALS (use for manual registration):\n"
-            f"Email: {creds['email']}\n"
-            f"Password: {creds['password']}\n\n"
             f"REGISTRATION STEPS:\n"
             f"1. Go to: {self.login_url}\n"
             f"2. Click 'Register' or 'Sign Up'\n"
             f"3. Use email: {creds['email']}\n"
-            f"4. Set password: {creds['password']}\n"
+            f"4. Set the generated password:\n"
+            f"   {self._credential_lookup_hint()}\n"
             f"5. Complete registration form\n"
             f"6. Verify email if required\n"
             f"7. Log in and get quote for 1000L\n\n"
-            f"Note: Credentials have been saved for future automated access."
+            f"Credentials have been saved for future automated access. The "
+            f"password is not repeated in this note: it is saved with every quote "
+            f"and may be logged, so read it from the encrypted credential store "
+            f"(config/supplier_credentials.json) only when registering by hand."
+        )
+
+    def _credential_lookup_hint(self) -> str:
+        """The command that reads this supplier's stored password on demand."""
+        return (
+            f".venv\\Scripts\\python -c \"from oilwatch.credentials import "
+            f"get_supplier_credentials as g; print(g('{self.supplier_key}')['password'])\""
         )
     
     async def discover_api(self) -> dict[str, Any]:
