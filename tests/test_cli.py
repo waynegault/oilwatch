@@ -125,7 +125,9 @@ class DispatchTests(unittest.TestCase):
         ):
             main()
 
-        self.assertEqual(run.await_args.args[0], "https://example.co.uk")
+        awaited = run.await_args
+        assert awaited is not None
+        self.assertEqual(awaited.args[0], "https://example.co.uk")
         self.assertIn("total_requests", out.getvalue())
 
     def test_quote_all_forwards_the_postcode_and_the_browser_flag(self) -> None:
@@ -243,7 +245,9 @@ class DispatchTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()),
                 ):
                     main()
-                self.assertEqual(register.await_args.kwargs["headless"], expected)
+                awaited = register.await_args
+                assert awaited is not None
+                self.assertEqual(awaited.kwargs["headless"], expected)
 
     def test_schedule_passes_the_postcode_to_the_scheduler(self) -> None:
         app = MagicMock()

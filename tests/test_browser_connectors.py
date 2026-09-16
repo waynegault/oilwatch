@@ -358,7 +358,9 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
             result = _quote(self.connector, FakeAsyncPage(content=self.QUICK_QUOTE))
 
         self.assertIs(result, sentinel)
-        self.assertIn("postcode", fallback.await_args.args[3])
+        awaited = fallback.await_args
+        assert awaited is not None
+        self.assertIn("postcode", awaited.args[3])
 
     def test_a_broken_browser_falls_back_to_http_with_the_error(self) -> None:
         sentinel = object()
@@ -374,7 +376,9 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
             result = _quote(self.connector, page)
 
         self.assertIs(result, sentinel)
-        self.assertEqual(fallback.await_args.args[3], "browser died")
+        awaited = fallback.await_args
+        assert awaited is not None
+        self.assertEqual(awaited.args[3], "browser died")
 
     def test_no_delivery_table_falls_back_without_blaming_the_browser(self) -> None:
         sentinel = object()
@@ -384,7 +388,9 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
             result = _quote(self.connector, self._page(content="<html>no delivery table</html>"))
 
         self.assertIs(result, sentinel)
-        self.assertEqual(len(fallback.await_args.args), 3)  # no browser error to report
+        awaited = fallback.await_args
+        assert awaited is not None
+        self.assertEqual(len(awaited.args), 3)  # no browser error to report
 
 
 class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
@@ -450,7 +456,9 @@ class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
             result = _quote(self.connector, page)
 
         self.assertIs(result, sentinel)
-        self.assertEqual(fallback.await_args.args[3], "browser died")
+        awaited = fallback.await_args
+        assert awaited is not None
+        self.assertEqual(awaited.args[3], "browser died")
 
     def test_a_span_without_a_figure_falls_back_to_http(self) -> None:
         """A 'Loading…' span must not be mistaken for a price."""
@@ -462,7 +470,9 @@ class HomeFuelsDirectBrowserConnectorTests(unittest.TestCase):
             result = _quote(self.connector, page)
 
         self.assertIs(result, sentinel)
-        self.assertEqual(len(fallback.await_args.args), 3)  # no browser error to report
+        awaited = fallback.await_args
+        assert awaited is not None
+        self.assertEqual(len(awaited.args), 3)  # no browser error to report
 
 
 if __name__ == "__main__":

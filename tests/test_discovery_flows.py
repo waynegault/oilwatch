@@ -95,6 +95,7 @@ class SearchTests(unittest.TestCase):
         client = FakeHttpClient({"html.duckduckgo.com": "<html>results</html>"})
         self.assertEqual(_service(client)._search("heating oil aberdeen"), "<html>results</html>")
         url, params = client.calls[0]
+        assert params is not None
         self.assertIn("duckduckgo", url)
         self.assertEqual(params["q"], "heating oil aberdeen")
 
@@ -110,7 +111,9 @@ class DiscoverTests(unittest.TestCase):
         self.assertEqual(candidate.distance_miles, 5.0)
         self.assertEqual(candidate.email, "info@turriff-fuels.co.uk")
         self.assertEqual(candidate.phone, "01888 562706")
-        self.assertIn("AB51 3AB", candidate.address)
+        address = candidate.address
+        assert address is not None
+        self.assertIn("AB51 3AB", address)
 
     def test_an_ungeocodable_result_still_counts_when_it_looks_local(self) -> None:
         client = FakeHttpClient({"html.duckduckgo.com": SEARCH_HTML, "turriff-fuels.co.uk": SITE_HTML})

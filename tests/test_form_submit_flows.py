@@ -104,25 +104,33 @@ class SelectOptionTests(unittest.TestCase):
         element = FakeField(tag_name="select", options=[FakeOption("1000 litres")])
         with patch("oilwatch.form_submit.Select", FakeSelect):
             _select_option(element, "1000 litres")
-        self.assertEqual(FakeSelect.last.selected, ["1000 litres"])
+        last = FakeSelect.last
+        assert last is not None
+        self.assertEqual(last.selected, ["1000 litres"])
 
     def test_a_partial_match_is_used_when_the_exact_text_is_absent(self) -> None:
         element = FakeField(tag_name="select", options=[FakeOption("1000 litres")])
         with patch("oilwatch.form_submit.Select", FakeSelect):
             _select_option(element, "1000")
-        self.assertEqual(FakeSelect.last.selected, ["1000 litres"])
+        last = FakeSelect.last
+        assert last is not None
+        self.assertEqual(last.selected, ["1000 litres"])
 
     def test_it_falls_back_to_the_first_real_option(self) -> None:
         element = FakeField(tag_name="select", options=[FakeOption("Please select"), FakeOption("500 litres")])
         with patch("oilwatch.form_submit.Select", FakeSelect):
             _select_option(element, "no such option")
-        self.assertEqual(FakeSelect.last.selected, ["500 litres"])
+        last = FakeSelect.last
+        assert last is not None
+        self.assertEqual(last.selected, ["500 litres"])
 
     def test_nothing_is_selected_when_every_option_is_a_placeholder(self) -> None:
         element = FakeField(tag_name="select", options=[FakeOption("Please select"), FakeOption("-- none --")])
         with patch("oilwatch.form_submit.Select", FakeSelect):
             _select_option(element, "no such option")
-        self.assertEqual(FakeSelect.last.selected, [])
+        last = FakeSelect.last
+        assert last is not None
+        self.assertEqual(last.selected, [])
 
 
 def _fields(**overrides):

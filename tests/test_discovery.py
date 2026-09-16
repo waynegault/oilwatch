@@ -93,7 +93,7 @@ class FieldExtractionTests(unittest.TestCase):
     def test_address_includes_the_postcode(self) -> None:
         text = "Example Fuels, Inverurie, Aberdeenshire AB51 3AB, Scotland"
         address = DiscoveryService._extract_address(text)
-        self.assertIsNotNone(address)
+        assert address is not None, "the postcode should be in the extracted address"
         self.assertIn("AB51 3AB", address)
 
 

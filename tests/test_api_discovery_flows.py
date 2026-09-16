@@ -132,8 +132,10 @@ class SetupTests(unittest.TestCase):
         self.assertIs(tool._page, page)
         # Everything is routed through the interceptor, which is the point of it.
         # (assertEqual, not assertIs: a bound method is a new object each time.)
-        self.assertEqual(context.route_handler, tool._intercept)
-        self.assertIs(context.route_handler.__self__, tool)
+        handler = context.route_handler
+        assert handler is not None
+        self.assertEqual(handler, tool._intercept)
+        self.assertIs(handler.__self__, tool)
 
 
 if __name__ == "__main__":

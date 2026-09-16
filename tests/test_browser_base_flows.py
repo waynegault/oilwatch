@@ -129,7 +129,9 @@ class SetupAndInterceptionTests(unittest.TestCase):
             asyncio.run(connector._setup_browser())
 
         route = FakeRoute(FakeRequest())
-        asyncio.run(context.route_handler(route))
+        handler = context.route_handler
+        assert handler is not None
+        asyncio.run(handler(route))
 
         self.assertTrue(route.fulfilled)
         self.assertEqual(len(connector._api_requests), 1)

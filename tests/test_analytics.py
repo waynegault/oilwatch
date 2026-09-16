@@ -11,7 +11,9 @@ def make_quote(
     supplier_id: int,
     name: str,
     observed_at: str,
-    price_per_liter: float,
+    # Some tests deliberately build a quote with no price (a row that must be
+    # skipped rather than compared), so the helper takes one.
+    price_per_liter: float | None,
     status: str = "ok",
 ) -> dict:
     return {
