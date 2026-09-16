@@ -108,8 +108,9 @@ def get_telephone_script():
     return _build("TelephoneQuoteScript")
 
 
-__all__ = [
+__all__ = [  # noqa: PLE0604 - the starred entry yields _CONNECTORS' keys, which are strings
     "get_supplier_connector",
     "get_telephone_script",
+    # The connector classes, by their public names.
     *_CONNECTORS,
 ]

@@ -152,7 +152,7 @@ class FakePlaywright:
             return FakeBrowser(self._page)
 
     @property
-    def chromium(self) -> "FakePlaywright._Chromium":
+    def chromium(self) -> FakePlaywright._Chromium:
         return self._Chromium(self._page)
 
     def stop(self) -> None:

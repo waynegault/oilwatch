@@ -181,5 +181,5 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
                 quantity_liters=quantity_liters,
                 status="error",
                 source="homefuels_direct_browser",
-                notes=f"HTTP fallback failed: {str(e)}",
+                notes=f"HTTP fallback failed: {e!s}",
             )

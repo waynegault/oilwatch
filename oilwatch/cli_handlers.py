@@ -10,8 +10,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from oilwatch.api_discovery import discover_supplier_api
 from oilwatch.auto_register import register_all

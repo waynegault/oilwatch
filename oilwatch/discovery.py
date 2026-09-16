@@ -10,7 +10,6 @@ from oilwatch.config import Settings
 from oilwatch.geo import GeoService
 from oilwatch.models import SupplierCandidate
 
-
 PRICE_WORDS = ("heating oil", "kerosene", "fuel", "domestic oil", "gas oil")
 LOCAL_HINTS = (
     "aberdeenshire",

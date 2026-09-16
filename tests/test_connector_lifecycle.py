@@ -39,9 +39,11 @@ class ConnectorClientLifecycleTests(unittest.TestCase):
         client.return_value.close.assert_called_once()
 
     def test_context_manager_closes_on_exit(self) -> None:
-        with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as client:
-            with ValueOilsConnector():
-                pass
+        with (
+            patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as client,
+            ValueOilsConnector(),
+        ):
+            pass
         client.return_value.close.assert_called_once()
 
     def test_a_connector_without_a_client_closes_cleanly(self) -> None:

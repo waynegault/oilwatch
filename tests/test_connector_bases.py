@@ -87,9 +87,11 @@ class SyncBrowserConnectorTests(unittest.TestCase):
             def __exit__(self, *exc: Any) -> bool:
                 return False
 
-        with patch("playwright.sync_api.sync_playwright", side_effect=lambda: FakeCM()):
-            with sync_page() as page:
-                self.assertEqual(page, "PAGE")
+        with (
+            patch("playwright.sync_api.sync_playwright", side_effect=lambda: FakeCM()),
+            sync_page() as page,
+        ):
+            self.assertEqual(page, "PAGE")
 
         self.assertTrue(closed)
 

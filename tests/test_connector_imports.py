@@ -53,6 +53,9 @@ class ConnectorImportCostTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=SUBPROCESS_TIMEOUT_S,
+                # The caller asserts on the return code, so a non-zero exit is
+                # the result under test rather than an error to raise here.
+                check=False,
             )
         except subprocess.TimeoutExpired:
             self.fail(

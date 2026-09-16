@@ -212,7 +212,7 @@ class FakeAsyncPlaywright:
         self.chromium = FakeChromium(browser)
         self.stopped = False
 
-    async def start(self) -> "FakeAsyncPlaywright":
+    async def start(self) -> FakeAsyncPlaywright:
         return self
 
     async def stop(self) -> None:

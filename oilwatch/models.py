@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -12,7 +12,7 @@ def utcnow_naive() -> datetime:
     *naive* (no ``+00:00`` suffix) so that stored ISO-8601 timestamps stay
     string-sortable and consistent with historical rows already in SQLite.
     """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass(slots=True)

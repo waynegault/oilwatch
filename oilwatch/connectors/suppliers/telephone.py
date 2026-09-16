@@ -104,7 +104,7 @@ QUESTIONS TO ASK:
 --------------------------------------------------------------------------------
 ADDITIONAL NOTES FOR THIS SUPPLIER:
 --------------------------------------------------------------------------------
-{notes if notes else "No additional notes available."}
+{notes or "No additional notes available."}
 
 --------------------------------------------------------------------------------
 QUOTE RECORDING

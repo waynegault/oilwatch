@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderServiceError, GeocoderTimedOut
+from geopy.geocoders import Nominatim
 
 
 class GeoService:

@@ -130,7 +130,7 @@ def _select_option(element, value: str) -> None:
     try:
         sel.select_by_visible_text(value)
         return
-    except Exception:  # noqa: BLE001 - exact match is best-effort; fall through to fuzzy
+    except Exception:  # noqa: BLE001, S110 - exact match is best-effort; fall through to fuzzy
         pass
     for option in sel.options:
         if value in option.text:

@@ -169,8 +169,8 @@ class APIDiscoveryTool:
                         try:
                             await action(self._page)
                             await self._page.wait_for_timeout(1000)
-                        except Exception as e:
-                            print(f"Action failed: {e}")
+                        except Exception as e:  # noqa: BLE001 - a caller's action is arbitrary
+                            log.warning("Action failed: %s", e)
 
                 # Wait for any pending requests
                 await self._page.wait_for_timeout(timeout)
@@ -198,7 +198,7 @@ class APIDiscoveryTool:
         """Get a summary of discovered APIs."""
         # Group endpoints by base path
         grouped: dict[str, list[str]] = {}
-        for url in self._api_endpoints.keys():
+        for url in self._api_endpoints:
             # Extract base path
             parts = url.split("?")[0].rstrip("/").split("/")
             base = "/".join(parts[:5]) if len(parts) > 4 else url

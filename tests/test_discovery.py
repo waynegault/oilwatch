@@ -31,12 +31,12 @@ class FakeGeo:
 
 
 def _settings(**overrides: Any) -> Settings:
-    base = dict(
-        database_path=Path("data/oilwatch.sqlite"),
-        chart_path=Path("data/chart.png"),
-        time_series_chart_path=Path("data/ts.png"),
-        home=HomeConfig(label="Hatton of Fintry, Aberdeenshire"),
-    )
+    base = {
+        "database_path": Path("data/oilwatch.sqlite"),
+        "chart_path": Path("data/chart.png"),
+        "time_series_chart_path": Path("data/ts.png"),
+        "home": HomeConfig(label="Hatton of Fintry, Aberdeenshire"),
+    }
     base.update(overrides)
     return Settings(**base)
 

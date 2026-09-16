@@ -12,8 +12,9 @@ connector module stays cheap and does not require a browser.
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.models import QuoteResult

@@ -302,7 +302,7 @@ class BrowserConnector(BaseConnector, ABC):
                         return await self._handle_registration_or_error(
                             supplier, quantity_liters, context, page, creds
                         )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - a sign-in that throws is a manual quote
                     # Login threw exception - may need registration
                     return await self._handle_registration_or_error(
                         supplier, quantity_liters, context, page, creds, str(e)
@@ -311,8 +311,8 @@ class BrowserConnector(BaseConnector, ABC):
                 # Get quote using browser
                 result = await self.get_quote_with_browser(supplier, quantity_liters, context, page)
                 return result
-                
-            except Exception as e:
+
+            except Exception as e:  # noqa: BLE001 - every browser fault becomes an error quote
                 return QuoteResult(
                     supplier_id=int(supplier["id"]),
                     supplier_name=supplier["name"],
@@ -320,7 +320,7 @@ class BrowserConnector(BaseConnector, ABC):
                     quantity_liters=quantity_liters,
                     status="error",
                     source=f"{self.supplier_key}_browser",
-                    notes=f"Browser automation error: {str(e)}",
+                    notes=f"Browser automation error: {e!s}",
                 )
             finally:
                 await self._close_browser()

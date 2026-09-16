@@ -102,9 +102,9 @@ class HomeFuelsDirectConnector(BaseConnector):
                 quantity_liters=quantity_liters,
                 status="error",
                 source="homefuels_direct_auto",
-                notes=f"HTTP error fetching quote: {str(e)}",
+                notes=f"HTTP error fetching quote: {e!s}",
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - any fetch fault becomes an error quote
             return QuoteResult(
                 supplier_id=int(supplier["id"]),
                 supplier_name=supplier["name"],
@@ -112,7 +112,7 @@ class HomeFuelsDirectConnector(BaseConnector):
                 quantity_liters=quantity_liters,
                 status="error",
                 source="homefuels_direct_auto",
-                notes=f"Error fetching quote: {str(e)}",
+                notes=f"Error fetching quote: {e!s}",
             )
     
     def _get_live_price(self) -> tuple[float | None, str]:

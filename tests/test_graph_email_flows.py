@@ -107,9 +107,9 @@ class ClientIdTests(unittest.TestCase):
         with (
             patch.dict("os.environ", {}, clear=True),
             patch("oilwatch.config.load_settings", side_effect=OSError("no settings")),
+            self.assertRaises(RuntimeError),
         ):
-            with self.assertRaises(RuntimeError):
-                load_client_id()
+            load_client_id()
 
 
 class RefreshTokenCacheTests(unittest.TestCase):

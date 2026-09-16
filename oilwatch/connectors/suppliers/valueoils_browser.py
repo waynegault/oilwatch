@@ -213,5 +213,5 @@ class ValueOilsBrowserConnector(BrowserConnector):
                 quantity_liters=quantity_liters,
                 status="error",
                 source="valueoils_browser",
-                notes=f"HTTP fallback failed: {str(e)}",
+                notes=f"HTTP fallback failed: {e!s}",
             )

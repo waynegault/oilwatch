@@ -112,7 +112,7 @@ class ValueOilsConnector(BaseConnector):
                 quantity_liters=quantity_liters,
                 status="error",
                 source="valueoils_auto",
-                notes=f"HTTP error fetching quote: {str(e)}",
+                notes=f"HTTP error fetching quote: {e!s}",
             )
         except Exception as e:  # noqa: BLE001 - reported as an error quote rather than raised
             return QuoteResult(
@@ -122,7 +122,7 @@ class ValueOilsConnector(BaseConnector):
                 quantity_liters=quantity_liters,
                 status="error",
                 source="valueoils_auto",
-                notes=f"Error fetching quote: {str(e)}",
+                notes=f"Error fetching quote: {e!s}",
             )
 
     @staticmethod

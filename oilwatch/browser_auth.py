@@ -30,6 +30,12 @@ import winreg
 from pathlib import Path
 from typing import Any
 
+# undetected-chromedriver imports distutils, which was removed from the stdlib in
+# Python 3.12+. Importing setuptools first provides the distutils shim, so it stays
+# adjacent to, and above, uc.
+import setuptools  # noqa: F401
+import undetected_chromedriver as uc
+
 from oilwatch.logging_setup import get_logger
 
 log = get_logger("browser_auth")
@@ -68,12 +74,6 @@ _SUBMIT_MARKER_JS = f"window.{_SUBMIT_MARKER_FLAG} = true;"
 #: worse than waiting, so this is a ceiling, not an expectation.
 SUBMIT_SETTLE_S = 8.0
 SUBMIT_POLL_S = 0.25
-
-# undetected-chromedriver imports distutils, which was removed from the stdlib
-# in Python 3.12+. Importing setuptools first provides the distutils shim.
-import setuptools  # noqa: F401
-
-import undetected_chromedriver as uc
 
 
 def detect_chrome_major_version() -> int | None:

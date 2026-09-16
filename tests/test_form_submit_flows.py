@@ -26,7 +26,7 @@ class FakeOption:
 class FakeSelect:
     """Accepts a visible-text match only when the text is one of its options."""
 
-    last: "FakeSelect | None" = None
+    last: FakeSelect | None = None
 
     def __init__(self, element) -> None:
         self._labels = [option.text for option in element.options]

@@ -73,13 +73,13 @@ class FakeGeo:
 
 
 def _settings(**overrides: Any) -> Settings:
-    base = dict(
-        database_path=Path("data/oilwatch.sqlite"),
-        chart_path=Path("data/chart.png"),
-        time_series_chart_path=Path("data/ts.png"),
-        home=HomeConfig(label="Hatton of Fintry, Aberdeenshire", latitude=57.2, longitude=-2.2),
-        search_queries=["heating oil aberdeen"],
-    )
+    base = {
+        "database_path": Path("data/oilwatch.sqlite"),
+        "chart_path": Path("data/chart.png"),
+        "time_series_chart_path": Path("data/ts.png"),
+        "home": HomeConfig(label="Hatton of Fintry, Aberdeenshire", latitude=57.2, longitude=-2.2),
+        "search_queries": ["heating oil aberdeen"],
+    }
     base.update(overrides)
     return Settings(**base)
 

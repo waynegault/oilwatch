@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import Mock, patch
 
-from oilwatch.connectors.suppliers.fueltool import FueltoolConnector
 from oilwatch.connectors.suppliers.fuelsoft import FuelsoftConnector
+from oilwatch.connectors.suppliers.fueltool import FueltoolConnector
 from oilwatch.connectors.suppliers.highland_fuels import HighlandFuelsConnector
 from oilwatch.connectors.suppliers.rix_browser import RixBrowserConnector
 from oilwatch.connectors.suppliers.scottish_fuels_browser import ScottishFuelsBrowserConnector

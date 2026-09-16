@@ -16,6 +16,7 @@ Requires a Microsoft Entra app registration:
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import os
 import re
@@ -260,12 +261,11 @@ class GraphEmailMonitor:
             stamp = utcnow_naive()
             raw_stamp = message.get("receivedDateTime") or ""
             if raw_stamp:
-                try:
-                    # Graph sends "...Z"; keep it naive like the rest of the app so
-                    # expiry comparisons never mix aware and naive datetimes.
-                    stamp = datetime.fromisoformat(raw_stamp.replace("Z", "+00:00")).replace(tzinfo=None)
-                except ValueError:
-                    pass
+                with contextlib.suppress(ValueError):
+                    # Graph sends "...Z", which fromisoformat accepts on 3.11+; the
+                    # value is kept naive like the rest of the app so expiry
+                    # comparisons never mix aware and naive datetimes.
+                    stamp = datetime.fromisoformat(raw_stamp).replace(tzinfo=None)
 
             offers = parse_discounts(text, received_at=stamp)
             for offer in offers:

@@ -45,7 +45,7 @@ class FakeAsyncClient:
         self._get_raises = get_raises
         self.urls: list[str] = []
 
-    async def __aenter__(self) -> "FakeAsyncClient":
+    async def __aenter__(self) -> FakeAsyncClient:
         return self
 
     async def __aexit__(self, *exc) -> bool:

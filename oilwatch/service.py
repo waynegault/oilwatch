@@ -128,7 +128,7 @@ class OilWatchApp:
                 payloads = list(pool.map(quote_one, suppliers))
 
         results: list[dict[str, Any]] = []
-        for supplier, payload in zip(suppliers, payloads):
+        for supplier, payload in zip(suppliers, payloads, strict=True):
             # Recorded here, in the one thread, so concurrent quotes cannot
             # contend for the single SQLite file.
             self.db.record_quote(payload)

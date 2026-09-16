@@ -9,7 +9,6 @@ from typing import Any
 
 from oilwatch.models import utcnow_naive
 
-
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS suppliers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

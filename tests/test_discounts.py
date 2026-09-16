@@ -3,7 +3,12 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta
 
-from oilwatch.discounts import DiscountOffer, best_discount_for, looks_like_an_offer, parse_discounts
+from oilwatch.discounts import (
+    DiscountOffer,
+    best_discount_for,
+    looks_like_an_offer,
+    parse_discounts,
+)
 
 # The real ValueOils email, lightly trimmed.
 VALUEOILS_EMAIL = """\

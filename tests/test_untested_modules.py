@@ -25,6 +25,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from oilwatch.cli import main
@@ -179,7 +180,7 @@ class SupplierApiDiscoveryTests(unittest.TestCase):
 class RegistrationSummaryTests(unittest.TestCase):
     """Registration is a long, semi-manual run; its report must be complete."""
 
-    RESULTS = [
+    RESULTS: ClassVar[list[dict[str, str]]] = [
         {
             "supplier": "Rix",
             "status": "registered",

@@ -38,7 +38,7 @@ def wait_until(
         try:
             if condition():
                 return True
-        except Exception:  # noqa: BLE001 - "not there yet" is the normal case for a poll
+        except Exception:  # noqa: BLE001, S110 - a raise is the normal "not there yet" for a poll
             pass
         time.sleep(interval_s)
         waited += interval_s

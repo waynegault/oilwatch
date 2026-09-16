@@ -11,7 +11,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-
 #: Sources whose price is market context rather than an offer from a supplier.
 #: Fueltool publishes a UK average, so it must not win "cheapest" and must not
 #: drag the average or the variance around; it is reported separately instead.

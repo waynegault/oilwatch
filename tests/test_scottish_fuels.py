@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from typing import ClassVar
 
 from oilwatch.connectors.suppliers.scottish_fuels_browser import ScottishFuelsBrowserConnector
 
@@ -41,7 +42,7 @@ class LoginPageDetectionTests(unittest.TestCase):
 class ProductSkuChoiceTests(unittest.TestCase):
     """The supplier renumbers the fuel-type radios, so selection must adapt."""
 
-    OPTIONS = {"451": "Premium Kerosene", "418": "Heating Oil", "555": "Diesel"}
+    OPTIONS: ClassVar[dict[str, str]] = {"451": "Premium Kerosene", "418": "Heating Oil", "555": "Diesel"}
 
     def test_configured_sku_wins_when_present(self) -> None:
         self.assertEqual(Connector.choose_product_sku("418", self.OPTIONS), "418")

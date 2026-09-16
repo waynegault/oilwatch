@@ -311,7 +311,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 raw_payload=raw_payload,
             )
             
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - every browser fault becomes an error quote
             return QuoteResult(
                 supplier_id=int(supplier["id"]),
                 supplier_name=supplier["name"],
@@ -319,7 +319,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 quantity_liters=quantity_liters,
                 status="error",
                 source="boilerjuice_browser",
-                notes=f"Browser automation error: {str(e)}",
+                notes=f"Browser automation error: {e!s}",
             )
     
     @staticmethod
@@ -396,7 +396,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
 
             return None
             
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an unreadable page is simply "no price"
             log.debug("price extraction failed: %s", e)
             return None
     
