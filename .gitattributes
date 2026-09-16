@@ -1,0 +1,16 @@
+# Normalise line endings in the repository, so that Windows git and WSL git
+# agree on what has changed.
+#
+# Before this file the worktree held a mix of CRLF and LF while the index held
+# LF throughout, and the two sides read that differently: Windows git has
+# core.autocrlf=true (which normalises on read and so hides it), while WSL git
+# leaves it unset and so compared CRLF content against LF blobs. The result was
+# ~42 files reported permanently dirty from WSL with a phantom 7,370-line diff
+# that vanished under `git diff --ignore-cr-at-eol` - which meant a real edit
+# hid in the noise for anything reading the tree over /mnt/c.
+* text=auto
+
+# The batch launchers are the exception and must stay CRLF: cmd.exe mis-parses
+# an LF-only batch file (labels and goto), and oilwatch_env.bat is the shared
+# file both unattended launchers call.
+*.bat text eol=crlf
