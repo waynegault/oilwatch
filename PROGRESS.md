@@ -298,13 +298,16 @@ Windows spawn.
 The 2026-09-16 import tidy-up (commit `abdf508`, matplotlib moved off the
 server's import path, ~0.6 s of the cold start) is a cleanup standing next to
 this, **not** the remedy. The upstream work is OpenClaw #144941
-(`fix(doctor): contain MCP child cleanup failures`, merged 2026-09-11), but it is
-scoped to `doctor`: it says `Fixes #144919` and only `Refs #144911`, and #144911
-("MCP server init timeout crashes the Gateway") is **still open** — P1, labelled
-`impact:crash-loop`, with no comments on it. Its own description nevertheless
-claims the containment is shared with Gateway connections, which contradicts that
-scoping, so the gateway path is **not** established as fixed even on `main`: 2026.9.4
-(still npm's latest on 09-16) reproduces it.
+(`fix(doctor): contain MCP child cleanup failures`, merged 2026-09-11T15:49Z).
+Despite the title, it is **not** doctor-only: it wraps `client.close` inside the
+shared `connectMcpClient`, so the promise `Client.connect` discards gets a
+handler — the same path agent runs and node hosts use, and #144911's thread reads
+its evidence as covering Gateway connections too. What is missing is
+**verification, not scope**: no maintainer confirmed Gateway coverage, the PR's own
+deployment validation was explicitly deferred, and no release carries it (the
+2026.9.4 tag, 03:46Z, predates the merge and is still npm's latest). #144911
+remains open, P1, `impact:crash-loop`. Our crash was on 2026.9.4, so it neither
+confirms nor refutes the fix.
 
 **Fixed 2026-09-15 — `refresh_prices` over MCP, which used to hang for ever.**
 Called through mcporter it returned **zero output** and timed out twice, even at
