@@ -85,6 +85,19 @@ class PurchaseRecordingTests(AppTestCase):
         recorded = self.app.record_purchase("Scottish Fuels", total_price=1089.40)
         self.assertEqual(recorded["agreed_price_per_liter"], 1.0894)
 
+    def test_both_figures_are_kept_as_given(self) -> None:
+        """When both are supplied, neither is re-derived from the other.
+
+        A total may carry a delivery charge the per-litre price does not, so one
+        that does not equal price × litres is stored as stated rather than
+        overwritten by the derivation.
+        """
+        recorded = self.app.record_purchase(
+            "Scottish Fuels", price_per_liter=1.10, total_price=1100.50
+        )
+        self.assertEqual(recorded["agreed_price_per_liter"], 1.10)
+        self.assertEqual(recorded["total_price"], 1100.50)
+
     def test_the_quantity_overrides_the_usual_order(self) -> None:
         recorded = self.app.record_purchase("Scottish Fuels", quantity_liters=500, price_per_liter=1.20)
         self.assertEqual(recorded["quantity_liters"], 500)

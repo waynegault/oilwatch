@@ -367,11 +367,14 @@ class OilWatchApp:
         resolved = self._resolve_supplier(supplier)
         litres = quantity_liters or self.settings.quote_quantity_liters
 
-        if price_per_liter is None and total_price is None:
-            raise ValueError("Give the price per litre or the total paid.")
+        # Either figure is enough. Each derivation sits inside the branch that
+        # proves the value it reads is not None — which the guard cannot say to a
+        # type checker — and neither one overwrites a figure that was given.
         if price_per_liter is None:
-            price_per_liter = round(float(total_price) / litres, 4)
-        if total_price is None:
+            if total_price is None:
+                raise ValueError("Give the price per litre or the total paid.")
+            price_per_liter = round(total_price / litres, 4)
+        elif total_price is None:
             total_price = round(price_per_liter * litres, 2)
 
         record = {
