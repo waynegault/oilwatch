@@ -309,6 +309,18 @@ deployment validation was explicitly deferred, and no release carries it (the
 remains open, P1, `impact:crash-loop`. Our crash was on 2026.9.4, so it neither
 confirms nor refutes the fix.
 
+Stronger than that, and checked against the source rather than the thread: **the
+call site that produced our crash is not in #144941's diff at all.** The PR changes
+five files — `docs/gateway/doctor/checks.md`, `src/agents/mcp-client-lifecycle.ts`,
+`src/agents/mcp-stdio-transport.test.ts`, `src/flows/doctor-core-checks.runtime.ts`
+and its test — and **nothing under `src/process/supervisor/`**. On `main`, the anchor
+control channel's close handler still calls `void finishPosixAuthority(...)`: an
+`async` function whose rejection is therefore unhandled, whose fallback message is
+literally "anchor channel closed without a matching closing receipt". So
+"verification is missing" understates it — even once #144941 ships, the fatal path
+is not provably closed. Cite that handler, not a line number: the file moves (one
+report cites 563-569, another 525).
+
 **Fixed 2026-09-15 — `refresh_prices` over MCP, which used to hang for ever.**
 Called through mcporter it returned **zero output** and timed out twice, even at
 900 s, with no DB mtime change — the failure that had made the CLI look like the
