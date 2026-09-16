@@ -508,6 +508,26 @@ python -m coverage run -m unittest discover -s tests -t .
 python -m coverage report -m
 # The report exits non-zero below the floor set in pyproject.toml
 # ([tool.coverage.report] fail_under), so a silent slide fails the run.
+# Measuring the MCP server, which runs as its own process, needs the .pth hook
+# described in docs/inspection.md 1.9.
+```
+
+### Check before you commit
+
+Both checkers are declared in the `dev` extra and both have their scope pinned in
+the repository rather than inherited from a default: Ruff's rule set in
+`pyproject.toml`, Pyright's analysis mode in `pyrightconfig.json`.
+
+```powershell
+# Lint. A finding is fixed, or silenced with "# noqa: <rule> - <reason>".
+python -m ruff check .
+
+# Types. Two questions, two runs:
+#   bare `pyright`  - is the package clean? A handful of third-party artifacts
+#                     remain, listed in docs/inspection.md 8.9.
+#   `pyright tests` - is the test tree clean? It is, and it must stay that way.
+python -m pyright
+python -m pyright tests
 ```
 
 ### Run from VS Code

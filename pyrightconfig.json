@@ -1,4 +1,14 @@
 {
+  // The analysis mode is pinned rather than inherited, for the same reason the
+  // Ruff rule set is (pyproject.toml): a default is not a decision, and the
+  // count recorded in docs/inspection.md is only reproducible if the mode that
+  // produced it is stated. "standard" is what bare `pyright` resolves to today
+  // (the installed 1.1.414 also bundles it as its default), so pinning it
+  // changes nothing now.
+  //
+  // Pylance reads this file, and .vscode/settings.json pins the same mode for
+  // the editor, so `pyright` and the Problems panel answer the same question.
+  "typeCheckingMode": "standard",
   "include": ["oilwatch"],
   "exclude": [".venv", "graphify-out", "**/node_modules"],
   "venvPath": ".",
