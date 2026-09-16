@@ -268,6 +268,38 @@ reports **9 tools, resources, prompts**, and `openclaw mcp doctor` reports
 not the MCP framework's (which is what it reported before the server declared
 one).
 
+**Known defect, 2026-09-16 — a missed `initialize` budget kills the whole
+OpenClaw gateway.** Not an OilWatch bug, and not fixable from this repository.
+When this server does not finish the stdio handshake inside the client's budget,
+OpenClaw logs `failed to start server "oilwatch" ... did not complete initialize
+within Ns`, and 0.25 s later throws an unhandled rejection out of its
+child-cleanup path (`service child cleanup identity lost: anchor channel closed
+without a matching closing receipt`, at `loseIdentity` ← `finishPosixAuthority` ←
+`Socket` close), writes a stability bundle, and exits `status=1/FAILURE` — taking
+every child in its cgroup with it: the other MCP servers, `openclaw cron` jobs in
+flight, heartbeat scripts. It was observed nine times between 2026-09-11 and
+2026-09-16.
+
+It is not specific to this server. `outlook`, also a spawned stdio child,
+produced the identical rejection on 2026-09-15 after its own init timeout, so
+retiring this one would leave the path open. A remote streamable-HTTP server
+cannot reach it at all: `graphify` timed out four times on 2026-09-16 with no
+rejection — the one structural answer, at the cost described under "Superseded"
+below.
+
+The budget is `connectionTimeoutMs`, confirmed as the knob by three configured
+values matching the seconds their log lines printed. Both stdio servers here now
+carry **180000**. Size it on the cold tail, not on a warm median: a warm
+`initialize` measures ~1.6-2.4 s, while a cold filesystem cache is several times
+slower (~8.7 s reported). The WSL interop path is not the variable — spawning
+this Windows python from inside WSL over `/mnt/c` measured the same as a direct
+Windows spawn.
+
+The 2026-09-16 import tidy-up (commit `abdf508`, matplotlib moved off the
+server's import path, ~0.6 s of the cold start) is a cleanup standing next to
+this, **not** the remedy. The remedy is upstream: OpenClaw #144941, merged
+2026-09-11, absent from the released 2026.9.4.
+
 **Fixed 2026-09-15 — `refresh_prices` over MCP, which used to hang for ever.**
 Called through mcporter it returned **zero output** and timed out twice, even at
 900 s, with no DB mtime change — the failure that had made the CLI look like the
@@ -293,7 +325,9 @@ cannot reach the Windows host on `localhost` and the working address depends on
 the WSL networking mode (NAT now; the LAN IP `192.168.33.56` under mirrored).
 That required the server to be running *and* the address to be right, so either
 slipping produced a `did not complete initialize within 10s` doctor warning. The
-stdio entry removes both preconditions.
+stdio entry removes both preconditions — but not for free: it is what exposes
+this server to the fatal init-timeout above, which the HTTP transport could not
+reach.
 
 ---
 
