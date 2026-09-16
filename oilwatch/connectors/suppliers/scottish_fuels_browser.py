@@ -210,7 +210,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
         # What the site states, not what we multiply out: its own inclusive
         # total for the quantity it quoted, with the per-litre rate derived from
         # that so the two can never disagree.
-        quoted_quantity = (quoted or {}).get("quantity") or quantity_liters
+        quoted_quantity = int((quoted or {}).get("quantity") or quantity_liters)
         if quoted and quoted["inc_vat_total"] > 0:
             total_price = quoted["inc_vat_total"]
             price_per_liter = round(total_price / quoted_quantity, 4)
