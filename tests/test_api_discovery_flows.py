@@ -62,10 +62,7 @@ class DiscoverTests(unittest.TestCase):
         async def bad(_page):
             raise RuntimeError("action blew up")
 
-        with (
-            patch.object(APIDiscoveryTool, "_setup", new=AsyncMock()),
-            patch("builtins.print"),
-        ):
+        with patch.object(APIDiscoveryTool, "_setup", new=AsyncMock()):
             asyncio.run(tool.discover(URL, actions=[bad, good]))
 
         self.assertEqual(ran, ["good"])

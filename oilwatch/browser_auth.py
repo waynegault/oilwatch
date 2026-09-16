@@ -153,7 +153,11 @@ class BrowserAuth:
     def launch(self, headless: bool = False) -> uc.Chrome:
         """Launch (or reuse) the persistent undetected Chrome session."""
         self._reset_preferences()
-        kwargs: dict[str, object] = {
+        # A heterogeneous kwargs bag for a third-party constructor. Annotating it
+        # ``object`` was worse than useless: it made every keyword a mismatch
+        # rather than a check, so it is ``Any`` and uc's own signature is the
+        # contract — the same as passing these inline.
+        kwargs: dict[str, Any] = {
             "options": self._options(headless),
             # uc's ``use_subprocess=False`` starts Chrome through a
             # multiprocessing helper and then waits on a pipe for the pid with

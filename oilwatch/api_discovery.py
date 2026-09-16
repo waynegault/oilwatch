@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -141,7 +142,9 @@ class APIDiscoveryTool:
     async def discover(
         self,
         url: str,
-        actions: list[callable] | None = None,
+        # ``callable`` is the builtin *function*, not a type: as an annotation it
+        # told a type checker nothing and the test's own actions nothing.
+        actions: list[Callable[[Page], Awaitable[Any]]] | None = None,
         timeout: int = 10000,
     ) -> dict[str, Any]:
         """
@@ -175,7 +178,10 @@ class APIDiscoveryTool:
                 # Wait for any pending requests
                 await self._page.wait_for_timeout(timeout)
 
-                return self.get_summary()
+            # Hand back a summary on every path. The declared return type is a
+            # dict, so an absent page — which _setup does not produce — reads as
+            # an empty discovery rather than a None a caller must guard.
+            return self.get_summary()
 
         finally:
             await self._close()
