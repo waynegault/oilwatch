@@ -6,11 +6,6 @@ from pathlib import Path
 from statistics import mean, median, pvariance
 from typing import Any
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
 #: Sources whose price is market context rather than an offer from a supplier.
 #: Fueltool publishes a UK average, so it must not win "cheapest" and must not
 #: drag the average or the variance around; it is reported separately instead.
@@ -19,6 +14,30 @@ BENCHMARK_SOURCES = frozenset({"fueltool"})
 #: The smallest market move worth reporting. Supplier quotes resolve to a penny
 #: per litre, so anything below this is rounding, not a price movement.
 TREND_THRESHOLD = 0.01
+
+#: Set by the first chart built; matplotlib requires the backend to be chosen
+#: before pyplot is imported.
+_backend_selected = False
+
+
+def _select_agg_backend() -> None:
+    """Choose matplotlib's Agg backend, once, on the first chart.
+
+    Charting is the only reason this module needs matplotlib, and pyplot is
+    imported by the chart builders rather than here. This module sits on the MCP
+    server's import path, and the server is spawned as a stdio child at every
+    client session start, so an import costing most of a second is spent against
+    the client's initialize timeout. Importing matplotlib to call ``use`` would
+    load it just the same, so the backend is selected when a chart is actually
+    built - exactly once, because re-selecting a backend closes open figures.
+    """
+    global _backend_selected
+    if _backend_selected:
+        return
+    import matplotlib
+
+    matplotlib.use("Agg")
+    _backend_selected = True
 
 
 class AnalyticsService:
@@ -259,6 +278,9 @@ class AnalyticsService:
         averages = [mean(grouped[day]) for day in days]
         variances = [pvariance(grouped[day]) if len(grouped[day]) > 1 else 0.0 for day in days]
 
+        _select_agg_backend()
+        from matplotlib import pyplot as plt
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fig, ax1 = plt.subplots(figsize=(12, 6))
         ax1.plot(days, cheapest, label="Cheapest", color="#0b6e4f", linewidth=2)
@@ -311,6 +333,9 @@ class AnalyticsService:
 
         if not series and not brent_points:
             raise ValueError("No successful quotes available for charting.")
+
+        _select_agg_backend()
+        from matplotlib import pyplot as plt
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fig, ax = plt.subplots(figsize=(12, 6))

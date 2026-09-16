@@ -4,16 +4,26 @@ This file was deleted once as five delegations and a getter, and this is not
 that. What is pinned here is the wiring that had drifted: a served version the
 handshake took from the MCP framework because the server never declared one, a
 delivery postcode repeated as a literal here while every other caller read it
-from configuration, and - now - that importing the module owns no database.
+from configuration, that importing the module owns no database, and that
+starting it imports no charting stack.
 """
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from oilwatch import __version__, mcp_server
 from oilwatch.identity import Contact
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Generous: the child only imports the package (1-4s normally). A bound is here
+#: so a stalled child fails this test loudly instead of hanging the suite.
+SUBPROCESS_TIMEOUT_S = 60
 
 
 class DeclaredIdentityTests(unittest.TestCase):
@@ -34,6 +44,48 @@ class LazyAppTests(unittest.TestCase):
 
         app_cls.assert_called_once_with(mcp_server.ROOT)
         self.assertIs(first, second)
+
+
+class ImportCostTests(unittest.TestCase):
+    """Starting the server must not pay for a chart nobody asked for.
+
+    An MCP client spawns this module as a child and measures its initialize
+    timeout from the spawn, so every import on this path is spent against that
+    budget. matplotlib used to be one of them (via oilwatch.service ->
+    oilwatch.analytics) and cost most of a second of it. Checked in a subprocess
+    so a matplotlib import elsewhere in the suite cannot mask a regression.
+    """
+
+    def _import_and_report(self, module: str) -> subprocess.CompletedProcess:
+        code = (
+            "import sys; "
+            f"import {module}; "
+            "raise SystemExit(1 if any(m.split('.')[0] == 'matplotlib' for m in sys.modules) else 0)"
+        )
+        try:
+            return subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_S,
+                # The caller asserts on the return code, so a non-zero exit is
+                # the result under test rather than an error to raise here.
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail(
+                f"importing {module} did not finish within {SUBPROCESS_TIMEOUT_S}s; "
+                f"it may be blocked, not slow"
+            )
+
+    def test_importing_the_server_does_not_import_matplotlib(self) -> None:
+        proc = self._import_and_report("oilwatch.mcp_server")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_importing_analytics_does_not_import_matplotlib(self) -> None:
+        proc = self._import_and_report("oilwatch.analytics")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
 
 
 class DefaultPostcodeTests(unittest.TestCase):
