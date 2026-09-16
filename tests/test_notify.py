@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 from oilwatch import notify
@@ -95,7 +96,9 @@ class ServiceIntegrationTests(unittest.TestCase):
             settings=SimpleNamespace(quote_quantity_liters=1000, currency="GBP", quote_max_workers=4),
         )
         app.quotes = SimpleNamespace(quote_supplier=self._quote)
-        app.quote_all = lambda **kwargs: OilWatchApp.quote_all(app, **kwargs)
+        # One cast, at the boundary: the namespace above stands in for an app,
+        # and this is the one place the real method is called with it.
+        app.quote_all = lambda **kwargs: OilWatchApp.quote_all(cast(OilWatchApp, app), **kwargs)
         return app
 
     @staticmethod

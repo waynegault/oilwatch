@@ -1,14 +1,37 @@
 from __future__ import annotations
 
 import re
+from typing import Any, Protocol
 from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
 
 from oilwatch.config import Settings
-from oilwatch.geo import GeoService
+from oilwatch.geo import GeoServiceLike
 from oilwatch.models import SupplierCandidate
+
+
+class ResponseLike(Protocol):
+    """The response surface ``DiscoveryService`` reads."""
+
+    @property
+    def text(self) -> str: ...
+
+    def raise_for_status(self) -> Any: ...
+
+
+class ClientLike(Protocol):
+    """The HTTP client surface ``DiscoveryService`` uses.
+
+    Declared here, where it is consumed, rather than taken from httpx: the
+    search and enrichment steps are driven with a fake client in the tests, and
+    naming the two members they need is what lets that fake stand in while this
+    side stays checked. ``params`` is keyword-only because httpx's is.
+    """
+
+    def get(self, url: str, *, params: Any = None) -> ResponseLike: ...
+
 
 PRICE_WORDS = ("heating oil", "kerosene", "fuel", "domestic oil", "gas oil")
 LOCAL_HINTS = (
@@ -28,10 +51,10 @@ PHONE_RE = re.compile(r"(\+44\s?\d[\d\s]{7,}|\(?0\d[\d\s]{8,}\d)")
 
 
 class DiscoveryService:
-    def __init__(self, settings: Settings, geo: GeoService) -> None:
+    def __init__(self, settings: Settings, geo: GeoServiceLike) -> None:
         self.settings = settings
         self.geo = geo
-        self.client = httpx.Client(
+        self.client: ClientLike = httpx.Client(
             follow_redirects=True,
             headers={"User-Agent": "OilWatch/0.1 (+https://github.com/)"},
             timeout=20.0,

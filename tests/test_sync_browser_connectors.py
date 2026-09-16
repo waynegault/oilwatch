@@ -9,6 +9,8 @@ changing supplier behaviour, which has no other offline coverage.
 from __future__ import annotations
 
 import unittest
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import patch
 
 from oilwatch.connectors.suppliers.fuelsoft import HIDDEN_SECTIONS, FuelsoftConnector
@@ -80,7 +82,9 @@ class FakePage:
         self.url = url
         self.fail_goto = fail_goto
         self.calls: list[tuple] = []
-        self.handlers: dict[str, object] = {}
+        # The values are handlers the connector registers via on(), and this fake
+        # calls them back: saying so is what checks the call below.
+        self.handlers: dict[str, Callable[..., Any]] = {}
         self.keyboard = FakeKeyboard()
         self._on_wait_response = on_wait_response
         self._json_raises = json_raises

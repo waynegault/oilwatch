@@ -21,7 +21,7 @@ class ScriptedGeocoder:
         self._results = results
         self.queries: list[str] = []
 
-    def geocode(self, query: str, timeout: int | None = None):
+    def geocode(self, query: str, timeout: float | None = None):
         self.queries.append(query)
         result = self._results.get(query)
         if isinstance(result, Exception):

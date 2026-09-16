@@ -11,7 +11,10 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 from unittest.mock import AsyncMock, patch
+
+from playwright.async_api import Playwright
 
 from oilwatch.api_discovery import APIDiscoveryTool, discover_supplier_api
 from tests.fake_async_page import FakeAsyncPage, FakeAsyncPlaywright, FakeBrowser, FakeContext
@@ -30,8 +33,12 @@ class FakePlaywright:
 def _tool(page: FakeAsyncPage) -> tuple[APIDiscoveryTool, FakePlaywright]:
     tool = APIDiscoveryTool()
     tool._page = page
-    tool._playwright = FakePlaywright()
-    return tool, tool._playwright
+    # One cast, at the boundary: this helper is the only place a fake playwright
+    # is put on the tool, and the local is handed back so the test can assert on
+    # it rather than on the attribute, whose type is the real one.
+    playwright = FakePlaywright()
+    tool._playwright = cast(Playwright, playwright)
+    return tool, playwright
 
 
 class DiscoverTests(unittest.TestCase):

@@ -156,14 +156,18 @@ class FakeRoute:
         self.fulfilled = True
 
 
-class FakeContext:
-    """The browser context: it records the route handler and hands out the page."""
+class FakeContext(FakeBrowserContext):
+    """The browser context: it records the route handler and hands out the page.
+
+    A ``FakeBrowserContext`` that also routes, so a page built with one can be
+    closed through either — ``page.context.close()`` and ``context.close()``.
+    """
 
     def __init__(self, page: Any) -> None:
+        super().__init__()
         self._page = page
         self.route_handler = None
         self.unrouted_with = None
-        self.closed = False
 
     async def route(self, pattern: str, handler) -> None:
         self.route_handler = handler
@@ -175,9 +179,6 @@ class FakeContext:
 
     async def new_page(self) -> Any:
         return self._page
-
-    async def close(self) -> None:
-        self.closed = True
 
 
 class FakeBrowser:

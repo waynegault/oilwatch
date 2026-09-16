@@ -3,9 +3,13 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import patch
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
 from oilwatch.scheduler import OilWatchScheduler, _window_hours
+from oilwatch.service import OilWatchApp
 
 
 class _StubApp:
@@ -79,12 +83,30 @@ class _StubScheduler:
         self.started = False
 
 
+def _wired(
+    *, postcode: str | None = "AB21 0YA", **kwargs: Any
+) -> tuple[OilWatchScheduler, _StubApp, _StubScheduler]:
+    """A scheduler over a stub app, with apscheduler's scheduler stubbed too.
+
+    Both casts live here and nowhere else: ``_StubApp`` stands in for
+    ``OilWatchApp`` and ``_StubScheduler`` for the real scheduler. A protocol for
+    the app was the alternative, and it was the worse one — the app is this
+    package's own class, and typing the scheduler against an interface of our own
+    would stop checking it against the app it actually drives.
+    """
+    app = _StubApp(**kwargs)
+    scheduler = OilWatchScheduler(cast(OilWatchApp, app), postcode=postcode)
+    stub = _StubScheduler()
+    scheduler.scheduler = cast(BackgroundScheduler, stub)
+    return scheduler, app, stub
+
+
 class RefreshChainTests(unittest.TestCase):
     """The daily refresh chain: critical step first, the rest best-effort."""
 
     def _scheduler(self, *, postcode: str | None = "AB21 0YA", **kwargs):
-        app = _StubApp(**kwargs)
-        return OilWatchScheduler(app, postcode=postcode), app
+        scheduler, app, _ = _wired(postcode=postcode, **kwargs)
+        return scheduler, app
 
     def test_every_step_runs_when_healthy(self) -> None:
         scheduler, app = self._scheduler()
@@ -142,10 +164,7 @@ class RefreshChainTests(unittest.TestCase):
 
 class StartTests(unittest.TestCase):
     def test_start_registers_three_jobs_and_starts_the_scheduler(self) -> None:
-        app = _StubApp()
-        scheduler = OilWatchScheduler(app)
-        stub = _StubScheduler()
-        scheduler.scheduler = stub
+        scheduler, app, stub = _wired()
 
         scheduler.start()
 
@@ -165,10 +184,7 @@ class StartTests(unittest.TestCase):
 class RunForeverTests(unittest.TestCase):
     def test_run_forever_starts_the_jobs_and_stops_on_interrupt(self) -> None:
         """The loop only ends on Ctrl-C, and the scheduler has to come down with it."""
-        app = _StubApp()
-        scheduler = OilWatchScheduler(app)
-        stub = _StubScheduler()
-        scheduler.scheduler = stub
+        scheduler, _, stub = _wired()
 
         with patch("oilwatch.scheduler.time.sleep", side_effect=KeyboardInterrupt):
             scheduler.run_forever()  # must not raise
@@ -203,10 +219,7 @@ class EmailWindowTests(unittest.TestCase):
     """
 
     def _trigger(self):
-        app = _StubApp()
-        scheduler = OilWatchScheduler(app)
-        stub = _StubScheduler()
-        scheduler.scheduler = stub
+        scheduler, _, stub = _wired()
         scheduler.start()
         job = next(job for job in stub.jobs if job["id"] == "monitor_email")
         return job["trigger"]

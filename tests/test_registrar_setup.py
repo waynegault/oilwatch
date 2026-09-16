@@ -11,54 +11,13 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from oilwatch.auto_register import AccountRegistrar, register_all
-from tests.fake_async_page import FakeAsyncPage, FakeElement
-
-
-class FakeContext:
-    def __init__(self, page) -> None:
-        self._page = page
-        self.closed = False
-
-    async def new_page(self):
-        return self._page
-
-    async def close(self) -> None:
-        self.closed = True
-
-    async def route(self, pattern, handler) -> None:
-        return None
-
-
-class FakeBrowser:
-    def __init__(self, context) -> None:
-        self._context = context
-        self.closed = False
-
-    async def new_context(self, **kwargs):
-        return self._context
-
-    async def close(self) -> None:
-        self.closed = True
-
-
-class FakeChromium:
-    def __init__(self, browser) -> None:
-        self._browser = browser
-
-    async def launch(self, **kwargs):
-        return self._browser
-
-
-class FakePlaywright:
-    def __init__(self, browser) -> None:
-        self.chromium = FakeChromium(browser)
-        self.stopped = False
-
-    async def start(self):
-        return self
-
-    async def stop(self) -> None:
-        self.stopped = True
+from tests.fake_async_page import (
+    FakeAsyncPage,
+    FakeAsyncPlaywright,
+    FakeBrowser,
+    FakeContext,
+    FakeElement,
+)
 
 
 def _wired():
@@ -66,7 +25,7 @@ def _wired():
     context = FakeContext(page)
     page.context = context  # _close closes the page's own context
     browser = FakeBrowser(context)
-    return AccountRegistrar(), page, context, FakePlaywright(browser)
+    return AccountRegistrar(), page, context, FakeAsyncPlaywright(browser)
 
 
 class SetupTests(unittest.TestCase):

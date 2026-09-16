@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import types
 import unittest
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 from oilwatch.graph_email import (
@@ -91,6 +92,17 @@ def _monitor(**overrides) -> GraphEmailMonitor:
     return monitor
 
 
+def _msal_app(monitor: GraphEmailMonitor) -> MagicMock:
+    """The mocked MSAL client, read back as a mock.
+
+    ``app`` is declared as MSAL's own client, so a mocked method reached through
+    it reads as a real method, which has no ``return_value`` — and the mock is
+    installed inside ``_monitor``, out of sight of the narrowing. One cast, here,
+    is the single place that says the client is a mock.
+    """
+    return cast(MagicMock, monitor.app)
+
+
 class ClientIdTests(unittest.TestCase):
     def test_the_environment_wins(self) -> None:
         with patch.dict("os.environ", {"MICROSOFT_CLIENT_ID": "env-id"}):
@@ -169,22 +181,24 @@ class RefreshTokenCacheTests(unittest.TestCase):
 class TokenTests(unittest.TestCase):
     def test_the_silent_cache_is_used_first(self) -> None:
         monitor = _monitor()
-        monitor.app.get_accounts.return_value = [{"username": "owner"}]
-        monitor.app.acquire_token_silent.return_value = {"access_token": "silent"}
+        app = _msal_app(monitor)
+        app.get_accounts.return_value = [{"username": "owner"}]
+        app.acquire_token_silent.return_value = {"access_token": "silent"}
 
         self.assertEqual(monitor.get_token(), {"access_token": "silent"})
 
     def test_a_persisted_refresh_token_is_used_when_silent_fails(self) -> None:
         monitor = _monitor()
-        monitor.app.get_accounts.return_value = []
-        monitor.app.acquire_token_by_refresh_token.return_value = {"access_token": "refreshed"}
+        app = _msal_app(monitor)
+        app.get_accounts.return_value = []
+        app.acquire_token_by_refresh_token.return_value = {"access_token": "refreshed"}
 
         with patch.object(GraphEmailMonitor, "_load_refresh_token", return_value="rt"):
             self.assertEqual(monitor.get_token(), {"access_token": "refreshed"})
 
     def test_no_token_available_is_none(self) -> None:
         monitor = _monitor()
-        monitor.app.get_accounts.return_value = []
+        _msal_app(monitor).get_accounts.return_value = []
         with patch.object(GraphEmailMonitor, "_load_refresh_token", return_value=None):
             self.assertIsNone(monitor.get_token())
 
@@ -195,8 +209,9 @@ class TokenTests(unittest.TestCase):
 
     def test_interactive_login_prints_the_flow_message(self) -> None:
         monitor = _monitor()
-        monitor.app.initiate_device_flow.return_value = {"message": "Go to https://microsoft.com/devicelogin"}
-        monitor.app.acquire_token_by_device_flow.return_value = {"refresh_token": "rt"}
+        app = _msal_app(monitor)
+        app.initiate_device_flow.return_value = {"message": "Go to https://microsoft.com/devicelogin"}
+        app.acquire_token_by_device_flow.return_value = {"refresh_token": "rt"}
 
         with (
             patch.object(GraphEmailMonitor, "_save_refresh_token") as save,
@@ -212,7 +227,10 @@ class SweepTests(unittest.TestCase):
         self.monitor = _monitor()
         self.monitor.get_token = MagicMock(return_value={"access_token": "a"})
         self.monitor.inbox_id = MagicMock(return_value=INBOX)
-        self.monitor.delete = MagicMock()
+        # Held by name as well: ``monitor.delete`` is declared as the real method,
+        # so reading assertions off it in another test method reads as a method.
+        self.delete_mock = MagicMock()
+        self.monitor.delete = self.delete_mock
 
     def _run(self, db: FakeDb, messages, *, parse_discounts=None):
         self.monitor.fetch_candidates = MagicMock(return_value=messages)
@@ -237,13 +255,13 @@ class SweepTests(unittest.TestCase):
         self.assertEqual(db.quotes[0]["source"], "email")
         self.assertAlmostEqual(db.quotes[0]["price_per_liter"], 1.1025, places=4)
         self.assertEqual(db.marked, ["m1"])
-        self.monitor.delete.assert_called_once_with({"access_token": "a"}, "m1")
+        self.delete_mock.assert_called_once_with({"access_token": "a"}, "m1")
 
     def test_mail_already_in_the_bin_is_not_deleted_again(self) -> None:
         db = FakeDb()
         self._run(db, [_message(parent="deleted-items")])
         self.assertEqual(db.marked, ["m1"])
-        self.monitor.delete.assert_not_called()
+        self.delete_mock.assert_not_called()
 
     def test_a_processed_message_is_skipped(self) -> None:
         db = FakeDb(processed=["m1"])
@@ -282,7 +300,7 @@ class SweepTests(unittest.TestCase):
         db = FakeDb()
         self._run(db, [_message(body={"contentType": "text", "content": "Thanks for your enquiry"})])
         self.assertEqual(db.marked, [])
-        self.monitor.delete.assert_called_once_with({"access_token": "a"}, "m1")
+        self.delete_mock.assert_called_once_with({"access_token": "a"}, "m1")
 
     def test_a_duplicate_observation_is_not_recorded_twice(self) -> None:
         db = FakeDb(already_recorded=True)
