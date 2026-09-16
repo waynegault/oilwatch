@@ -1,11 +1,13 @@
 # OilWatch Progress Summary
 
-**Date:** 11 September 2026
+**Date:** 16 September 2026
 **Package version:** 0.1.0 (unchanged since the prototype — see `pyproject.toml`)
 
 > This file supersedes a stale March-2026 version that described an empty
 > database and a single test file. None of that is true any more. Figures below
-> were verified on 2026-09-11.
+> were verified on 2026-09-16. Individual sections name the date they were
+> checked where that is not this one; the database counts are as of the date
+> stated beside them.
 
 ---
 
