@@ -29,7 +29,7 @@ class PricePageConnector(BaseConnector):
         pattern = config.get("price_regex")
         if not pattern:
             raise ValueError(f"Supplier {supplier['name']} is missing price_regex configuration.")
-        response = self.client.get(quote_url)
+        response = self.http_client().get(quote_url)
         response.raise_for_status()
         match = re.search(pattern, response.text, re.IGNORECASE)
         if not match:

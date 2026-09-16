@@ -219,8 +219,11 @@ class FuelsoftConnector(SyncBrowserConnector):
         for q in quotes:
             if not isinstance(q, dict):
                 continue
+            raw_total = q.get("Total")
+            if raw_total is None:
+                continue
             try:
-                total = float(q.get("Total"))
+                total = float(raw_total)
             except (TypeError, ValueError):
                 continue
             weighting = str(q.get("DeliveryOptionWeighting") or "").lower()

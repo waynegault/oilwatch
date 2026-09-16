@@ -29,6 +29,18 @@ class BaseConnector(ABC):
     def now() -> datetime:
         return utcnow_naive()
 
+    def http_client(self) -> httpx.Client:
+        """The HTTP client this connector owns.
+
+        ``client`` is optional because a browser or manual connector never builds
+        one. A connector that reaches for it anyway is a bug, so this says so at
+        the point of use rather than failing later with "'NoneType' object has no
+        attribute 'get'".
+        """
+        if self.client is None:  # pragma: no cover - every HTTP connector sets one
+            raise RuntimeError(f"{type(self).__name__} has no HTTP client")
+        return self.client
+
     def close(self) -> None:
         """Release the HTTP connection pool, if this connector owns one.
 

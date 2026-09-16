@@ -30,7 +30,7 @@ class FueltoolConnector(BaseConnector):
         context: dict[str, Any],
     ) -> QuoteResult:
         try:
-            response = self.client.get(self.quote_url)
+            response = self.http_client().get(self.quote_url)
             response.raise_for_status()
         except httpx.HTTPError as exc:
             return QuoteResult(

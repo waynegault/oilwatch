@@ -66,7 +66,7 @@ class HTTPFormConnector(BaseConnector):
             key: self._render_value(value, supplier, quantity_liters, agreed_price_per_liter, context)
             for key, value in fields.items()
         }
-        response = self.client.request(method.upper(), url, data=payload)
+        response = self.http_client().request(method.upper(), url, data=payload)
         response.raise_for_status()
         return response
 

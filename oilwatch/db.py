@@ -98,6 +98,18 @@ class Database:
         conn.row_factory = sqlite3.Row
         return conn
 
+    @staticmethod
+    def _inserted_id(cursor: sqlite3.Cursor) -> int:
+        """The row id of the row an INSERT just wrote.
+
+        ``lastrowid`` is Optional in the sqlite3 typeshed; after an INSERT it is
+        always set, so a missing one means the statement was not an insert.
+        """
+        row_id = cursor.lastrowid
+        if row_id is None:  # pragma: no cover - an INSERT always sets it
+            raise RuntimeError("the insert returned no row id")
+        return row_id
+
     def init_schema(self) -> None:
         with closing(self.connect()) as conn, conn:
             conn.executescript(SCHEMA)
@@ -191,7 +203,7 @@ class Database:
                     json.dumps(record.get("raw_payload", {})),
                 ),
             )
-            return int(cursor.lastrowid)
+            return self._inserted_id(cursor)
 
     def quote_already_recorded(self, record: dict[str, Any]) -> bool:
         """True when an identical observation is already stored.
@@ -238,7 +250,7 @@ class Database:
                     json.dumps(record.get("raw_payload", {})),
                 ),
             )
-            return int(cursor.lastrowid)
+            return self._inserted_id(cursor)
 
     def list_orders(self, limit: int | None = None) -> list[dict[str, Any]]:
         """Recorded purchases, newest first, with the supplier's name.
@@ -439,7 +451,7 @@ class Database:
                     record.get("observed_at", utcnow_naive().isoformat()),
                 ),
             )
-            return int(cursor.lastrowid)
+            return self._inserted_id(cursor)
 
     def active_discounts(self) -> list[dict[str, Any]]:
         """Discount offers that have not expired, largest first.

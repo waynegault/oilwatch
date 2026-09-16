@@ -139,7 +139,7 @@ class HomeFuelsDirectConnector(BaseConnector):
         transport_error: httpx.HTTPError | None = None
         for url in (self.aberdeenshire_url, self.price_url):
             try:
-                response = self.client.get(url)
+                response = self.http_client().get(url)
                 response.raise_for_status()
             except httpx.HTTPError as exc:
                 transport_error = exc

@@ -67,7 +67,7 @@ class ValueOilsConnector(BaseConnector):
         postcode = context.get("postcode", "")
 
         try:
-            response = self.client.get(self.regional_url)
+            response = self.http_client().get(self.regional_url)
             response.raise_for_status()
             tier_total = self._extract_tier_total(response.text)
 

@@ -79,7 +79,10 @@ class DiscoveryService:
             snippet_node = result.select_one("a.result__snippet")
             if not anchor:
                 continue
-            website = self._unwrap_duckduckgo_url(anchor.get("href", ""))
+            # bs4 types a tag's attribute as possibly absent and possibly not a
+            # string (a multi-valued attribute arrives as a list). href is
+            # neither, so the str() states what the lines below already assume.
+            website = self._unwrap_duckduckgo_url(str(anchor.get("href") or ""))
             if not website:
                 continue
             domain = urlparse(website).netloc.lower()

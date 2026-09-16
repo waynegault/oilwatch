@@ -82,7 +82,7 @@ class HighlandFuelsConnector(BaseConnector):
 
         try:
             response = request_with_retry(
-                self.client,
+                self.http_client(),
                 "POST",
                 self.quote_url,
                 content=request_xml,
@@ -137,8 +137,10 @@ class HighlandFuelsConnector(BaseConnector):
         for offer in root.findall(".//Offer"):
             name = (offer.findtext("OfferName") or "").strip().lower()
             try:
-                total_pence = float(offer.findtext("Total"))
-                litres = float(offer.findtext("Quantity"))
+                # findtext gives None for a missing element; float("") raises the
+                # ValueError this guard already catches.
+                total_pence = float(offer.findtext("Total") or "")
+                litres = float(offer.findtext("Quantity") or "")
             except (TypeError, ValueError):
                 continue
             if litres <= 0:
