@@ -1,0 +1,6 @@
+{
+  "include": ["oilwatch"],
+  "exclude": [".venv", "graphify-out", "**/node_modules"],
+  "venvPath": ".",
+  "venv": ".venv"
+}
