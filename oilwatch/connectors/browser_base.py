@@ -10,6 +10,7 @@ from typing import Any
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
 from oilwatch.connectors.base import BaseConnector
+from oilwatch.connectors.protocols import PageLike
 from oilwatch.credentials import get_supplier_credentials, store_supplier_credentials
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
@@ -44,7 +45,7 @@ class BrowserConnector(BaseConnector, ABC):
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
-        self._page: Page | None = None
+        self._page: PageLike | None = None
         self._api_requests: list[dict[str, Any]] = []
         self._api_responses: list[dict[str, Any]] = []
     
@@ -54,7 +55,7 @@ class BrowserConnector(BaseConnector, ABC):
         supplier: dict[str, Any],
         quantity_liters: int,
         context: dict[str, Any],
-        page: Page,
+        page: PageLike,
     ) -> QuoteResult:
         """
         Get a quote using browser automation.
@@ -63,7 +64,7 @@ class BrowserConnector(BaseConnector, ABC):
         """
         raise NotImplementedError
     
-    async def login(self, page: Page, email: str, password: str) -> bool:
+    async def login(self, page: PageLike, email: str, password: str) -> bool:
         """
         Log in to the supplier website.
 
@@ -77,7 +78,7 @@ class BrowserConnector(BaseConnector, ABC):
         # Default implementation - override in subclasses
         raise NotImplementedError
 
-    async def _optional_login(self, page: Page, email: str, password: str) -> bool:
+    async def _optional_login(self, page: PageLike, email: str, password: str) -> bool:
         """Best-effort sign-in for a supplier whose quotes work signed-out.
 
         Returns True regardless — these suppliers do not need a session to quote
@@ -108,7 +109,7 @@ class BrowserConnector(BaseConnector, ABC):
 
     async def _wait_for(
         self,
-        page: Page,
+        page: PageLike,
         ready: Callable[[], Awaitable[Any]],
         *,
         timeout_ms: int = 15000,
@@ -200,8 +201,11 @@ class BrowserConnector(BaseConnector, ABC):
         if self._intercept_requests:
             await self._context.route("**/*", self._intercept_request)
         
-        self._page = await self._context.new_page()
-        return self._page
+        # The attribute holds the protocol; the local keeps this method's own
+        # return type the real Page it has just built.
+        page = await self._context.new_page()
+        self._page = page
+        return page
     
     async def _intercept_request(self, route):
         """Intercept requests to discover APIs."""
@@ -332,7 +336,7 @@ class BrowserConnector(BaseConnector, ABC):
         supplier: dict[str, Any],
         quantity_liters: int,
         context: dict[str, Any],
-        page: Page,
+        page: PageLike,
         creds: dict[str, str],
         error: str = "",
     ) -> QuoteResult:

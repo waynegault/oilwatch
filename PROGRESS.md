@@ -19,7 +19,7 @@ It is a working system, not a prototype:
 
 | Area | State |
 |------|-------|
-| Modules under `oilwatch/` | 54 Python files |
+| Modules under `oilwatch/` | 55 Python files |
 | Supplier connectors | 16 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |

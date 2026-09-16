@@ -55,7 +55,7 @@ class FakeElement:
     async def get_attribute(self, name: str) -> str | None:
         return self.attributes.get(name)
 
-    async def evaluate(self, script: str) -> str:
+    async def evaluate(self, expression: str) -> str:
         return self.tag
 
     async def query_selector_all(self, selector: str) -> list[Any]:
@@ -101,8 +101,8 @@ class FakeAsyncPage:
         self.goto_urls.append(url)
         self.url = url
 
-    async def wait_for_timeout(self, ms: int) -> None:
-        self.waits.append(ms)
+    async def wait_for_timeout(self, timeout: float) -> None:
+        self.waits.append(int(timeout))
 
     async def wait_for_load_state(self, *args: Any, **kwargs: Any) -> None:
         return None

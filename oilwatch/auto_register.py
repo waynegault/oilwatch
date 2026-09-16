@@ -17,6 +17,7 @@ from typing import Any
 
 from playwright.async_api import Browser, Page, Playwright, async_playwright
 
+from oilwatch.connectors.protocols import PageLike
 from oilwatch.credentials import (
     generate_supplier_password,
     store_supplier_credentials,
@@ -132,7 +133,7 @@ class AccountRegistrar:
         self.headless = headless
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
-        self._page: Page | None = None
+        self._page: PageLike | None = None
         self._results: list[dict[str, Any]] = []
 
     async def _setup(self) -> Page:
@@ -146,8 +147,11 @@ class AccountRegistrar:
             viewport={"width": 1920, "height": 1080},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         )
-        self._page = await self._context.new_page()
-        return self._page
+        # The attribute holds the protocol; the local keeps this method's own
+        # return type the real Page it has just built.
+        page = await self._context.new_page()
+        self._page = page
+        return page
 
     async def _close(self) -> None:
         """Close browser."""
@@ -159,7 +163,7 @@ class AccountRegistrar:
         self._browser = None
         self._playwright = None
 
-    async def _accept_cookies(self, page: Page) -> None:
+    async def _accept_cookies(self, page: PageLike) -> None:
         """Accept cookie consent banners."""
         cookie_selectors = [
             'button:has-text("Accept"), button:has-text("Accept All"), button:has-text("OK")',
@@ -187,7 +191,7 @@ class AccountRegistrar:
         except Exception as exc:  # noqa: BLE001
             log.debug("cookie close button not clickable: %s", exc)
 
-    async def _fill_fields(self, page: Page, fields: dict[str, str]) -> int:
+    async def _fill_fields(self, page: PageLike, fields: dict[str, str]) -> int:
         """Fill the first matching selector for each field; return how many took.
 
         Every platform uses a different selector set and most of them will not
@@ -294,7 +298,7 @@ class AccountRegistrar:
 
         return result
 
-    async def _follow_register_link(self, page: Page, form: RegistrationForm) -> None:
+    async def _follow_register_link(self, page: PageLike, form: RegistrationForm) -> None:
         """Follow the "Register" link on the sites that keep the form behind one."""
         if not form.register_link:
             return
@@ -308,7 +312,7 @@ class AccountRegistrar:
             log.debug("register link click failed: %s", exc)
 
     async def _fill_registration_fields(
-        self, page: Page, form: RegistrationForm, name: str, email: str, password: str
+        self, page: PageLike, form: RegistrationForm, name: str, email: str, password: str
     ) -> None:
         values = {
             "first_name": name.split()[0].lower() if name else "",
@@ -319,7 +323,7 @@ class AccountRegistrar:
         if not filled and form.fallback_fields:
             await self._fill_fields(page, {s: values[k] for s, k in form.fallback_fields})
 
-    async def _submit(self, page: Page, form: RegistrationForm) -> tuple[str, str]:
+    async def _submit(self, page: PageLike, form: RegistrationForm) -> tuple[str, str]:
         """Click the register button and read the outcome the page gives back."""
         button = await page.query_selector(form.register_button)
         if button is None:

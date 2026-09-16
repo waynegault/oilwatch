@@ -18,9 +18,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from playwright.async_api import Page
-
 from oilwatch.connectors.browser_base import BrowserConnector
+from oilwatch.connectors.protocols import PageLike
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
@@ -56,7 +55,7 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
         self.quote_url = "https://homefuelsdirect.co.uk/home/heating-oil-prices/aberdeenshire"
         self._requires_login = False
 
-    async def login(self, page: Page, email: str, password: str) -> bool:
+    async def login(self, page: PageLike, email: str, password: str) -> bool:
         """Optional sign-in; HomeFuels quotes work signed-out (see the base)."""
         return await self._optional_login(page, email, password)
 
@@ -65,7 +64,7 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
         supplier: dict[str, Any],
         quantity_liters: int,
         context: dict[str, Any],
-        page: Page,
+        page: PageLike,
     ) -> QuoteResult:
         """Read HomeFuels' live average price per litre from the price page."""
         postcode = context.get("postcode", "") or load_contact().postcode
@@ -98,7 +97,7 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
             # Fall back to HTTP scraping
             return await self._fallback_to_http(supplier, quantity_liters, context, str(e))
 
-    async def _read_live_price(self, page: Page) -> float | None:
+    async def _read_live_price(self, page: PageLike) -> float | None:
         """Read the live average price (pence per litre, ex-VAT) from the span.
 
         Bounded-waits for the figure to render, then returns it as GBP per

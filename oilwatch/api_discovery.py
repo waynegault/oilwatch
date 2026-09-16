@@ -11,6 +11,7 @@ from typing import Any
 from playwright.async_api import Page, Playwright, async_playwright
 
 from oilwatch.config import CHECKOUT_ROOT
+from oilwatch.connectors.protocols import PageLike
 from oilwatch.logging_setup import get_logger
 
 log = get_logger("api_discovery")
@@ -36,7 +37,7 @@ class APIDiscoveryTool:
         # same reason every other path resolves from oilwatch.config.
         self.output_dir = output_dir or CHECKOUT_ROOT / "data" / "api_discovery"
         self._playwright: Playwright | None = None
-        self._page: Page | None = None
+        self._page: PageLike | None = None
         self._requests: list[dict[str, Any]] = []
         self._responses: list[dict[str, Any]] = []
         self._api_endpoints: dict[str, dict[str, Any]] = {}
@@ -58,8 +59,11 @@ class APIDiscoveryTool:
         # Intercept all requests
         await context.route("**/*", self._intercept)
 
-        self._page = await context.new_page()
-        return self._page
+        # The attribute holds the protocol; the local keeps this method's own
+        # return type the real Page it has just built.
+        page = await context.new_page()
+        self._page = page
+        return page
 
     async def _intercept(self, route):
         """Intercept and log all API requests."""
@@ -144,7 +148,7 @@ class APIDiscoveryTool:
         url: str,
         # ``callable`` is the builtin *function*, not a type: as an annotation it
         # told a type checker nothing and the test's own actions nothing.
-        actions: list[Callable[[Page], Awaitable[Any]]] | None = None,
+        actions: list[Callable[[PageLike], Awaitable[Any]]] | None = None,
         timeout: int = 10000,
     ) -> dict[str, Any]:
         """

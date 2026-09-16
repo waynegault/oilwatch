@@ -5,9 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from playwright.async_api import Page
-
 from oilwatch.connectors.browser_base import BrowserConnector
+from oilwatch.connectors.protocols import PageLike
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
@@ -68,7 +67,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
         self.login_url = "https://www.boilerjuice.com/uk/users/login"
         self.quote_url = "https://www.boilerjuice.com/uk/journeys/core/quote"
 
-    async def login(self, page: Page, email: str, password: str) -> bool:
+    async def login(self, page: PageLike, email: str, password: str) -> bool:
         """
         Log in to BoilerJuice.
 
@@ -141,7 +140,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             log.debug("login error: %s", e)
             raise RuntimeError(f"the sign-in attempt raised {type(e).__name__}: {e}") from e
 
-    async def _accept_cookie_consent(self, page: Page) -> None:
+    async def _accept_cookie_consent(self, page: PageLike) -> None:
         """Dismiss Cookiebot's consent dialog, best-effort.
 
         The dialog covers the page and the sign-in form is not reachable behind
@@ -168,7 +167,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
         supplier: dict[str, Any],
         quantity_liters: int,
         context: dict[str, Any],
-        page: Page,
+        page: PageLike,
     ) -> QuoteResult:
         """
         Get a quote from BoilerJuice using browser automation.
@@ -337,7 +336,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             return None
         return float(match.group(1).replace(",", ""))
 
-    async def _quote_page_ready(self, page: Page) -> bool:
+    async def _quote_page_ready(self, page: PageLike) -> bool:
         """True once the quote form, or a rendered quote, is on the page."""
         if await page.query_selector(_POSTCODE_SELECTOR) is not None:
             return True
@@ -346,7 +345,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
         except Exception:  # noqa: BLE001 - an unreadable page is simply not ready
             return False
 
-    async def _quote_ready(self, page: Page, quantity_liters: int) -> bool:
+    async def _quote_ready(self, page: PageLike, quantity_liters: int) -> bool:
         """True once a price can be read off the page, for the bounded wait."""
         try:
             content = await page.content()
@@ -356,7 +355,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             return True
         return await self._extract_price(page, quantity_liters) is not None
 
-    async def _extract_price(self, page: Page, quantity_liters: int) -> float | None:
+    async def _extract_price(self, page: PageLike, quantity_liters: int) -> float | None:
         """Extract price per litre from the page."""
         try:
             # Get page content

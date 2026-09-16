@@ -20,9 +20,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from playwright.async_api import Page
-
 from oilwatch.connectors.browser_base import BrowserConnector
+from oilwatch.connectors.protocols import PageLike
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult
@@ -56,7 +55,7 @@ class ValueOilsBrowserConnector(BrowserConnector):
         self.quote_url = "https://www.valueoils.com/regions/scotland/aberdeenshire/"
         self._requires_login = False
 
-    async def login(self, page: Page, email: str, password: str) -> bool:
+    async def login(self, page: PageLike, email: str, password: str) -> bool:
         """Optional sign-in; ValueOils quotes work signed-out (see the base)."""
         return await self._optional_login(page, email, password)
 
@@ -65,7 +64,7 @@ class ValueOilsBrowserConnector(BrowserConnector):
         supplier: dict[str, Any],
         quantity_liters: int,
         context: dict[str, Any],
-        page: Page,
+        page: PageLike,
     ) -> QuoteResult:
         """Fill the Quick Quote and read the Standard Delivery total."""
         postcode = context.get("postcode", "") or load_contact().postcode
@@ -106,7 +105,7 @@ class ValueOilsBrowserConnector(BrowserConnector):
         except Exception as e:  # noqa: BLE001 - any browser failure degrades to the HTTP fallback
             return await self._fallback_to_http(supplier, quantity_liters, context, str(e))
 
-    async def _fill_quick_quote(self, page: Page, postcode: str, quantity_liters: int) -> None:
+    async def _fill_quick_quote(self, page: PageLike, postcode: str, quantity_liters: int) -> None:
         """Fill the Quick Quote and submit it. Raises when the form is absent."""
         postcode_field = await page.query_selector(_POSTCODE_SELECTOR)
         if postcode_field is None:
@@ -126,7 +125,7 @@ class ValueOilsBrowserConnector(BrowserConnector):
             raise RuntimeError("the ValueOils 'Show Price' button was not found")
         await submit.click()
 
-    async def _read_standard_total(self, page: Page) -> float | None:
+    async def _read_standard_total(self, page: PageLike) -> float | None:
         """The Standard Delivery total once the results have rendered."""
         await self._wait_for(
             page, lambda: self._standard_total(page), timeout_ms=25000, what="the ValueOils Quick Quote"
@@ -134,7 +133,7 @@ class ValueOilsBrowserConnector(BrowserConnector):
         return await self._standard_total(page)
 
     @staticmethod
-    async def _standard_total(page: Page) -> float | None:
+    async def _standard_total(page: PageLike) -> float | None:
         try:
             content = await page.content()
         except Exception:  # noqa: BLE001 - an unreadable page is simply not ready
