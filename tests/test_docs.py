@@ -34,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROGRESS = (ROOT / "PROGRESS.md").read_text(encoding="utf-8")
 ROADMAP = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+AGENTS = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 LIVE_SETTINGS = ROOT / "config" / "settings.json"
 EXAMPLE_SETTINGS = ROOT / "config" / "settings.example.json"
 SHARED_ENV = ROOT / "oilwatch_env.bat"
@@ -210,6 +211,21 @@ class ReferenceTests(unittest.TestCase):
             name for name in _mcp_tool_names() if not re.search(rf"\b{re.escape(name)}\b", README)
         )
         self.assertEqual(missing, [], f"README.md does not name these tools: {missing}")
+
+    def test_every_cli_command_is_named_in_agents_md(self) -> None:
+        """The contract lists them too, so it drifts the same way.
+
+        AGENTS.md is what an agent reads first; a list there that has fallen
+        behind the parser is the same failure as one in the README. Names must
+        appear in backticks here, which is how the file writes code, so the word
+        "quote" in a sentence cannot stand in for the command.
+        """
+        missing = sorted(name for name in _cli_commands() if f"`{name}`" not in AGENTS)
+        self.assertEqual(missing, [], f"AGENTS.md does not name these commands: {missing}")
+
+    def test_every_mcp_tool_is_named_in_agents_md(self) -> None:
+        missing = sorted(name for name in _mcp_tool_names() if f"`{name}`" not in AGENTS)
+        self.assertEqual(missing, [], f"AGENTS.md does not name these tools: {missing}")
 
 
 #: Settings objects whose keys are schema. Every other object in the file is

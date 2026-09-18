@@ -2,8 +2,29 @@
 
 The consumer contract for OilWatch, for any agent driving its CLI or MCP server.
 `user-guide.md` §14 is the full brief; this file is the part that changes
-behaviour, so it is worth reading even when nothing else is. The tool reference is
-in `README.md`, and status in `PROGRESS.md`.
+behaviour, so it is worth reading even when nothing else is. The full tool
+reference — every flag and return shape — is in `README.md`, and status in
+`PROGRESS.md`.
+
+## What you can call
+
+**Over MCP — nine tools.** Reads: `list_suppliers`, `current_prices`, `cheapest`,
+`purchases`, `status`. Write a file and return its path: `chart`,
+`time_series_chart`. Costs minutes: `refresh_prices`. Reaches the network:
+`update_brent`.
+
+**Through the CLI — twenty-one commands**, as `oilwatch <command>` or
+`python -m oilwatch.cli <command>`: `init`, `discover`, `suppliers`, `quote`,
+`quote-all`, `cheapest`, `status`, `chart`, `time-series`, `update-brent`,
+`import-spreadsheet`, `record-purchase`, `purchases`, `schedule`, `phone-script`,
+`api-discover`, `register`, `login`, `submit-requests`, `monitor-email`,
+`login-email`. `oilwatch --help` gives the flags; `README.md` is the reference.
+
+A few of these have consequences beyond this machine, so call them
+deliberately: `quote-all` and `refresh_prices` drive real browsers,
+`submit-requests` puts the owner's details in a supplier's form,
+`monitor-email` reads the mailbox and deletes what it processes, and
+`record-purchase` is the owner's own act.
 
 ## Reading prices
 
@@ -28,6 +49,33 @@ in `README.md`, and status in `PROGRESS.md`.
 - A **partial result is normal**: `refresh_prices` fails per supplier.
 - The **Scottish Fuels sign-in is intermittent.** It fails identically from the
   CLI, so it is not an MCP problem.
+
+## When a price is missing, read its `reason`
+
+Every row that is not `ok` carries a machine-readable `reason` beside the prose in
+`notes`, so a gap can be explained without parsing English:
+
+- `no_quote_page` — no web quote exists at all: ask by phone or email.
+- `quote_by_request` — a quote page exists, but it answers a **person**: it takes
+  the details and replies, so there is no price to read. Say this, and not "no
+  quote page" — the two send a reader to different places.
+- `login_not_confirmed` — an authenticated portal did not sign in.
+- `captcha` — a bot check stopped the flow.
+- `site_error` — the attempt raised: a timeout, an HTTP error, or a parse failure.
+- `null` — unclassified, not "no reason": most connectors do not attribute one
+  yet, and that is not a claim that none applies.
+
+## Who is being asked, and where
+
+The supplier register is **`config/suppliers.json`**, which is version controlled
+— unlike `config/settings.json`, which holds the owner's address, postcode and
+credentials. The register holds the suppliers, the domains never to treat as one,
+and each supplier's `quote_request` saying whether it is asked by form or by
+phone. So it, and not the code, is the list of suppliers this install chases: read
+it before saying who is or is not being asked.
+
+A row's **`order_page`** is where a quote is actually requested; its `website` is
+often only a marketing page.
 
 ## Never
 
