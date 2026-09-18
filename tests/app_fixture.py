@@ -30,7 +30,7 @@ SETTINGS: dict[str, Any] = {
     "max_quote_age_days": 30,
 }
 
-#: Written to config/supplier_overrides.json and imported by ``init()``. Two of
+#: Written to config/suppliers.json and imported by ``init()``. Two of
 #: the names share a word, so looking a supplier up by "Scottish Fuels" is
 #: ambiguous on purpose.
 OVERRIDES: list[dict[str, Any]] = [
@@ -74,7 +74,7 @@ class AppTestCase(unittest.TestCase):
         )
 
     def _write_overrides(self) -> None:
-        (self.root / "config" / "supplier_overrides.json").write_text(
+        (self.root / "config" / "suppliers.json").write_text(
             json.dumps({"suppliers": self.overrides, "excluded_domains": self.excluded_domains}),
             encoding="utf-8",
         )

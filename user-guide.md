@@ -118,7 +118,7 @@ python -m oilwatch.cli monitor-email
 ```
 
 With no `--suppliers`, the run is read from the **supplier register**
-(`config/supplier_overrides.json`), where a record can say how it is asked:
+(`config/suppliers.json`), where a record can say how it is asked:
 `"quote_request": {"form": "gleaner_oils"}` names a form in `SUPPLIER_FORMS`
 (`oilwatch/form_submit.py`), and `{"phone": true}` means there is no form, so the
 run prints the number to ring from that record's own `phone` instead of failing.

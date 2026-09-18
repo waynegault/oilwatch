@@ -99,7 +99,7 @@ The orders table is unchanged and still the record of what was bought.
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Package structure | ✅ Complete | Hatchling build, editable install |
-| Configuration | ✅ Complete | JSON config: `config/settings.json` (personal values, gitignored) + `supplier_overrides.json` (the tracked supplier register) |
+| Configuration | ✅ Complete | JSON config: `config/settings.json` (personal values, gitignored) + `suppliers.json` (the tracked supplier register) |
 | Database | ✅ Complete | SQLite; supplier registry and quote history (live counts via `oilwatch status`) |
 | Supplier discovery | ✅ Complete | DuckDuckGo search, geocoding, 50-mile filter |
 | Connectors | ✅ Complete | 4 generic + 15 supplier-specific (HTTP, Playwright browser, telephone) |

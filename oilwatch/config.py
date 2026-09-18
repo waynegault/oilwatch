@@ -117,7 +117,7 @@ def load_supplier_registry(root: Path | None = None) -> dict[str, Any]:
     which looks exactly like an install with no suppliers yet.
     """
     base = root or CHECKOUT_ROOT
-    path = base / "config" / "supplier_overrides.json"
+    path = base / "config" / "suppliers.json"
     if not path.exists():
         return {"suppliers": [], "excluded_domains": []}
     data = json.loads(path.read_text(encoding="utf-8"))

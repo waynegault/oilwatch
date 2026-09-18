@@ -34,7 +34,7 @@ SUPPLIER_DOMAINS = {
     "rix.co.uk": "rix.co.uk",
     # Brogan Fuels is part of Scottish Fuels (same company), so a reply from its
     # domain is a Scottish Fuels quote and is filed against that supplier's row.
-    # Brogan is retired as a supplier of its own in config/supplier_overrides.json.
+    # Brogan is retired as a supplier of its own in config/suppliers.json.
     "brogans.co.uk": "scottishfuels.co.uk",
     "connon-oils.co.uk": "connon",  # Connon Bros/Oils (Fuelsoft, website connon.fuelsoft.co.uk)
     "connon.fuelsoft.co.uk": "connon",

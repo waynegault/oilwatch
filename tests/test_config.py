@@ -35,7 +35,7 @@ class ConfigTests(unittest.TestCase):
     def _write_register(
         self, suppliers: list[dict[str, object]] | None = None, excluded: list[str] | None = None
     ) -> None:
-        (self.root / "config" / "supplier_overrides.json").write_text(
+        (self.root / "config" / "suppliers.json").write_text(
             json.dumps({"suppliers": suppliers or [], "excluded_domains": excluded or []}),
             encoding="utf-8",
         )
@@ -110,7 +110,7 @@ class ConfigTests(unittest.TestCase):
         its contract, and silently importing nothing looks like an install that
         has simply not been set up yet.
         """
-        (self.root / "config" / "supplier_overrides.json").write_text(
+        (self.root / "config" / "suppliers.json").write_text(
             json.dumps([{"name": "A", "website": "https://a.example.com"}]), encoding="utf-8"
         )
         with self.assertRaises(ValueError) as caught:
