@@ -105,6 +105,12 @@ def current_prices() -> dict[str, Any]:
     the ordering page when there is one, otherwise the site, which may only be a
     marketing page. ``order_page`` being ``None`` means unrecorded rather than
     "there is no page".
+
+    The suppliers that are *not* in ``quotes`` — ``no_quote_suppliers``,
+    ``failed_suppliers`` and ``never_quoted`` — carry the same ``kind``,
+    ``order_channel``, ``order_page`` and ``contact``, because those are the rows
+    a reader has to *ask*, and a reason without a way to act on it is half an
+    answer.
     """
     return _get_app().current_prices()
 

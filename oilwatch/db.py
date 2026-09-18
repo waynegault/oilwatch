@@ -315,8 +315,9 @@ class Database:
         with closing(self.connect()) as conn:
             rows = conn.execute(
                 """
-                SELECT s.name AS supplier_name, s.website, attempt.observed_at,
-                       attempt.status, attempt.reason, attempt.notes
+                SELECT s.name AS supplier_name, s.website, s.connector_config_json,
+                       s.phone, s.email, s.kind,
+                       attempt.observed_at, attempt.status, attempt.reason, attempt.notes
                 FROM suppliers s
                 JOIN (
                     SELECT supplier_id, MAX(observed_at) AS max_attempt
@@ -426,7 +427,7 @@ class Database:
             rows = conn.execute(
                 """
                 SELECT s.id AS supplier_id, s.name AS supplier_name, s.website,
-                       s.connector_type
+                       s.connector_type, s.connector_config_json, s.phone, s.email, s.kind
                 FROM suppliers s
                 LEFT JOIN quotes q ON q.supplier_id = s.id
                 WHERE s.status != 'inactive' AND q.id IS NULL

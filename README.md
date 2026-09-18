@@ -237,7 +237,7 @@ Recording a purchase is a deliberate CLI act by the owner
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `list_suppliers` | Suppliers on record | None |
-| `current_prices` | Latest price per supplier (£/L inc. VAT), as an envelope that explains an empty market: `quotes` plus `as_of`, `window_days`, `excluded_suppliers`, `never_quoted`, `not_refreshed_suppliers`, `no_quote_suppliers` (last ask gave no price) and `failed_suppliers` (last ask raised). Each row carries `valid_until`, `kind`, `order_channel`, a `contact` of `{phone, email, url}`, and `order_page` when recorded | None |
+| `current_prices` | Latest price per supplier (£/L inc. VAT), as an envelope that explains an empty market: `quotes` plus `as_of`, `window_days`, `excluded_suppliers`, `never_quoted`, `not_refreshed_suppliers`, `no_quote_suppliers` (last ask gave no price) and `failed_suppliers` (last ask raised). Every row — including the ones *not* in `quotes`, which are the ones a reader has to ask — carries `kind`, `order_channel`, a `contact` of `{phone, email, url}`, and `order_page`/`valid_until` when recorded | None |
 | `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`), the winner's `kind` / `order_channel` / `contact` / `order_page`, the `window_days` compared, and any `excluded_suppliers` the age window dropped | None |
 | `purchases` | Purchases already recorded, newest first, with totals and discount codes | None |
 | `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase and the same `no_quote_suppliers` / `failed_suppliers` split | None |

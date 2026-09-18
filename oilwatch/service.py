@@ -233,38 +233,12 @@ class OilWatchApp:
             litres = int(row.get("quantity_liters") or configured_quantity)
             best = best_discount_for(offers, litres) if offers else None
 
-            # The page a human would order from, when the supplier's own config
-            # names one (`order_page`). Two deliberate choices here. It is not
-            # taken from the quote's payload, because that URL is whatever the
-            # connector fetches and for some suppliers it is an API endpoint
-            # (Highland Fuels' getoffers.php), so promoting it would put a link an
-            # agent then cites onto a row that cannot be ordered from it. And an
-            # absent value means "not recorded", not "no page exists". The key is
-            # not `order_url`: that was the POST target of the automated ordering
-            # path, which is dropped, and the placeholder has been removed from
-            # the shipped example so nobody configures it by mistake.
-            config = json.loads(enriched.pop("connector_config_json", None) or "{}")
-            order_page = config.get("order_page")
-            enriched["order_page"] = order_page
-
-            # What this row is, and how to act on it, as fields rather than
-            # sentences in a note. A consumer's standing rules — "Fueltool is a
-            # benchmark, never the winner", "give the ordering URL" — were
-            # enforceable only by reading prose and remembering, which is not an
-            # interface. `kind` comes from the supplier's own record; the channel
-            # and contact are derived from what is recorded.
-            kind = row.get("kind") or "supplier"
-            phone = row.get("phone")
-            email = row.get("email")
-            enriched["kind"] = kind
-            enriched["contact"] = {
-                "phone": phone,
-                "email": email,
-                # The one URL to act on: the ordering page when one is recorded,
-                # otherwise the supplier's site, which may be a marketing page.
-                "url": order_page or row.get("website"),
-            }
-            enriched["order_channel"] = self.order_channel(kind, order_page, phone, email)
+            # The supplier's own facts, from its register record: what it is, the
+            # page a human would order from when the config names one, and the
+            # derived channel and contact. The raw JSON is dropped rather than
+            # carried, so it never reaches a consumer.
+            enriched.update(self.supplier_facts(row))
+            enriched.pop("connector_config_json", None)
 
             price = row.get("price_per_liter")
             if price is not None:
@@ -283,6 +257,39 @@ class OilWatchApp:
             )
             enriched_rows.append(enriched)
         return enriched_rows
+
+    @staticmethod
+    def supplier_facts(row: dict[str, Any]) -> dict[str, Any]:
+        """What a supplier is, and how to act on it, as fields.
+
+        Shared by the priced rows and by the suppliers the last ask could not
+        price — and it matters most for the second: the suppliers that quote only
+        on request have no current price, so a reason with no ordering link or
+        phone number beside it is half an answer.
+
+        ``order_page`` is not taken from the quote's payload, because that URL is
+        whatever the connector fetches and for some suppliers it is an API
+        endpoint (Highland Fuels' getoffers.php) or a marketing page, so
+        promoting it would hand a reader a link they cannot order from. An absent
+        value means "not recorded", not "no page exists".
+        """
+        config = json.loads(row.get("connector_config_json") or "{}")
+        order_page = config.get("order_page")
+        kind = row.get("kind") or "supplier"
+        phone = row.get("phone")
+        email = row.get("email")
+        return {
+            "kind": kind,
+            "order_page": order_page,
+            "order_channel": OilWatchApp.order_channel(kind, order_page, phone, email),
+            "contact": {
+                "phone": phone,
+                "email": email,
+                # The one URL to act on: the ordering page when one is recorded,
+                # otherwise the supplier's site, which may be a marketing page.
+                "url": order_page or row.get("website"),
+            },
+        }
 
     @staticmethod
     def order_channel(
@@ -328,6 +335,26 @@ class OilWatchApp:
             window_days=self.settings.max_quote_age_days,
         )
 
+    def _never_quoted(self) -> list[dict[str, Any]]:
+        """Suppliers with no quote row at all, with the same facts beside them.
+
+        Nothing has ever been recorded from these, so the only useful thing on the
+        row is how to go about asking — which is the same set of fields a priced
+        row carries, for the same reason. The keys the database layer already
+        returned are kept as they were: renaming a field a consumer may read is a
+        separate decision from adding one.
+        """
+        entries: list[dict[str, Any]] = []
+        for row in self.db.unquoted_suppliers():
+            entry: dict[str, Any] = {
+                "supplier_name": row["supplier_name"],
+                "website": row["website"],
+                "connector_type": row["connector_type"],
+            }
+            entry.update(self.supplier_facts(row))
+            entries.append(entry)
+        return entries
+
     def _supplier_attempt_outcomes(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """The last ask per supplier, split into the two ways it can come back empty.
 
@@ -347,6 +374,10 @@ class OilWatchApp:
                 "reason": row["reason"],
                 "note": row["notes"],
             }
+            # The same facts a priced row carries, and most needed here: these are
+            # the suppliers a reader has to *ask*, so "quote by request" without
+            # the page to request it on is the least actionable row in the output.
+            entry.update(self.supplier_facts(row))
             if row["status"] == "error":
                 failed.append(entry)
             elif row["status"] != "ok":
@@ -398,7 +429,7 @@ class OilWatchApp:
             "quotes": rows,
             "excluded_suppliers": self._excluded_suppliers(),
             "not_refreshed_suppliers": self._not_refreshed_suppliers(),
-            "never_quoted": self.db.unquoted_suppliers(),
+            "never_quoted": self._never_quoted(),
             # The two ways a supplier can be missing from `quotes` because the ask
             # itself came back empty. Kept apart from the lists above, which name
             # prices that a window or a failed attempt held back: these name what

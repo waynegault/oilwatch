@@ -448,6 +448,55 @@ class OrderChannelTests(AppTestCase):
         self.assertEqual(rows["Both Contacts"]["contact"]["phone"], "01234 567890")
         self.assertEqual(rows["Both Contacts"]["contact"]["email"], "sales@both.example.com")
 
+    def test_a_never_quoted_supplier_still_says_how_to_ask_it(self) -> None:
+        """The rows a reader has to *ask* need these fields most of all.
+
+        A supplier with no quote row at all comes back in ``never_quoted``, and a
+        bare "no price yet" that names no page and no number is the least
+        actionable row in the envelope.
+        """
+        self._init()
+        by_name = {row["supplier_name"]: row for row in self.app.current_prices()["never_quoted"]}
+
+        self.assertEqual(by_name["Page Only"]["order_channel"], "web")
+        self.assertEqual(by_name["Page Only"]["contact"]["url"], "https://page.example.com/order")
+        self.assertEqual(by_name["Phone Only"]["order_channel"], "phone")
+        self.assertEqual(by_name["Phone Only"]["contact"]["phone"], "01234 567890")
+
+    def test_an_unpriced_attempt_still_says_how_to_ask_it(self) -> None:
+        """The same for the suppliers the last ask could not price.
+
+        These five are the ones that quote only on request, so
+        ``quote_by_request`` is exactly where an ordering link has to travel with
+        the reason rather than in a separate lookup.
+        """
+        ids = self._init()
+        self.app.db.record_quote(
+            {
+                "supplier_id": ids["Page Only"],
+                "observed_at": utcnow_naive().isoformat(),
+                "quantity_liters": 1000,
+                "status": "manual_action_required",
+                "price_per_liter": None,
+                "total_price": None,
+                "currency": "GBP",
+                "source": "test",
+                "reason": "quote_by_request",
+                "notes": "",
+                "raw_payload": {},
+            }
+        )
+
+        entry = next(
+            row
+            for row in self.app.current_prices()["no_quote_suppliers"]
+            if row["name"] == "Page Only"
+        )
+
+        self.assertEqual(entry["reason"], "quote_by_request")
+        self.assertEqual(entry["order_channel"], "web")
+        self.assertEqual(entry["contact"]["url"], "https://page.example.com/order")
+
     def test_the_winner_carries_its_kind_and_contact(self) -> None:
         for name, supplier_id in self._init().items():
             self._record(supplier_id, price=1.10 if name == "Page Only" else 1.30)
