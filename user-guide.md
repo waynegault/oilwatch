@@ -119,7 +119,12 @@ python -m oilwatch.cli monitor-email
 Supplier replies are one-off quotes: check the inbox after requesting, and once
 the price is recorded let the monitor delete it. A reply from a supplier not yet
 in `SUPPLIER_DOMAINS` (or in a format `extract_ppl` cannot parse) needs the map or
-the parser extended rather than left unprocessed.
+the parser extended rather than left unprocessed. So the sweep says what it did —
+one line per recorded price and a closing `sweep: N new message(s), M recorded,
+K from unrecognised sender(s)` — and names the domains it could not place. That
+line is how an oil company mailing from an unlisted domain (a CRM, a marketing
+host, a second brand) is noticed at all: its mail is skipped, so without it the
+sweep looks identical to one that found nothing. Subjects are not logged.
 
 The email sweep is a *separate* mechanism from price refresh and **is**
 scheduled — a supplier answers when it chooses, so polling is the only way to

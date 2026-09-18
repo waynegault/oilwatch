@@ -331,6 +331,66 @@ class GraphSweepRerunTests(unittest.TestCase):
         self.assertEqual(len(deleted), 1, "cleared out of the inbox")
         self.assertFalse(self.db.message_processed("FFF"), "left re-scannable")
 
+    def test_the_sweep_says_what_it_recorded(self) -> None:
+        """A captured reply has to leave a trace, not just a row in the database.
+
+        Recording a quote logged nothing, so an unattended sweep that captured
+        Rix's email and one that found nothing wrote the same empty log: on
+        2026-09-18 data/oilwatch.log was 0 bytes back to the 13th while sweeps
+        ran hourly and recorded Rix, Regency and Scottish Fuels replies.
+        """
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([self._message("GGG", "inbox-id")], [])
+
+        text = "\n".join(captured.output)
+        expected = apply_vat(1.1035, DOMESTIC_VAT_RATE)
+        self.assertIn(f"recorded {expected:.4f}/L from Rix (rix.co.uk)", text)
+        self.assertIn("sweep: scanned 1, recorded 1, 0 from unrecognised", text)
+
+    def test_a_personal_sender_the_map_does_not_know_is_counted_but_not_named(self) -> None:
+        """Naming unknown senders leaked the owner's inbox into a log file.
+
+        The first cut listed every unrecognised domain: one sweep put eighty of
+        them on one line, including a financial ombudsman case, NHS Scotland and
+        his bank, and named no supplier at all. The count stays, because it says
+        the sweep ran and how much it skipped.
+        """
+        stranger = self._message("HHH", "inbox-id")
+        stranger["from"] = {"emailAddress": {"address": "caseworker@ombudsman.example"}}
+        stranger["subject"] = "Your complaint reference"
+        stranger["body"] = {
+            "contentType": "text",
+            "content": "Please find attached our response to your complaint. No price, no quote.",
+        }
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([stranger], [])
+
+        text = "\n".join(captured.output)
+        self.assertIn("sweep: scanned 1, recorded 0, 1 from unrecognised", text)
+        self.assertNotIn("ombudsman.example", text, "a stranger's domain stays out of the log")
+        self.assertNotIn("Your complaint reference", text)
+
+    def test_fuel_shaped_mail_from_an_unknown_sender_is_named(self) -> None:
+        """The one unknown sender worth naming: an oil company being missed.
+
+        A reply that reads like a quote but comes from a domain missing from
+        SUPPLIER_DOMAINS is skipped, so naming the domain is the only way to
+        notice it and add it.
+        """
+        stranger = self._message("III", "inbox-id")
+        stranger["from"] = {"emailAddress": {"address": "quotes@unlisted-fuels.example"}}
+        stranger["subject"] = "Your heating oil quotation"
+        stranger["body"] = {"contentType": "text", "content": "Kerosene 99.15p (Excl. VAT)"}
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([stranger], [])
+
+        text = "\n".join(captured.output)
+        self.assertIn("fuel quote from unrecognised sender(s): unlisted-fuels.example", text)
+        self.assertIn("add the domain to SUPPLIER_DOMAINS", text)
+        self.assertNotIn("Your heating oil quotation", text, "the subject stays out of the log")
+
 
 if __name__ == "__main__":
     unittest.main()

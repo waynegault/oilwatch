@@ -237,14 +237,29 @@ class GraphEmailMonitor:
 
         recorded: list[dict[str, Any]] = []
         inbox = self.inbox_id(token)
+        scanned = 0
+        unrecognised = 0
+        candidates: set[str] = set()
         for message in self.fetch_candidates(token):
             message_id = message.get("id", "")
             if app.db.message_processed(message_id):
                 continue  # already mined; re-reading old mail must not duplicate
+            scanned += 1
             sender = message.get("from", {}).get("emailAddress", {}).get("address", "")
             domain = sender_domain_from_email(sender)
             supplier_fragment = supplier_fragment_for(domain)
             if supplier_fragment is None:
+                # A sender the map does not know. It is counted but not named:
+                # most of this is personal correspondence, and the log is
+                # written to disk - a first attempt at naming them put eighty
+                # of the owner's correspondents, including a financial
+                # ombudsman case and his bank, into one line. The one case
+                # worth naming is a message that reads like a fuel price,
+                # because that is an oil company being missed rather than a
+                # stranger.
+                unrecognised += 1
+                if extract_ppl(self._body_text(message)) is not None:
+                    candidates.add(domain)
                 continue
             supplier = self._find_supplier(app, supplier_fragment)
             if supplier is None:
@@ -333,6 +348,12 @@ class GraphEmailMonitor:
                 if not app.db.quote_already_recorded(record):
                     app.db.record_quote(record)
                     recorded.append(record)
+                    log.info(
+                        "recorded %.4f/L from %s (%s)",
+                        price_per_liter,
+                        supplier["name"],
+                        domain,
+                    )
 
             app.db.mark_message_processed(message_id)
             # Delete only from the inbox. Mail already sitting in Deleted Items is
@@ -340,6 +361,26 @@ class GraphEmailMonitor:
             if inbox and message.get("parentFolderId") == inbox:
                 self.delete(token, message_id)
 
+        # Always leave a record of the sweep. Recording a quote used to log
+        # nothing at all, so an unattended run that captured a reply and one
+        # that saw no mail were equally silent - and this log is the only thing
+        # a scheduled run leaves behind. On 2026-09-18 it was empty back to the
+        # 13th while sweeps were running hourly and recording quotes.
+        log.info(
+            "sweep: scanned %d, recorded %d, %d from unrecognised sender(s)",
+            scanned,
+            len(recorded),
+            unrecognised,
+        )
+        if candidates:
+            # Fuel-shaped mail from a sender the map does not know: this is the
+            # one case where an oil company is being missed rather than a
+            # stranger, so it is named and the fix is spelled out.
+            log.warning(
+                "mail that reads like a fuel quote from unrecognised sender(s): %s "
+                "- add the domain to SUPPLIER_DOMAINS to record them",
+                ", ".join(sorted(candidates)),
+            )
         return recorded
 
     @staticmethod

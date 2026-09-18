@@ -25,7 +25,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 15 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 642, all passing offline |
+| Tests | 645, all passing offline |
 | Database | 27 suppliers, 524 quotes, 0 orders (2026-09-15) |
 
 ---
@@ -56,7 +56,7 @@ It is a working system, not a prototype:
 | `browser_auth.py` | Login + persisted session handling |
 | `form_submit.py` | Quote-request form submission |
 | `quotes.py` | Quote collection orchestration |
-| `graph_email.py` | Poll the inbox via Microsoft Graph, extract replies and discount codes, delete processed mail |
+| `graph_email.py` | Poll the inbox via Microsoft Graph, extract replies and discount codes, delete processed mail, and log what each sweep did — including senders it could not place, since that mail is skipped |
 | `email_parsing.py` | Supplier reply domains + the price parser the Graph monitor reuses |
 | `import_xls.py` | Import `Oil Prices.xls` history |
 | `brent.py` | Brent crude daily series from the EIA |
@@ -98,7 +98,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 642 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 645 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
