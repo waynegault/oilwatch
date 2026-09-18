@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
     name TEXT NOT NULL,
     website TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL DEFAULT 'manual_review',
+    kind TEXT NOT NULL DEFAULT 'supplier',
     query TEXT,
     title TEXT,
     snippet TEXT,
@@ -121,6 +122,13 @@ class Database:
                 conn.execute("ALTER TABLE quotes ADD COLUMN valid_until TEXT")
             if "reason" not in columns:
                 conn.execute("ALTER TABLE quotes ADD COLUMN reason TEXT")
+            # `kind` distinguishes a supplier from a benchmark (Fueltool is a
+            # UK-average figure, not somewhere you can buy). Same additive
+            # reasoning as `valid_until` above: an existing database keeps
+            # working, and every row already there is a supplier.
+            supplier_columns = {row["name"] for row in conn.execute("PRAGMA table_info(suppliers)")}
+            if "kind" not in supplier_columns:
+                conn.execute("ALTER TABLE suppliers ADD COLUMN kind TEXT NOT NULL DEFAULT 'supplier'")
             # Give pre-existing rows a validity too, so an older database compares
             # on the same footing as a fresh one instead of reporting null. Idempotent:
             # only rows where it is still unset are touched.
@@ -146,6 +154,7 @@ class Database:
             "distance_miles": record.get("distance_miles"),
             "connector_type": record.get("connector_type", "manual"),
             "connector_config_json": json.dumps(record.get("connector_config", {})),
+            "kind": record.get("kind", "supplier"),
             "notes": record.get("notes", ""),
         }
         with closing(self.connect()) as conn, conn:
@@ -153,10 +162,12 @@ class Database:
                 """
                 INSERT INTO suppliers (
                     name, website, status, query, title, snippet, email, phone, address,
-                    latitude, longitude, distance_miles, connector_type, connector_config_json, notes
+                    latitude, longitude, distance_miles, connector_type, connector_config_json,
+                    kind, notes
                 ) VALUES (
                     :name, :website, :status, :query, :title, :snippet, :email, :phone, :address,
-                    :latitude, :longitude, :distance_miles, :connector_type, :connector_config_json, :notes
+                    :latitude, :longitude, :distance_miles, :connector_type, :connector_config_json,
+                    :kind, :notes
                 )
                 ON CONFLICT(website) DO UPDATE SET
                     name=excluded.name,
@@ -172,6 +183,7 @@ class Database:
                     distance_miles=COALESCE(excluded.distance_miles, suppliers.distance_miles),
                     connector_type=excluded.connector_type,
                     connector_config_json=excluded.connector_config_json,
+                    kind=excluded.kind,
                     notes=excluded.notes,
                     last_seen_at=CURRENT_TIMESTAMP
                 """,
@@ -353,7 +365,8 @@ class Database:
         with closing(self.connect()) as conn:
             rows = conn.execute(
                 """
-                SELECT q.*, s.name AS supplier_name, s.website, s.connector_config_json
+                SELECT q.*, s.name AS supplier_name, s.website, s.connector_config_json,
+                       s.phone, s.email, s.kind
                 FROM quotes q
                 JOIN suppliers s ON s.id = q.supplier_id
                 JOIN (

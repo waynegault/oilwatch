@@ -244,7 +244,27 @@ class OilWatchApp:
             # path, which is dropped, and the placeholder has been removed from
             # the shipped example so nobody configures it by mistake.
             config = json.loads(enriched.pop("connector_config_json", None) or "{}")
-            enriched["order_page"] = config.get("order_page")
+            order_page = config.get("order_page")
+            enriched["order_page"] = order_page
+
+            # What this row is, and how to act on it, as fields rather than
+            # sentences in a note. A consumer's standing rules — "Fueltool is a
+            # benchmark, never the winner", "give the ordering URL" — were
+            # enforceable only by reading prose and remembering, which is not an
+            # interface. `kind` comes from the supplier's own record; the channel
+            # and contact are derived from what is recorded.
+            kind = row.get("kind") or "supplier"
+            phone = row.get("phone")
+            email = row.get("email")
+            enriched["kind"] = kind
+            enriched["contact"] = {
+                "phone": phone,
+                "email": email,
+                # The one URL to act on: the ordering page when one is recorded,
+                # otherwise the supplier's site, which may be a marketing page.
+                "url": order_page or row.get("website"),
+            }
+            enriched["order_channel"] = self.order_channel(kind, order_page, phone, email)
 
             price = row.get("price_per_liter")
             if price is not None:
@@ -263,6 +283,41 @@ class OilWatchApp:
             )
             enriched_rows.append(enriched)
         return enriched_rows
+
+    @staticmethod
+    def order_channel(
+        kind: str,
+        order_page: str | None,
+        phone: str | None,
+        email: str | None,
+    ) -> str:
+        """How this supplier is actually ordered from, as one value.
+
+        The point is that a rule an agent must not get wrong becomes a field it
+        can branch on, instead of prose it has to read and remember:
+
+        - ``benchmark`` — not orderable at all. Fueltool is a UK-average figure,
+          and presenting it as the winner is the mistake this prevents.
+        - ``web`` — a human-orderable page is recorded (``order_page``). A
+          supplier's ``website`` is deliberately not enough to earn this: for
+          ValueOils it is a marketing page and for Highland Fuels an API
+          endpoint.
+        - ``phone_email`` / ``phone`` / ``email`` — no page, and these contacts.
+        - ``none`` — nothing recorded but a website. That means *unrecorded*, not
+          "cannot be ordered from": the honest gap, the same way an absent
+          ``order_page`` reads.
+        """
+        if kind == "benchmark":
+            return "benchmark"
+        if order_page:
+            return "web"
+        if phone and email:
+            return "phone_email"
+        if phone:
+            return "phone"
+        if email:
+            return "email"
+        return "none"
 
     def cheapest(self) -> dict[str, Any]:
         self.db.init_schema()

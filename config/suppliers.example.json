@@ -44,6 +44,18 @@
         "form": "example_enquiry"
       },
       "notes": "quote_request.form names an entry in SUPPLIER_FORMS (oilwatch/form_submit.py), which is what `oilwatch submit-requests` drives. Use {\"phone\": true} instead when the supplier has no form: the run then reports a number to ring rather than a failure, reading the number from this record's own `phone`."
+    },
+    {
+      "name": "Example Benchmark",
+      "website": "https://example.com/uk-average",
+      "status": "active",
+      "kind": "benchmark",
+      "connector_type": "price_page",
+      "connector_config": {
+        "quote_url": "https://example.com/uk-average",
+        "price_regex": "(\\d+\\.\\d+)\\s*p(?:ence)?\\s*/\\s*l"
+      },
+      "notes": "`kind` defaults to \"supplier\"; \"benchmark\" marks a figure rather than a company - a UK average, say. Its rows then carry kind: benchmark and order_channel: benchmark, so a consumer can refuse to present it as the winner without reading this note. Leave `kind` out for anything you could actually buy from."
     }
   ]
 }

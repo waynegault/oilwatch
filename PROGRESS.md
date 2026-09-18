@@ -25,7 +25,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 15 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 657, all passing offline |
+| Tests | 662, all passing offline |
 | Database | 17 active suppliers (28 including retired), 602 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -98,7 +98,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 657 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 662 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -170,6 +170,15 @@ suppliers whose only priced row came from the spreadsheet import won on
   one, and each supplier's `quote_request` saying whether it is asked by form or
   by phone. It is version controlled; `config/settings.json` holds the owner's
   address, postcode and credentials and is not.
+- **Rows say what they are and how to act on them (2026-09-18).** Each priced row
+  now carries `kind` (`supplier`/`benchmark` — Fueltool's record sets it, and the
+  new column defaults to `supplier` for every other row), `order_channel` (`web`
+  when an `order_page` is recorded, else `phone_email` / `phone` / `email`, or
+  `benchmark`, or `none` for nothing recorded but a website) and a `contact` of
+  `{phone, email, url}` where `url` is the ordering page when there is one. The
+  winner carries the same three. This is the half of Hal's §2.3 ask that mattered
+  most: "Fueltool is a benchmark, never the winner" and "give the ordering URL"
+  were rules enforced by reading prose and remembering, and are now fields.
 - **On demand, not on a timer (changed 2026-09-15).** Prices are refreshed when
   someone asks for them — `oilwatch quote-all --browser`, `refresh_prices` over
   MCP, or an agent turn — rather than on a schedule. The scheduler's per-user

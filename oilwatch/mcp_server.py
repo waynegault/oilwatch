@@ -97,10 +97,14 @@ def current_prices() -> dict[str, Any]:
     ``no_quote_suppliers`` (the last ask returned no price — often because there
     is no web quote to read), and ``failed_suppliers`` (the last ask raised).
 
-    Each row carries ``valid_until`` and the supplier's ``order_page`` when its
-    config records one — where a person would order from. ``None`` means
-    unrecorded rather than "there is no page", so fall back to ``website`` only as
-    a general link.
+    Each row carries ``valid_until``, its ``kind`` (``supplier`` or
+    ``benchmark``), its ``order_channel`` — ``web``, ``phone_email``, ``phone``,
+    ``email``, ``benchmark``, or ``none`` when nothing is recorded — a
+    ``contact`` of ``{phone, email, url}``, and the supplier's ``order_page``
+    when its config records one. ``contact.url`` is the single link to act on:
+    the ordering page when there is one, otherwise the site, which may only be a
+    marketing page. ``order_page`` being ``None`` means unrecorded rather than
+    "there is no page".
     """
     return _get_app().current_prices()
 
@@ -112,9 +116,11 @@ def cheapest() -> dict[str, Any]:
     ``excluded_suppliers`` lists any supplier whose newest quote fell outside
     ``max_quote_age_days``, so a thin market is visible as "not re-quoted yet".
     ``window_days`` states the window that comparison was made against, so an
-    empty market is not read as a broken one. ``order_page`` on the winner is
-    where a person would order from, when the supplier's config records one;
-    ``website`` stays the general link, and may be a marketing page.
+    empty market is not read as a broken one. The winner carries its ``kind``,
+    ``order_channel``, ``contact`` and ``order_page``, so a reader never has to
+    work out how to act on the price; a ``kind`` of ``benchmark`` is not a
+    supplier you can buy from, and ``website`` stays the general link, which may
+    be a marketing page.
     """
     return _get_app().cheapest()
 

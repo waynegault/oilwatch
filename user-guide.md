@@ -587,9 +587,13 @@ without saying so is the one way to get this wrong.
 ## How to report a price to Wayne
 
 - **Always give the supplier's ordering URL next to the price** — its
-  `order_page` when the row carries one, its `website` otherwise, because a
-  website is often only a marketing page. Name the discount code when one
+  `contact.url` (the `order_page` when recorded, the `website` otherwise, because
+  a website is often only a marketing page). Name the discount code when one
   applies. A price with no way to act on it is half an answer.
+- **`order_channel` says how to act**: `web` (a page is recorded), `phone_email`,
+  `phone`, `email`, `benchmark` (not orderable at all — Fueltool), or `none`
+  (nothing recorded but a website). The winner carries the same fields, so "and
+  how do I buy it?" is answered by the payload rather than by memory.
 - Give the **`observed_at` date** with the price, so a day-old quote is never
   read as today's.
 - Prices are £ per litre **inclusive of 5% VAT**, for the configured quantity

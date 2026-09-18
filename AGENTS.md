@@ -75,7 +75,12 @@ phone. So it, and not the code, is the list of suppliers this install chases: re
 it before saying who is or is not being asked.
 
 A row's **`order_page`** is where a quote is actually requested; its `website` is
-often only a marketing page.
+often only a marketing page. Priced rows also carry **`kind`**
+(`supplier`/`benchmark`), **`order_channel`** (`web`, `phone_email`, `phone`,
+`email`, `benchmark`, `none`) and a **`contact`** of `{phone, email, url}`, so
+"who can I buy from, and how?" is answered by fields rather than by reading notes.
+Use `contact.url` — the ordering page when there is one — and treat a `kind` of
+`benchmark` as a figure (Fueltool), never a winner to report.
 
 ## Never
 

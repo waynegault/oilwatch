@@ -114,6 +114,13 @@ class AnalyticsService:
                 # exists", so the general `website` above stays the fallback for
                 # a reader who needs something to cite.
                 "order_page": cheapest.get("order_page"),
+                # What the winner is and how to act on it, so the rule that
+                # matters most here is a field: a `kind` of "benchmark" is not a
+                # supplier you can buy from, and `contact.url` is the one link to
+                # hand a reader (the ordering page when there is one).
+                "kind": cheapest.get("kind", "supplier"),
+                "order_channel": cheapest.get("order_channel"),
+                "contact": cheapest.get("contact"),
                 "price_per_liter": cheapest["price_per_liter"],
                 "observed_at": cheapest["observed_at"],
                 # Surfaced so a comparison says how long the offer stands, not

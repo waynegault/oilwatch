@@ -326,6 +326,140 @@ class OrderingPageTests(AppTestCase):
         self.assertEqual(cheapest["order_page"], "https://formy.example.com/order")
 
 
+#: One supplier per way of ordering, so every branch of the derivation has a case
+#: that fails if it changes. The benchmark deliberately *also* has a page and a
+#: phone number: ``benchmark`` has to win over both, because a figure you cannot
+#: buy from must never come back looking orderable.
+ORDER_CHANNEL_OVERRIDES = [
+    {
+        "name": "Page Only",
+        "website": "https://page.example.com/",
+        "connector_type": "manual",
+        "connector_config": {"order_page": "https://page.example.com/order"},
+    },
+    {
+        "name": "Both Contacts",
+        "website": "https://both.example.com/",
+        "connector_type": "manual",
+        "phone": "01234 567890",
+        "email": "sales@both.example.com",
+    },
+    {
+        "name": "Phone Only",
+        "website": "https://phone.example.com/",
+        "connector_type": "manual",
+        "phone": "01234 567890",
+    },
+    {
+        "name": "Email Only",
+        "website": "https://email.example.com/",
+        "connector_type": "manual",
+        "email": "sales@email.example.com",
+    },
+    {
+        "name": "Nothing Recorded",
+        "website": "https://nothing.example.com/",
+        "connector_type": "manual",
+    },
+    {
+        "name": "A Benchmark",
+        "website": "https://bench.example.com/",
+        "kind": "benchmark",
+        "connector_type": "manual",
+        "phone": "01234 567890",
+        "connector_config": {"order_page": "https://bench.example.com/order"},
+    },
+]
+
+
+class OrderChannelTests(AppTestCase):
+    """What a row *is*, and how to act on it, as fields rather than prose.
+
+    A consumer of these tools holds rules it must not get wrong — Fueltool is a
+    benchmark and must never be presented as the winner; every price goes out
+    with a link to order from. Both were enforceable only by reading a note and
+    remembering it. These tests pin the fields that replace that reading.
+    """
+
+    overrides = ORDER_CHANNEL_OVERRIDES
+
+    def _record(self, supplier_id: int, price: float = 1.10) -> None:
+        self.app.db.record_quote(
+            {
+                "supplier_id": supplier_id,
+                "observed_at": utcnow_naive().isoformat(),
+                "quantity_liters": 1000,
+                "status": "ok",
+                "price_per_liter": price,
+                "total_price": price * 1000,
+                "currency": "GBP",
+                "source": "test",
+                "notes": "",
+                "raw_payload": {},
+            }
+        )
+
+    def _rows(self) -> dict[str, dict]:
+        for supplier_id in self._init().values():
+            self._record(supplier_id)
+        return {row["supplier_name"]: row for row in self.app.current_prices()["quotes"]}
+
+    def test_each_supplier_reports_how_it_is_ordered_from(self) -> None:
+        rows = self._rows()
+        self.assertEqual(
+            {
+                name: rows[name]["order_channel"]
+                for name in (
+                    "Page Only",
+                    "Both Contacts",
+                    "Phone Only",
+                    "Email Only",
+                    "Nothing Recorded",
+                    "A Benchmark",
+                )
+            },
+            {
+                "Page Only": "web",
+                "Both Contacts": "phone_email",
+                "Phone Only": "phone",
+                "Email Only": "email",
+                "Nothing Recorded": "none",
+                "A Benchmark": "benchmark",
+            },
+        )
+
+    def test_a_benchmark_is_never_orderable_even_when_it_has_a_page(self) -> None:
+        """The precedence that matters: a figure you cannot buy from.
+
+        Fueltool is scraped from a public web page and has a phone-shaped record
+        in no sense — but even if a benchmark row carried both, reporting it as
+        ``web`` is the mistake this field exists to prevent.
+        """
+        row = self._rows()["A Benchmark"]
+        self.assertEqual(row["kind"], "benchmark")
+        self.assertEqual(row["order_channel"], "benchmark")
+
+    def test_the_contact_carries_the_one_url_to_act_on(self) -> None:
+        rows = self._rows()
+        self.assertEqual(rows["Page Only"]["contact"]["url"], "https://page.example.com/order")
+        # No ordering page recorded, so the site is what a reader is given —
+        # even though it may only be a marketing page.
+        self.assertEqual(rows["Nothing Recorded"]["contact"]["url"], "https://nothing.example.com/")
+        self.assertEqual(rows["Both Contacts"]["contact"]["phone"], "01234 567890")
+        self.assertEqual(rows["Both Contacts"]["contact"]["email"], "sales@both.example.com")
+
+    def test_the_winner_carries_its_kind_and_contact(self) -> None:
+        for name, supplier_id in self._init().items():
+            self._record(supplier_id, price=1.10 if name == "Page Only" else 1.30)
+
+        cheapest = self.app.cheapest()["cheapest_supplier"]
+
+        self.assertEqual(cheapest["name"], "Page Only")
+        self.assertEqual(cheapest["kind"], "supplier")
+        self.assertEqual(cheapest["order_channel"], "web")
+        self.assertEqual(cheapest["contact"]["url"], "https://page.example.com/order")
+
+
 class RefreshCooldownStateTests(AppTestCase):
     """The age a cooldown is measured against, read from the database.
 

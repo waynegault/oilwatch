@@ -274,6 +274,22 @@ class DatabaseTests(unittest.TestCase):
         supplier = self.db.list_suppliers()[0]
         self.assertEqual(supplier["connector_config"]["quote_url"], "https://a.example.com/prices")
 
+    def test_kind_roundtrips_and_defaults_to_supplier(self) -> None:
+        """A record that says nothing about `kind` is a supplier, not a blank.
+
+        Fueltool is the one benchmark, and it is a figure rather than a company,
+        so the default has to be the honest one for the thirteen other records
+        that never mention it.
+        """
+        self.db.upsert_supplier(self._supplier("Ordinary", "https://ordinary.example.com"))
+        self.db.upsert_supplier(
+            self._supplier("A Benchmark", "https://bench.example.com", kind="benchmark")
+        )
+
+        by_name = {s["name"]: s["kind"] for s in self.db.list_suppliers()}
+        self.assertEqual(by_name["Ordinary"], "supplier")
+        self.assertEqual(by_name["A Benchmark"], "benchmark")
+
     def test_record_brent_roundtrip_and_dedup(self) -> None:
         self.assertTrue(self.db.record_brent("2026-03-20", 70.5, "eia"))
         self.assertFalse(self.db.record_brent("2026-03-20", 71.0, "eia"))  # duplicate date ignored

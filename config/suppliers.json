@@ -71,8 +71,9 @@
       "name": "Fueltool",
       "website": "https://www.fueltool.co.uk/",
       "status": "active",
+      "kind": "benchmark",
       "connector_type": "manual",
-      "notes": "UK-average benchmark (scraped via HTTP). Not a local supplier."
+      "notes": "UK-average benchmark (scraped via HTTP). Not a local supplier. `kind` marks it as a figure rather than a company, so every row carries `kind: benchmark` and `order_channel: benchmark` and a consumer can refuse to present it as the winner without reading this sentence."
     },
     {
       "name": "Turriff Fuels",
