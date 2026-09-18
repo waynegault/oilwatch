@@ -98,7 +98,7 @@ Establish a baseline before changing anything.
 | 2.8 | 🔍 MCP tools carry annotations | `grep -n "@mcp.tool" oilwatch/mcp_server.py` | Every tool passes an `annotations=` from `_READ_ONLY` / `_LOCAL_ARTIFACT` / `_EXTERNAL_FETCH` / `_EXTERNAL_SLOW` |
 | 2.9 | 🔧 Servers bind IPv4 only | `grep -n "MCP_HOST\|0.0.0.0\|::" oilwatch/mcp_server.py` | `127.0.0.1` default, `0.0.0.0` opt-in, no `::` anywhere |
 | 2.10 | 🔧 No `eval`/`exec` on scraped content | `grep -rn "eval(\|exec(" oilwatch/` | Only `driver.execute_script` (Selenium) and `importlib.import_module`; no `eval` |
-| 2.11 | 🔍 No accidental key-shaped literals | `grep -rnE "[A-Za-z0-9_-]{32,}" oilwatch/` | Only the public Microsoft OAuth client id, which is already published in `monitor_email.bat` |
+| 2.11 | 🔍 No accidental key-shaped literals | `grep -rnE "[A-Za-z0-9_-]{32,}" oilwatch/` | Every hit is a literal, not a credential. The pattern matches any long token, so on 2026-09-18 the fifteen hits were Chrome flags and CSS selectors (`--disable-features=AutofillServerCommunication,AutofillEnableAccountWalletStorage`, `#sgcPriceChecker_txtQuotePostcode`) plus the public Microsoft OAuth client id, which is already published in `monitor_email.bat`. The check is that none is a key — not that there are none — so read a hit before calling it benign |
 | 2.12 | 🔧 No suppression of a security warning | `grep -rn "warnings.filterwarnings\|filterwarnings" oilwatch/ tests/` | Zero — warnings are signal |
 
 ## 3. Safety — Critical
@@ -154,7 +154,7 @@ OilWatch must never buy anything, and must not damage the host or the database.
 | 6.2 | 🔍 The pool is bounded | `grep -n "ThreadPoolExecutor" oilwatch/service.py` | `max_workers=min(workers, len(suppliers))` |
 | 6.3 | 🔍 Charts release their figures | `grep -n "plt.close" oilwatch/analytics.py` | Every chart closes its figure |
 | 6.4 | 🔍 Request interception does not stall a site | `grep -n "_intercept_requests" oilwatch/connectors/browser_base.py` | A connector whose site stalls when proxied can opt out |
-| 6.5 | 🔍 Temp files are removed | `dir /b .qwen\tmp` | No leftover probe scripts; intermediates are deleted when done |
+| 6.5 | 🔍 Temp files are removed | `dir /b .qwen\tmp` | No leftovers *from this pass*; intermediates are deleted when done. `.qwen/` is the owner's scratch and is out of audit scope, so a file that predates the pass is reported rather than cleared — on 2026-09-18 `store_boilerjuice.py`, `email-task.backup.xml` and `msg16.txt` all predated it and were left alone (`store_boilerjuice.py` was scanned for `password = "..."`-shaped assignments and has none) |
 
 ## 7. Configuration & Path Resolution — High
 
@@ -258,7 +258,7 @@ nothing. These are the checks that catch it.
 | 14.2 | 🔍 The CLI runs against the live database | `.venv\Scripts\python.exe -m oilwatch.cli status` | A market snapshot with a cheapest supplier, a trend and a recommendation |
 | 14.3 | 🔍 The MCP server handshakes | Spawn `--stdio` and list tools | Nine tools, and a read call returns without error |
 | 14.4 | 🔍 One supplier quoted end to end | `.venv\Scripts\python.exe -m oilwatch.cli quote <id> --browser` | A price with `observed_at` and a note naming the quantity and basis |
-| 14.5 | 🔍 No leftovers | `dir /b .qwen\tmp`; `git status --short` | No probe scripts, no capture logs; only intended changes |
+| 14.5 | 🔍 No leftovers | `dir /b .qwen\tmp`; `git status --short` | No probe scripts or capture logs from this pass, and only intended changes in git. Pre-existing scratch is the owner's: name it, do not clear it (§6.5) |
 | 14.6 | 🔍 Findings recorded | Review the audit notes | Each finding has a severity, a location and a remediation |
 
 ## 15. New Insights & Standards (2026-09-15)
