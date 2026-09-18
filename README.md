@@ -257,6 +257,12 @@ A WSL client reaching that HTTP endpoint must use the Windows host address (the
 NAT gateway, e.g. `172.28.144.1`), never `localhost`; the stdio path above
 sidesteps that. Any MCP-capable client can use the server either way.
 
+One trap when configuring a client: **the repo path contains a space**
+(`Oil Price Webscraper`). A client that builds the stdio command by splitting it
+on spaces sees `.../Projects/Oil` and fails with `spawn .../Projects/Oil ENOENT`;
+give such a client a space-free wrapper rather than the raw path. The two
+`/mnt/c/...` interop caveats that go with it are in `user-guide.md` §Traps.
+
 ---
 
 ## Price Normalisation (VAT)
