@@ -38,6 +38,10 @@ config/settings.json
 # API discovery results (large files)
 data/api_discovery/
 
+# Generated data explorer pages: a snapshot of the live database, rebuilt on
+# demand, so they are not committed (see *.png above for the same reasoning).
+data/*.html
+
 # Registration results
 data/registration_results.json
 
