@@ -380,5 +380,55 @@ class RefreshCooldownStateTests(AppTestCase):
         self.assertIsNone(self.app.refresh_recently_done(10))
 
 
+class SupplierOutcomeTests(AppTestCase):
+    """Which suppliers gave no price, and which ones we failed to retrieve one from.
+
+    Two lists because they read differently: "no web quote to fetch" is the
+    supplier doing what it does, where a failed retrieval is a fault. ``reason``
+    carries the difference, so neither list needs its notes read.
+    """
+
+    def _attempt(self, supplier_id: int, status: str, reason: str | None, observed) -> None:
+        self.app.db.record_quote(
+            {
+                "supplier_id": supplier_id,
+                "observed_at": observed.isoformat(),
+                "quantity_liters": 1000,
+                "status": status,
+                "price_per_liter": None,
+                "total_price": None,
+                "currency": "GBP",
+                "source": "test",
+                "notes": f"{status} on the last ask",
+                "reason": reason,
+                "raw_payload": {},
+            }
+        )
+
+    def test_both_envelopes_split_the_empty_outcomes(self) -> None:
+        ids = self._init()
+        now = utcnow_naive()
+        self._attempt(
+            ids["ValueOils"], "manual_action_required", "no_quote_page", now - timedelta(minutes=3)
+        )
+        self._attempt(ids["Scottish Fuels"], "error", "site_error", now - timedelta(minutes=2))
+
+        prices = self.app.current_prices()
+
+        self.assertEqual([row["name"] for row in prices["no_quote_suppliers"]], ["ValueOils"])
+        self.assertEqual(prices["no_quote_suppliers"][0]["reason"], "no_quote_page")
+        self.assertEqual([row["name"] for row in prices["failed_suppliers"]], ["Scottish Fuels"])
+        self.assertEqual(prices["failed_suppliers"][0]["reason"], "site_error")
+        # Neither list holds a supplier that did give a price, and the supplier
+        # never asked appears in neither — it is `never_quoted`'s business.
+        self.assertEqual(prices["quotes"], [])
+        self.assertEqual([row["supplier_name"] for row in prices["never_quoted"]], ["Scottish Fuels Depot"])
+
+        # A run is read back with `status`, so the same two groups are there.
+        report = self.app.status()
+        self.assertEqual([row["name"] for row in report["no_quote_suppliers"]], ["ValueOils"])
+        self.assertEqual([row["name"] for row in report["failed_suppliers"]], ["Scottish Fuels"])
+
+
 if __name__ == "__main__":
     unittest.main()

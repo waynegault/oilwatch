@@ -267,6 +267,31 @@ class OilWatchApp:
             window_days=self.settings.max_quote_age_days,
         )
 
+    def _supplier_attempt_outcomes(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """The last ask per supplier, split into the two ways it can come back empty.
+
+        Reported separately because they call for different next actions: a
+        supplier that gave no price is often doing exactly what it does — no web
+        quote to read, so the contact details are the answer — while one whose
+        retrieval failed is a fault worth looking at. ``reason`` says which,
+        without reading the note.
+        """
+        no_quote: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+        for row in self.db.latest_attempts():
+            entry = {
+                "name": row["supplier_name"],
+                "website": row["website"],
+                "last_attempt_at": row["observed_at"],
+                "reason": row["reason"],
+                "note": row["notes"],
+            }
+            if row["status"] == "error":
+                failed.append(entry)
+            elif row["status"] != "ok":
+                no_quote.append(entry)
+        return no_quote, failed
+
     def refresh_recently_done(self, minutes: int) -> dict[str, Any] | None:
         """Whether a sweep ran within ``minutes``, and when.
 
@@ -303,6 +328,7 @@ class OilWatchApp:
         self.db.init_schema()
         rows = self._with_effective_prices(self._current_quotes())
         observed = [row["observed_at"] for row in rows if row.get("observed_at")]
+        no_quote, failed = self._supplier_attempt_outcomes()
         return {
             # The freshest observation in `quotes`, so the whole response can be
             # aged at a glance; None when there is nothing to age.
@@ -312,6 +338,12 @@ class OilWatchApp:
             "excluded_suppliers": self._excluded_suppliers(),
             "not_refreshed_suppliers": self._not_refreshed_suppliers(),
             "never_quoted": self.db.unquoted_suppliers(),
+            # The two ways a supplier can be missing from `quotes` because the ask
+            # itself came back empty. Kept apart from the lists above, which name
+            # prices that a window or a failed attempt held back: these name what
+            # the most recent ask did.
+            "no_quote_suppliers": no_quote,
+            "failed_suppliers": failed,
         }
 
     def status(self) -> dict[str, Any]:
@@ -323,6 +355,7 @@ class OilWatchApp:
             window_days=self.settings.max_quote_age_days,
         )
         trend = self.analytics.price_trend(self.db.all_quotes())
+        no_quote, failed = self._supplier_attempt_outcomes()
         return {
             "market_snapshot": snapshot,
             "trend": trend,
@@ -330,6 +363,11 @@ class OilWatchApp:
             # Carried here so "have I already ordered, and what did I pay?" is
             # answerable without a second call.
             "last_purchase": next(iter(self.purchases(limit=1)), None),
+            # And which suppliers the last sweep could not price, split by whether
+            # they had no quote to give or the retrieval failed — the difference
+            # between an expected gap and a fault worth looking at.
+            "no_quote_suppliers": no_quote,
+            "failed_suppliers": failed,
         }
 
     def monitor_email(self) -> dict[str, Any]:

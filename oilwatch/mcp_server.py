@@ -92,8 +92,10 @@ def current_prices() -> dict[str, Any]:
     which reason applies when that is empty or thin — ``window_days`` (the recency
     window applied), ``as_of`` (the freshest observation in ``quotes``, or None
     when there is none), ``excluded_suppliers`` (quotes older than the window),
-    ``never_quoted`` (no price has ever been recorded from them), and
-    ``not_refreshed_suppliers`` (priced earlier, latest attempt failed).
+    ``never_quoted`` (no price has ever been recorded from them),
+    ``not_refreshed_suppliers`` (priced earlier, latest attempt failed),
+    ``no_quote_suppliers`` (the last ask returned no price — often because there
+    is no web quote to read), and ``failed_suppliers`` (the last ask raised).
 
     Each row carries ``valid_until`` and the supplier's ``order_page`` when its
     config records one — where a person would order from. ``None`` means
@@ -129,7 +131,12 @@ def purchases() -> list[dict[str, Any]]:
 
 @mcp.tool(title="Market status", annotations=_READ_ONLY)
 def status() -> dict[str, Any]:
-    """Return the market snapshot, price trend, and a buy/hold recommendation."""
+    """Return the market snapshot, price trend, and a buy/hold recommendation.
+
+    Also names the suppliers the most recent ask could not price, split into
+    ``no_quote_suppliers`` (they gave no price) and ``failed_suppliers`` (the
+    retrieval failed), so a report can give both without reading every note.
+    """
     return _get_app().status()
 
 

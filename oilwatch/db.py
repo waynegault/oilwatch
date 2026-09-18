@@ -293,6 +293,31 @@ class Database:
             return None
         return self._supplier_row_to_dict(row)
 
+    def latest_attempts(self) -> list[dict[str, Any]]:
+        """The most recent attempt for every supplier, whatever it returned.
+
+        Unlike :meth:`not_refreshed_quotes` this needs no successful quote to
+        exist, so it answers "what did the last ask actually do?" for a supplier
+        that has never given a price at all.
+        """
+        with closing(self.connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT s.name AS supplier_name, s.website, attempt.observed_at,
+                       attempt.status, attempt.reason, attempt.notes
+                FROM suppliers s
+                JOIN (
+                    SELECT supplier_id, MAX(observed_at) AS max_attempt
+                    FROM quotes GROUP BY supplier_id
+                ) a ON a.supplier_id = s.id
+                JOIN quotes attempt
+                  ON attempt.supplier_id = s.id AND attempt.observed_at = a.max_attempt
+                WHERE s.status != 'inactive'
+                ORDER BY s.name ASC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def newest_observation(self) -> str | None:
         """The newest ``observed_at`` in the quotes table, or None when empty.
 

@@ -512,13 +512,16 @@ There are two doors onto the same engine. Use them like this.
 ## Reads — the `oilwatch` MCP tools (all instant, no browser)
 
 - **`current_prices`** — the latest quote per supplier (£/L inc. VAT), as an
-  envelope: `quotes`, plus `as_of` and `window_days` and the three ways a
-  supplier can be missing from it — `excluded_suppliers` (older than the
-  window), `never_quoted` (never priced at all), and `not_refreshed_suppliers`
-  (priced earlier, latest attempt failed). An empty `quotes` therefore says *why*
-  it is empty instead of being a dead end.
+  envelope: `quotes`, plus `as_of` and `window_days` and the five ways a supplier
+  can be missing from it — `excluded_suppliers` (older than the window),
+  `never_quoted` (never priced at all), `not_refreshed_suppliers` (priced
+  earlier, latest attempt failed), `no_quote_suppliers` (the last ask gave no
+  price) and `failed_suppliers` (the last ask raised). An empty `quotes`
+  therefore says *why* it is empty instead of being a dead end.
 - **`cheapest`** — the winner, plus the market average and variance.
-- **`status`** — the snapshot, the trend, and a buy/hold read.
+- **`status`** — the snapshot, the trend, a buy/hold read, and the same
+  `no_quote_suppliers` / `failed_suppliers` split, so a sweep can be read back in
+  one call.
 - **`list_suppliers`** — the supplier list.
 - **`purchases`** — the recorded purchase history (read-only; see Writing).
 - **`chart`** / **`time_series_chart`** — write a PNG and return its path.

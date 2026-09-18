@@ -201,10 +201,10 @@ Recording a purchase is a deliberate CLI act by the owner
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `list_suppliers` | Suppliers on record | None |
-| `current_prices` | Latest price per supplier (£/L inc. VAT), as an envelope that explains an empty market: `quotes` plus `as_of`, `window_days`, `excluded_suppliers`, `never_quoted` and `not_refreshed_suppliers`; each row carries `valid_until` and `order_page` when recorded | None |
+| `current_prices` | Latest price per supplier (£/L inc. VAT), as an envelope that explains an empty market: `quotes` plus `as_of`, `window_days`, `excluded_suppliers`, `never_quoted`, `not_refreshed_suppliers`, `no_quote_suppliers` (last ask gave no price) and `failed_suppliers` (last ask raised); each row carries `valid_until` and `order_page` when recorded | None |
 | `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`), the winner's `order_page`, the `window_days` compared, and any `excluded_suppliers` the age window dropped | None |
 | `purchases` | Purchases already recorded, newest first, with totals and discount codes | None |
-| `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase | None |
+| `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase and the same `no_quote_suppliers` / `failed_suppliers` split | None |
 | `chart` | Market summary chart; returns a file path | None |
 | `time_series_chart` | Per-supplier prices with Brent crude on a second axis; returns a path | None |
 | `refresh_prices` | Scrape fresh quotes from all suppliers — **slow** (minutes, browser automation). Returns `{cached, cooldown_minutes, refreshed_at, results}`; within the 10-minute cooldown it returns `cached: true` and starts nothing | `postcode: str`, `force: bool` |
