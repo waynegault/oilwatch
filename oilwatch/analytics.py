@@ -46,6 +46,7 @@ class AnalyticsService:
         latest_quotes: list[dict[str, Any]],
         excluded_suppliers: list[dict[str, Any]] | None = None,
         not_refreshed_suppliers: list[dict[str, Any]] | None = None,
+        window_days: int | None = None,
     ) -> dict[str, Any]:
         """The market as the owner would compare it: suppliers, plus the benchmark.
 
@@ -60,6 +61,13 @@ class AnalyticsService:
         from an *earlier* run, because their latest attempt returned none. Those
         prices are still inside the window and so still count, but they are not
         this run's result and must not be read as one.
+
+        ``window_days`` is the recency window the caller applied. It is carried
+        in the result so the snapshot states its own scope: a reader looking at
+        an empty or thin market can then say "nothing inside the last N days"
+        instead of guessing between an empty database, a tight window and a
+        scrape that failed. That ambiguity is worst on a first call, which is
+        why it belongs in the empty result too, not only the populated one.
         """
         priced = [row for row in latest_quotes if row["price_per_liter"] is not None]
 
@@ -81,6 +89,9 @@ class AnalyticsService:
                 "average_price_per_liter": None,
                 "variance": None,
                 "quotes_considered": 0,
+                # Carried even here: an empty market is exactly when a reader
+                # needs to know the window it is empty against.
+                "window_days": window_days,
                 "benchmark": benchmark,
                 "excluded_suppliers": list(excluded_suppliers or []),
                 "not_refreshed_suppliers": list(not_refreshed_suppliers or []),
@@ -113,6 +124,9 @@ class AnalyticsService:
             "average_price_per_liter": round(mean(prices), 4),
             "variance": round(pvariance(prices), 6) if len(prices) > 1 else 0.0,
             "quotes_considered": len(prices),
+            # The window this comparison was made against, so a reader can tell
+            # "nothing is trading" from "nothing was quoted recently enough".
+            "window_days": window_days,
             # The excluded figure, so it is visible rather than silently dropped.
             "benchmark": benchmark,
             # And the suppliers the recency window held back, by name.

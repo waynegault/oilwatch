@@ -89,7 +89,9 @@ def current_prices() -> list[dict[str, Any]]:
 
     Suppliers with no quote inside the configured ``max_quote_age_days`` window
     are omitted, so historical spreadsheet rows cannot masquerade as today's
-    prices. ``cheapest`` and ``status`` name the suppliers it omits.
+    prices. ``cheapest`` and ``status`` name the suppliers it omits; because this
+    tool returns a bare list it cannot carry the window's value, and ``cheapest``
+    reports that as ``window_days``.
     """
     return _get_app().current_prices()
 
@@ -100,6 +102,8 @@ def cheapest() -> dict[str, Any]:
 
     ``excluded_suppliers`` lists any supplier whose newest quote fell outside
     ``max_quote_age_days``, so a thin market is visible as "not re-quoted yet".
+    ``window_days`` states the window that comparison was made against, so an
+    empty market is not read as a broken one.
     """
     return _get_app().cheapest()
 

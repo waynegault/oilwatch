@@ -142,6 +142,17 @@ class ReportingTests(AppTestCase):
         self.assertIsInstance(snapshot, dict)
         self.assertEqual(self.app.current_prices(), [])
 
+    def test_both_market_tools_report_the_configured_window(self) -> None:
+        """The window travels from settings into the output, not just the query.
+
+        Pinned at this layer because the analytics test passes the value in
+        directly: a caller that stopped passing it would leave the empty-market
+        case ambiguous again with that test still green.
+        """
+        window = self.app.settings.max_quote_age_days
+        self.assertEqual(self.app.cheapest()["window_days"], window)
+        self.assertEqual(self.app.status()["market_snapshot"]["window_days"], window)
+
     def test_cheapest_flags_a_supplier_whose_latest_attempt_failed(self) -> None:
         """A price from an earlier run is named, not passed off as this run's.
 

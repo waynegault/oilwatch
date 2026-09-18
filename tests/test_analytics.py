@@ -36,6 +36,22 @@ class SnapshotTests(unittest.TestCase):
         # on the key rather than treating its absence as an older server.
         self.assertEqual(result["excluded_suppliers"], [])
 
+    def test_the_window_is_carried_in_both_branches(self) -> None:
+        """The snapshot states its own scope, and an empty market is the case
+        that needs it most.
+
+        Without it a reader looking at an empty or thin market has to guess
+        between an empty database, a tight recency window, and a scrape that
+        failed - which is the exact ambiguity an agent hits on its first call.
+        """
+        empty = AnalyticsService.latest_market_snapshot([], window_days=1)
+        self.assertEqual(empty["window_days"], 1)
+
+        populated = AnalyticsService.latest_market_snapshot(
+            [make_quote(1, "A", "2026-03-20T10:00:00", 0.71)], window_days=3
+        )
+        self.assertEqual(populated["window_days"], 3)
+
     def test_cheapest_and_average(self) -> None:
         quotes = [
             make_quote(1, "A", "2026-03-20T10:00:00", 0.71),

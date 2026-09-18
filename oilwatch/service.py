@@ -243,6 +243,7 @@ class OilWatchApp:
             self._with_effective_prices(self._current_quotes()),
             excluded_suppliers=self._excluded_suppliers(),
             not_refreshed_suppliers=self._not_refreshed_suppliers(),
+            window_days=self.settings.max_quote_age_days,
         )
 
     def current_prices(self) -> list[dict[str, Any]]:
@@ -255,6 +256,7 @@ class OilWatchApp:
             self._with_effective_prices(self._current_quotes()),
             excluded_suppliers=self._excluded_suppliers(),
             not_refreshed_suppliers=self._not_refreshed_suppliers(),
+            window_days=self.settings.max_quote_age_days,
         )
         trend = self.analytics.price_trend(self.db.all_quotes())
         return {
