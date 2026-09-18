@@ -191,13 +191,14 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 
 | # | Check | Command / Action | Expected |
 |---|-------|------------------|----------|
-| 9.1 | 🔍 Documented counts match the code | `.venv\Scripts\python.exe -m unittest tests.test_docs -v` | Passes. `test_docs.py` reads the MCP tool count, the CLI subcommand count, the test count and the module count back out of the code |
+| 9.1 | 🔍 Documented counts match the code | `.venv\Scripts\python.exe -m unittest tests.test_docs -v` | Passes. `test_docs.py` reads the MCP tool count, the CLI subcommand count, the test count and the module count back out of the code, and checks that every tool and every command is named in the reference (§9.8) |
 | 9.2 | 🔧 Counts are updated when code changes | Add a tool, a command or a test | Update `PROGRESS.md` and `ROADMAP.md` in the same commit, or the suite fails |
 | 9.3 | 🔍 The README index matches the files present | Compare the README's file tree and Support & Documentation table with `dir /b *.md` | Every listed document exists; no deleted document is still listed |
 | 9.4 | 🔧 No prices in the guide or README | `grep -rnE "£1\.[0-9]{3}" README.md user-guide.md` | No hardcoded prices — they rot within weeks; link to `oilwatch cheapest` instead. `PROGRESS.md` and `ROADMAP.md` are exempt: they are a dated record, and a price there is history, not a claim about today |
 | 9.5 | 🔍 The agent brief is current | `grep -n "openclaw mcp probe" user-guide.md` | The brief (user-guide.md §14) states the tool count and the refresh cost |
 | 9.6 | 🔍 Connector documentation matches the registries | Compare `user-guide.md` §9's domain table with `_SUPPLIER_CONNECTORS` | The same domains, the same connector names |
 | 9.7 | 🔍 Every document ends with a newline | `tail -c 1 README.md` | Ends in `0a` |
+| 9.8 | 🔍 Every command and tool is named in the reference | `.venv\Scripts\python.exe -m unittest tests.test_docs.ReferenceTests` | Passes. README is the tool reference `AGENTS.md` sends an agent to, so it must name all 21 CLI subcommands (in a command position, so the prose word "quote" cannot stand in for the `quote` command) and all 9 MCP tools. On 2026-09-18 five commands were missing from it — `import-spreadsheet`, `login-email`, `submit-requests`, `time-series`, `update-brent` — so the check reads both lists back out of the code rather than trusting the prose |
 
 ## 10. Testing — High
 

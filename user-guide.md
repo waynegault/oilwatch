@@ -114,8 +114,15 @@ message** so a processed reply cannot be counted twice.
 ```powershell
 python -m oilwatch.cli submit-requests                      # every supplier the register asks
 python -m oilwatch.cli submit-requests --suppliers gleaner_oils
+python -m oilwatch.cli login-email                          # once, ever: OAuth2 device code
 python -m oilwatch.cli monitor-email
 ```
+
+`login-email` is a one-time step, not part of the routine: it runs the OAuth2
+device-code flow and caches a refresh token (DPAPI-encrypted at rest on Windows),
+so `monitor-email` can reach the mailbox afterwards without a password. The first
+sweep after the token is lost — a new machine, a revoked grant, a deleted cache —
+fails with "Not authenticated" until it is run again.
 
 With no `--suppliers`, the run is read from the **supplier register**
 (`config/suppliers.json`), where a record can say how it is asked:
@@ -579,17 +586,22 @@ without saying so is the one way to get this wrong.
 
 ## How to report a price to Wayne
 
-- **Always give the supplier's ordering URL (its `website`) next to the price**,
-  and name the discount code when one applies. A price with no way to act on it
-  is half an answer.
+- **Always give the supplier's ordering URL next to the price** — its
+  `order_page` when the row carries one, its `website` otherwise, because a
+  website is often only a marketing page. Name the discount code when one
+  applies. A price with no way to act on it is half an answer.
 - Give the **`observed_at` date** with the price, so a day-old quote is never
   read as today's.
 - Prices are £ per litre **inclusive of 5% VAT**, for the configured quantity
   (1000 L). Say which basis you are quoting.
 - **Fueltool is a UK-average benchmark, not a supplier you can order from** —
   say so rather than presenting it as the winner.
-- Several suppliers are **phone/email-only**. They come back
-  `manual_action_required` with contact details. That is expected, not a failure.
+- Several suppliers **cannot be priced by a scraper at all**. They come back
+  `manual_action_required` with contact details and a `reason` saying which kind
+  of gap it is: `quote_by_request` means there *is* a quote page and it answers a
+  person (Compass Fuels, Crown Oil, Gleaner Oils, Nationwide Fuels, Oilfast
+  Insch), while `no_quote_page` means there is none and the phone is the only
+  route (Turriff Fuels, Carnegie Fuels). Both are expected, not failures.
 - **Scottish Fuels often undercuts the field, but its automatic sign-in is
   intermittent** — expect `manual_action_required` for it sometimes. That is not
   an OilWatch fault and not an MCP fault: do not try to "fix" it, and do not

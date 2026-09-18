@@ -25,8 +25,8 @@ It is a working system, not a prototype:
 | Supplier connectors | 15 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 653, all passing offline |
-| Database | 27 suppliers, 524 quotes, 0 orders (2026-09-15) |
+| Tests | 655, all passing offline |
+| Database | 17 active suppliers (28 including retired), 602 quote rows, 1 order (2026-09-18) |
 
 ---
 
@@ -98,7 +98,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 653 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 655 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -164,7 +164,11 @@ suppliers whose only priced row came from the spreadsheet import won on
   Nationwide Fuels and Crown Oil each have a live quote page that answers a
   person rather than the app — a wpforms form, a Gravity Forms pair, or a lead
   form behind Turnstile — so they carry `reason: quote_by_request` and their
-  `order_page` in the register, not `no_quote_page`.
+  `order_page` in the register, not `no_quote_page`. The register itself is
+  `config/suppliers.json`: the suppliers it knows, the domains never to treat as
+  one, and each supplier's `quote_request` saying whether it is asked by form or
+  by phone. It is version controlled; `config/settings.json` holds the owner's
+  address, postcode and credentials and is not.
 - **On demand, not on a timer (changed 2026-09-15).** Prices are refreshed when
   someone asks for them — `oilwatch quote-all --browser`, `refresh_prices` over
   MCP, or an agent turn — rather than on a schedule. The scheduler's per-user

@@ -159,7 +159,7 @@
       "website": "https://www.boilerjuice.com/",
       "status": "active",
       "connector_type": "manual",
-      "notes": "Broker/aggregator, deliberately not discovered (excluded_domains above lists boilerjuice.com). Quotes by email; the inclusive total carries a service charge the headline PPL omits, so the quote is read from that total. Its browser connector exists but does not yet collect a price."
+      "notes": "Broker/aggregator, deliberately not discovered (excluded_domains above lists boilerjuice.com). Quotes by email; the inclusive total carries a service charge the headline PPL omits, so the quote is read from that total. Its browser connector signs in with the stored account and reads the cheapest inclusive 'You Pay' total, so it does collect a price - an earlier version of this note said it did not, which the quotes table has since contradicted."
     },
     {
       "name": "Brogan Fuels",

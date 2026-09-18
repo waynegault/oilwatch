@@ -114,6 +114,12 @@ python -m oilwatch.cli status
 
 # Generate PRICE CHART showing market trends
 python -m oilwatch.cli chart
+
+# Per-supplier price lines over time, with Brent crude on a second axis
+python -m oilwatch.cli time-series
+
+# Refresh the Brent crude daily series from the EIA (network, no browser)
+python -m oilwatch.cli update-brent
 ```
 
 ### Supplier Commands
@@ -137,6 +143,32 @@ python -m oilwatch.cli phone-script --postcode "AB21 0YA" --name "Your Name"
 
 # Export call sheets to JSON for tracking
 python -m oilwatch.cli phone-script --postcode "AB21 0YA" --name "Your Name" --output data\call-sheets.json
+```
+
+### Enquiry and Email Commands
+
+For the suppliers that quote only after you ask. `submit-requests` drives their
+enquiry forms; `monitor-email` then reads the reply, records the price and
+deletes the message, so a processed reply cannot be counted twice. The sweep is
+the one thing here that *is* scheduled — it runs hourly on weekdays, because a
+supplier answers when it chooses.
+
+```powershell
+# Fill every enquiry form the register asks for (see config/suppliers.json).
+# A supplier with no form on its site is reported as a number to ring.
+python -m oilwatch.cli submit-requests
+
+# One supplier only
+python -m oilwatch.cli submit-requests --suppliers gleaner_oils
+
+# Read replies and record their prices (needs the one-time login below)
+python -m oilwatch.cli monitor-email
+
+# One-time OAuth2 device-code sign-in for the mailbox grant
+python -m oilwatch.cli login-email
+
+# Sign in to a supplier's own site by hand, re-establishing a browser session
+python -m oilwatch.cli login scottish_fuels
 ```
 
 ### Purchase Records
@@ -176,8 +208,11 @@ python -m oilwatch.mcp_server
 ### Utility Commands
 
 ```powershell
-# Initialize database and import supplier credentials
+# Initialize database and import the supplier register
 python -m oilwatch.cli init
+
+# Import historical prices from the spreadsheet OilWatch replaced
+python -m oilwatch.cli import-spreadsheet --path "Oil Prices.xls"
 
 # Discover APIs on supplier websites (for development)
 python -m oilwatch.cli api-discover --url "https://www.valueoils.com"
@@ -214,6 +249,20 @@ Recording a purchase is a deliberate CLI act by the owner
 Each tool carries MCP `ToolAnnotations`, so a client can distinguish a safe read
 (`readOnlyHint`) from a slow, world-touching scrape (`openWorldHint`) and gate
 approvals accordingly.
+
+Wherever a supplier row is not `ok`, it carries a machine-readable `reason`
+beside the prose in `notes`, so a gap can be explained without parsing English:
+
+| `reason` | Means |
+|----------|-------|
+| `no_quote_page` | no web quote exists at all — ask by phone or email |
+| `quote_by_request` | a quote page exists, but it answers a *person*: it takes your details and replies, so there is no price to read |
+| `login_not_confirmed` | an authenticated portal did not sign in |
+| `captcha` | a bot check stopped the flow |
+| `site_error` | the attempt raised — timeout, HTTP error, or a parse failure |
+
+`null` means unclassified, not "no reason": most connectors do not attribute one
+yet, and that is not a claim that none applies.
 
 ### AI Agent Workflow
 
@@ -434,7 +483,8 @@ envelope looks like this (`blob` is base64-encoded binary ciphertext):
 | **Session expiry** | A browser connector stops working once a supplier session lapses (Scottish Fuels 302s to its account page) | Re-run `oilwatch login <supplier>`; the connector now reports this instead of crashing |
 | **Selector drift** | A supplier redesign silently breaks a scraper | Connectors fall back to `manual_action_required` and report what they saw; update the connector |
 | **CAPTCHA on registration** | Accounts can't be fully auto-created | One-off manual sign-in |
-| **Phone-only suppliers** | Oilfast, Turriff and Carnegie cannot be quoted automatically | `oilwatch phone-script` |
+| **Phone-only suppliers** | Turriff Fuels and Carnegie Fuels have no quote form at all | `oilwatch phone-script`, or the number in their register record |
+| **Quote-by-request suppliers** | Compass Fuels, Crown Oil, Gleaner Oils, Nationwide Fuels and Oilfast Insch have a form, not a price — it takes your details and replies | `oilwatch submit-requests`, then `monitor-email` reads the reply |
 | **Price freshness** | Stored prices age | Refresh on demand — `oilwatch quote-all`, `refresh_prices` over MCP, or an agent turn; nothing is scheduled to do it; `cheapest` ignores quotes older than `max_quote_age_days` (code default 30; this install sets 1, because a quote stands at most a day) and lists them as `excluded_suppliers` |
 
 ### Technical Debt
@@ -464,6 +514,8 @@ Oil Price Webscraper/
 ├── docs/
 │   └── inspection.md            # Repeatable audit checklist for this repo
 ├── config/
+│   ├── suppliers.json           # The supplier register: suppliers + excluded_domains
+│   ├── suppliers.example.json   # Its shipped shape, for a fresh install
 │   ├── settings.example.json    # Copy to settings.json (gitignored)
 │   └── supplier_credentials.json # All passwords
 ├── data/

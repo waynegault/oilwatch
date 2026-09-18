@@ -33,6 +33,7 @@ from oilwatch.logging_setup import LOG_FILE_ENV
 ROOT = Path(__file__).resolve().parents[1]
 PROGRESS = (ROOT / "PROGRESS.md").read_text(encoding="utf-8")
 ROADMAP = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+README = (ROOT / "README.md").read_text(encoding="utf-8")
 LIVE_SETTINGS = ROOT / "config" / "settings.json"
 EXAMPLE_SETTINGS = ROOT / "config" / "settings.example.json"
 SHARED_ENV = ROOT / "oilwatch_env.bat"
@@ -75,6 +76,36 @@ def _discovered_tests() -> int:
 def _package_modules() -> int:
     """How many Python files the package holds."""
     return len(list((ROOT / "oilwatch").rglob("*.py")))
+
+
+def _cli_commands() -> set[str]:
+    """Every subcommand name the CLI parser defines."""
+    tree = ast.parse((ROOT / "oilwatch" / "cli.py").read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "add_parser"):
+            continue
+        argument = node.args[0] if node.args else None
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+            names.add(argument.value)
+    return names
+
+
+def _mcp_tool_names() -> set[str]:
+    """Every function name the MCP server decorates with ``@mcp.tool``."""
+    tree = ast.parse((ROOT / "oilwatch" / "mcp_server.py").read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            if isinstance(target, ast.Attribute) and target.attr == "tool":
+                names.add(node.name)
+    return names
 
 
 def _stated(pattern: str, *, what: str, document: str = PROGRESS) -> int:
@@ -151,6 +182,34 @@ class RoadmapCountTests(unittest.TestCase):
             _discovered_tests(),
             "ROADMAP.md's test count is stale; run the suite and update it",
         )
+
+
+class ReferenceTests(unittest.TestCase):
+    """README is the tool reference, so it has to name every tool and command.
+
+    ``AGENTS.md`` points an agent at it for the tool reference, which only works
+    if it is complete: a command that exists but is documented nowhere is worse
+    than one that does not exist, because the reader concludes the app cannot do
+    the thing. Seven of the twenty-one commands were missing on 2026-09-18, which
+    is the same drift the count guards above exist to catch - so this reads both
+    lists out of the code rather than trusting the prose.
+    """
+
+    def test_every_cli_command_is_named_in_the_readme(self) -> None:
+        missing = sorted(
+            name
+            for name in _cli_commands()
+            # In a command position, so the prose word "quote" cannot stand in
+            # for the `quote` command.
+            if not re.search(rf"oilwatch(?:\.cli)? {re.escape(name)}\b", README)
+        )
+        self.assertEqual(missing, [], f"README.md does not name these commands: {missing}")
+
+    def test_every_mcp_tool_is_named_in_the_readme(self) -> None:
+        missing = sorted(
+            name for name in _mcp_tool_names() if not re.search(rf"\b{re.escape(name)}\b", README)
+        )
+        self.assertEqual(missing, [], f"README.md does not name these tools: {missing}")
 
 
 #: Settings objects whose keys are schema. Every other object in the file is
