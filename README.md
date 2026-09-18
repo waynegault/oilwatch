@@ -201,8 +201,8 @@ Recording a purchase is a deliberate CLI act by the owner
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `list_suppliers` | Suppliers on record | None |
-| `current_prices` | Latest price per supplier (£/L inc. VAT) with `valid_until`; ignores quotes older than `max_quote_age_days` (`cheapest`/`status` name those it drops) | None |
-| `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`) and any `excluded_suppliers` the age window dropped | None |
+| `current_prices` | Latest price per supplier (£/L inc. VAT) with `valid_until` and the supplier's `order_page` when one is recorded; ignores quotes older than `max_quote_age_days` (`cheapest`/`status` name those it drops) | None |
+| `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`), the winner's `order_page`, the `window_days` compared, and any `excluded_suppliers` the age window dropped | None |
 | `purchases` | Purchases already recorded, newest first, with totals and discount codes | None |
 | `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase | None |
 | `chart` | Market summary chart; returns a file path | None |
