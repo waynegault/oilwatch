@@ -195,14 +195,25 @@ class DispatchTests(unittest.TestCase):
         auth.launch.assert_called_once_with(headless=True)
         auth.close.assert_called_once()
 
-    def test_submit_requests_defaults_to_the_configured_supplier_list(self) -> None:
-        """No --suppliers falls back to config, not to a literal in the CLI."""
+    def test_submit_requests_defaults_to_the_supplier_register(self) -> None:
+        """No --suppliers falls back to the register, not to a literal in the CLI.
+
+        The list used to live in the gitignored settings.json, so the suppliers
+        to chase were neither reviewable in the repository nor shared with it.
+        """
         auth = MagicMock()
         submit = MagicMock(return_value=[])
         app = MagicMock()
-        app.settings.submit_request_suppliers = ["gleaner_oils", "oilfast"]
+        registry = {
+            "excluded_domains": [],
+            "suppliers": [
+                {"name": "Gleaner Oils", "quote_request": {"form": "gleaner_oils"}},
+                {"name": "Oilfast Insch", "quote_request": {"form": "oilfast"}},
+            ],
+        }
         with (
             patch("oilwatch.cli.OilWatchApp", return_value=app),
+            patch("oilwatch.config.load_supplier_registry", return_value=registry),
             patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
             patch("oilwatch.form_submit.submit_all", new=submit),
             patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
@@ -212,13 +223,44 @@ class DispatchTests(unittest.TestCase):
 
         self.assertEqual(submit.call_args.args[1], ["gleaner_oils", "oilfast"])
 
-    def test_submit_requests_reports_when_there_is_nothing_to_submit(self) -> None:
+    def test_a_phone_only_supplier_is_reported_without_opening_a_browser(self) -> None:
+        """A supplier with no form is a phone call, not a failed submission.
+
+        Its mail would otherwise read as "No form configured", which says
+        nothing about what to do next and looks like a fault.
+        """
         auth = MagicMock()
         app = MagicMock()
-        app.settings.submit_request_suppliers = []
+        registry = {
+            "excluded_domains": [],
+            "suppliers": [
+                {"name": "Turriff Fuels", "phone": "01888 562706", "quote_request": {"phone": True}},
+            ],
+        }
         out = io.StringIO()
         with (
             patch("oilwatch.cli.OilWatchApp", return_value=app),
+            patch("oilwatch.config.load_supplier_registry", return_value=registry),
+            patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
+            contextlib.redirect_stdout(out),
+        ):
+            main()
+
+        auth.launch.assert_not_called()
+        self.assertIn("Turriff Fuels", out.getvalue())
+        self.assertIn("01888 562706", out.getvalue())
+
+    def test_submit_requests_reports_when_there_is_nothing_to_submit(self) -> None:
+        auth = MagicMock()
+        app = MagicMock()
+        out = io.StringIO()
+        with (
+            patch("oilwatch.cli.OilWatchApp", return_value=app),
+            patch(
+                "oilwatch.config.load_supplier_registry",
+                return_value={"suppliers": [], "excluded_domains": []},
+            ),
             patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
             patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
             contextlib.redirect_stdout(out),

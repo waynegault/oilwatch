@@ -38,15 +38,18 @@ class OilWatchAppTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_imports_supplier_overrides(self) -> None:
-        overrides = [
-            {
-                "name": "Test Supplier",
-                "website": "https://example.com",
-                "status": "active",
-                "connector_type": "manual",
-                "connector_config": {}
-            }
-        ]
+        overrides = {
+            "excluded_domains": [],
+            "suppliers": [
+                {
+                    "name": "Test Supplier",
+                    "website": "https://example.com",
+                    "status": "active",
+                    "connector_type": "manual",
+                    "connector_config": {}
+                }
+            ],
+        }
         (self.root / "config" / "supplier_overrides.json").write_text(json.dumps(overrides), encoding="utf-8")
         result = self.app.init()
         self.assertEqual(result["imported_overrides"], 1)

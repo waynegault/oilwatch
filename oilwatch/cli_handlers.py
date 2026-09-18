@@ -12,6 +12,7 @@ import asyncio
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from oilwatch.api_discovery import discover_supplier_api
 from oilwatch.auto_register import register_all
@@ -188,32 +189,42 @@ def _cmd_login(app: OilWatchApp, args: argparse.Namespace) -> None:
 
 def _cmd_submit_requests(app: OilWatchApp, args: argparse.Namespace) -> None:
     from oilwatch.browser_auth import BrowserAuth
-    from oilwatch.form_submit import submit_all
+    from oilwatch.config import load_supplier_registry
+    from oilwatch.form_submit import requests_from, submit_all
 
-    supplier_keys = [
-        s.strip()
-        for s in (args.suppliers or ",".join(app.settings.submit_request_suppliers)).split(",")
-        if s.strip()
-    ]
-    if not supplier_keys:
+    if args.suppliers:
+        supplier_keys = [s.strip() for s in args.suppliers.split(",") if s.strip()]
+        phone_only: list[dict[str, Any]] = []
+    else:
+        # Derived from the supplier register, which is version controlled,
+        # rather than from a list in the gitignored settings.json. The supplier
+        # that can only be telephoned is reported as a call, not as a failure.
+        registry = load_supplier_registry(app.root)
+        supplier_keys, phone_only = requests_from(registry["suppliers"])
+    if not supplier_keys and not phone_only:
         print("Error: no suppliers given and none configured. Pass --suppliers.")
         return
-    auth = BrowserAuth("form_submit")
-    driver = auth.launch(headless=True)
-    try:
-        results = submit_all(
-            driver,
-            supplier_keys,
-            name=args.name,
-            email=args.email,
-            phone=args.phone,
-            postcode=args.postcode,
-            address=args.address or app.settings.home.label,
-            quantity_liters=args.quantity_liters,
-        )
-    finally:
-        auth.close()
-    _print(results)
+
+    results: list[dict[str, Any]] = []
+    if supplier_keys:
+        # Launched only when there is a form to drive: a register of phone-only
+        # suppliers should not open a browser to print two phone numbers.
+        auth = BrowserAuth("form_submit")
+        driver = auth.launch(headless=True)
+        try:
+            results = submit_all(
+                driver,
+                supplier_keys,
+                name=args.name,
+                email=args.email,
+                phone=args.phone,
+                postcode=args.postcode,
+                address=args.address or app.settings.home.label,
+                quantity_liters=args.quantity_liters,
+            )
+        finally:
+            auth.close()
+    _print(results + phone_only)
 
 
 def _cmd_monitor_email(app: OilWatchApp, args: argparse.Namespace) -> None:

@@ -99,17 +99,17 @@ The orders table is unchanged and still the record of what was bought.
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Package structure | ✅ Complete | Hatchling build, editable install |
-| Configuration | ✅ Complete | JSON-based config in `config/settings.json` + `supplier_overrides.json` |
+| Configuration | ✅ Complete | JSON config: `config/settings.json` (personal values, gitignored) + `supplier_overrides.json` (the tracked supplier register) |
 | Database | ✅ Complete | SQLite; supplier registry and quote history (live counts via `oilwatch status`) |
 | Supplier discovery | ✅ Complete | DuckDuckGo search, geocoding, 50-mile filter |
-| Connectors | ✅ Complete | 4 generic + 16 supplier-specific (HTTP, Playwright browser, telephone) |
+| Connectors | ✅ Complete | 4 generic + 15 supplier-specific (HTTP, Playwright browser, telephone) |
 | Quote collection | ✅ Complete | Pluggable; live browser + HTTP collection working |
 | Analytics | ✅ Complete | Recency window (`max_quote_age_days`, default 30d) keeps 2007–2025 spreadsheet rows out of the current comparison |
 | Ordering | ❌ Dropped | Buying is manual; `record-purchase` records what was bought |
 | MCP server | ✅ Complete | 9 tools over streamable HTTP or stdio; OpenClaw spawns it on demand |
 | Scheduler | ✅ Complete | Background jobs for discovery and quotes |
 | CLI | ✅ Complete | 21 commands |
-| Tests | ✅ Complete | 645 tests, all offline |
+| Tests | ✅ Complete | 653 tests, all offline |
 | Email intake | ✅ Complete | Microsoft Graph monitor: extract reply price, record, delete mail |
 | Market context | ✅ Complete | Brent crude daily series from the EIA |
 

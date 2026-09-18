@@ -43,14 +43,19 @@ OVERRIDES: list[dict[str, Any]] = [
     },
 ]
 
+#: The register's other half, which ``load_settings`` reads for the discovery
+#: filter.
+EXCLUDED_DOMAINS: list[str] = []
+
 
 class AppTestCase(unittest.TestCase):
     """An ``OilWatchApp`` on a temporary root, with config written for it."""
 
     settings: dict[str, Any] = SETTINGS
-    #: ``None`` writes no overrides file at all, for tests that insert suppliers
+    #: ``None`` writes no register at all, for tests that insert suppliers
     #: themselves and want no help.
     overrides: list[dict[str, Any]] | None = OVERRIDES
+    excluded_domains: list[str] = EXCLUDED_DOMAINS
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -70,7 +75,8 @@ class AppTestCase(unittest.TestCase):
 
     def _write_overrides(self) -> None:
         (self.root / "config" / "supplier_overrides.json").write_text(
-            json.dumps(self.overrides), encoding="utf-8"
+            json.dumps({"suppliers": self.overrides, "excluded_domains": self.excluded_domains}),
+            encoding="utf-8",
         )
 
     def _init(self) -> dict[str, int]:

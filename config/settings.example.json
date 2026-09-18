@@ -16,19 +16,7 @@
     "domestic heating oil suppliers <your area>",
     "heating oil <your town> supplier"
   ],
-  "excluded_domains": [
-    "boilerjuice.com",
-    "cheapestoil.co.uk",
-    "consumercouncil.org.uk",
-    "cylex-uk.co.uk",
-    "fueltool.co.uk",
-    "heatingoilnearme.co.uk",
-    "oilcompare.co.uk",
-    "spendlessonfuel.com",
-    "yell.com"
-  ],
   "login_urls": {},
-  "submit_request_suppliers": [],
   "microsoft_client_id": "",
   "scheduler": {
     "discovery_interval_hours": 168,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from oilwatch.form_submit import SUPPLIER_FORMS, _resolve_field, submit_request
+from oilwatch.form_submit import SUPPLIER_FORMS, _resolve_field, requests_from, submit_request
 from oilwatch.waiting import wait_until
 
 
@@ -171,6 +171,53 @@ class SubmitRequestTests(unittest.TestCase):
         self.assertEqual(elements["fuel_type"].sent, [])  # a select, handled as one
         # the quote-type radio, then the submit button, each clicked via the driver
         self.assertEqual(len(driver.scripts), 2)
+
+
+class RequestsFromTests(unittest.TestCase):
+    """Which suppliers to ask, read from the tracked register.
+
+    The list used to live in gitignored settings.json, so the set of suppliers
+    the app chases was neither reviewable in the repository nor shared with it.
+    """
+
+    def test_a_form_entry_becomes_a_key_to_submit(self) -> None:
+        keys, phone_only = requests_from(
+            [{"name": "Gleaner Oils", "quote_request": {"form": "gleaner_oils"}}]
+        )
+        self.assertEqual(keys, ["gleaner_oils"])
+        self.assertEqual(phone_only, [])
+
+    def test_a_phone_entry_becomes_a_call_to_report_not_a_form_to_drive(self) -> None:
+        keys, phone_only = requests_from(
+            [
+                {
+                    "name": "Turriff Fuels",
+                    "phone": "01888 562706",
+                    "quote_request": {"phone": True},
+                }
+            ]
+        )
+        self.assertEqual(keys, [], "there is no form to drive")
+        self.assertEqual(len(phone_only), 1)
+        self.assertEqual(phone_only[0]["status"], "phone_only")
+        self.assertEqual(phone_only[0]["supplier"], "Turriff Fuels")
+        self.assertIn("01888 562706", phone_only[0]["message"])
+
+    def test_the_number_is_read_from_the_record(self) -> None:
+        """One place to correct a phone number, not two that can disagree."""
+        _, phone_only = requests_from(
+            [{"name": "Turriff Fuels", "phone": "01888 000000", "quote_request": {"phone": True}}]
+        )
+        self.assertIn("01888 000000", phone_only[0]["message"])
+
+    def test_a_supplier_with_no_request_entry_is_left_alone(self) -> None:
+        """Registration in the register is not a request to be chased."""
+        keys, phone_only = requests_from([{"name": "Rix", "phone": "01224 455477"}])
+        self.assertEqual((keys, phone_only), ([], []))
+
+    def test_a_phone_entry_with_no_number_says_so_rather_than_printing_nothing(self) -> None:
+        _, phone_only = requests_from([{"name": "Nowhere Fuels", "quote_request": {"phone": True}}])
+        self.assertIn("their website", phone_only[0]["message"])
 
 
 if __name__ == "__main__":

@@ -1,35 +1,54 @@
-[
-  {
-    "name": "Example Direct Price Supplier",
-    "website": "https://example.com/heating-oil",
-    "status": "active",
-    "connector_type": "price_page",
-    "connector_config": {
-      "quote_url": "https://example.com/heating-oil",
-      "order_page": "https://example.com/heating-oil",
-      "price_regex": "(\\d+\\.\\d+)\\s*p(?:ence)?\\s*/\\s*l"
-    }
-  },
-  {
-    "name": "Example Web Form Supplier",
-    "website": "https://example.com/quote",
-    "status": "active",
-    "connector_type": "http_form",
-    "connector_config": {
-      "quote_url": "https://example.com/api/quote",
-      "quote_method": "POST",
-      "quote_fields": {
-        "postcode": "{postcode}",
-        "quantity": "{quantity_liters}"
+{
+  "excluded_domains": [
+    "example-price-comparison.com"
+  ],
+  "suppliers": [
+    {
+      "name": "Example Direct Price Supplier",
+      "website": "https://example.com/heating-oil",
+      "status": "active",
+      "connector_type": "price_page",
+      "connector_config": {
+        "quote_url": "https://example.com/heating-oil",
+        "order_page": "https://example.com/heating-oil",
+        "price_regex": "(\\d+\\.\\d+)\\s*p(?:ence)?\\s*/\\s*l"
+      }
+    },
+    {
+      "name": "Example Web Form Supplier",
+      "website": "https://example.com/quote",
+      "status": "active",
+      "connector_type": "http_form",
+      "connector_config": {
+        "quote_url": "https://example.com/api/quote",
+        "quote_method": "POST",
+        "quote_fields": {
+          "postcode": "{postcode}",
+          "quantity": "{quantity_liters}"
+        },
+        "price_regex": "\"price_per_liter\"\\s*:\\s*(\\d+\\.\\d+)",
+        "order_url": "https://example.com/api/order",
+        "order_method": "POST",
+        "order_fields": {
+          "quantity": "{quantity_liters}",
+          "price_per_liter": "{agreed_price_per_liter}"
+        },
+        "reference_regex": "\"order_reference\"\\s*:\\s*\"([^\"]+)\""
+      }
+    },
+    {
+      "name": "Example Enquiry Form Supplier",
+      "website": "https://example.com/get-a-quote",
+      "status": "active",
+      "phone": "01234 567890",
+      "connector_type": "manual",
+      "connector_config": {
+        "order_page": "https://example.com/get-a-quote"
       },
-      "price_regex": "\"price_per_liter\"\\s*:\\s*(\\d+\\.\\d+)",
-      "order_url": "https://example.com/api/order",
-      "order_method": "POST",
-      "order_fields": {
-        "quantity": "{quantity_liters}",
-        "price_per_liter": "{agreed_price_per_liter}"
+      "quote_request": {
+        "form": "example_enquiry"
       },
-      "reference_regex": "\"order_reference\"\\s*:\\s*\"([^\"]+)\""
+      "notes": "quote_request.form names an entry in SUPPLIER_FORMS (oilwatch/form_submit.py), which is what `oilwatch submit-requests` drives. Use {\"phone\": true} instead when the supplier has no form: the run then reports a number to ring rather than a failure, reading the number from this record's own `phone`."
     }
-  }
-]
+  ]
+}

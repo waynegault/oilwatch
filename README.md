@@ -370,8 +370,8 @@ endpoint, and the contact details the phone and enquiry flows use — is in
 
 Brogan Fuels was retired on 2026-09-18: it is part of Scottish Fuels, so it is no
 longer listed, quoted or reported on separately. Its connector is gone; the
-Scottish Fuels connector covers the price, and `settings.excluded_domains` stops
-discovery re-adding the domain.
+Scottish Fuels connector covers the price, and the register's `excluded_domains`
+stops discovery re-adding the domain.
 
 Supplier accounts, where required, live in `config/supplier_credentials.json`
 (gitignored). Scottish Fuels needs a live session; see §7 of the user guide.

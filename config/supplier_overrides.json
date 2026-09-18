@@ -1,139 +1,174 @@
-[
-  {
-    "name": "Connon Bros",
-    "website": "https://connon.fuelsoft.co.uk/",
-    "status": "active",
-    "phone": "01358 720320",
-    "connector_type": "manual",
-    "connector_config": {
-      "quote_url": "https://oilweb.johnstonfuels.co.uk/Connon/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore",
-      "order_page": "https://oilweb.johnstonfuels.co.uk/Connon/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore"
+{
+  "excluded_domains": [
+    "boilerjuice.com",
+    "brogans.co.uk",
+    "cheapestoil.co.uk",
+    "consumercouncil.org.uk",
+    "cylex-uk.co.uk",
+    "fueltool.co.uk",
+    "heatingoilnearme.co.uk",
+    "oilcompare.co.uk",
+    "spendlessonfuel.com",
+    "yell.com"
+  ],
+  "suppliers": [
+    {
+      "name": "Connon Bros",
+      "website": "https://connon.fuelsoft.co.uk/",
+      "status": "active",
+      "phone": "01358 720320",
+      "connector_type": "manual",
+      "connector_config": {
+        "quote_url": "https://oilweb.johnstonfuels.co.uk/Connon/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore",
+        "order_page": "https://oilweb.johnstonfuels.co.uk/Connon/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore"
+      },
+      "notes": "Connon Oils is now part of Johnston Oils; Fuelsoft WebOrdering form (scraped via browser connector)."
     },
-    "notes": "Connon Oils is now part of Johnston Oils; Fuelsoft WebOrdering form (scraped via browser connector)."
-  },
-  {
-    "name": "Johnson Oils",
-    "website": "https://oilweb.johnstonfuels.co.uk/JOil/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore",
-    "status": "active",
-    "phone": "01224 774774",
-    "connector_type": "manual",
-    "notes": "Fuelsoft WebOrdering form (scraped via browser connector)."
-  },
-  {
-    "name": "Regency Oils",
-    "website": "https://www.regencyoils.com/",
-    "status": "active",
-    "phone": "0800 838500",
-    "connector_type": "manual",
-    "connector_config": {
-      "quote_url": "https://order.regencyoils.co.uk/WEBPLUS/Portal.aspx?action=quote",
-      "order_page": "https://order.regencyoils.co.uk/WEBPLUS/Portal.aspx?action=quote",
-      "product_value": "3302"
+    {
+      "name": "Johnson Oils",
+      "website": "https://oilweb.johnstonfuels.co.uk/JOil/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore",
+      "status": "active",
+      "phone": "01224 774774",
+      "connector_type": "manual",
+      "notes": "Fuelsoft WebOrdering form (scraped via browser connector)."
     },
-    "notes": "Fuelsoft WEBPLUS platform (scraped via browser connector)."
-  },
-  {
-    "name": "Gleaner Oils",
-    "website": "https://www.gleaner.co.uk/",
-    "status": "active",
-    "phone": "01224 877575",
-    "connector_type": "manual",
-    "connector_config": {
-      "order_page": "https://www.gleaner.co.uk/get-a-quote-or-place-an-order/"
+    {
+      "name": "Regency Oils",
+      "website": "https://www.regencyoils.com/",
+      "status": "active",
+      "phone": "0800 838500",
+      "connector_type": "manual",
+      "connector_config": {
+        "quote_url": "https://order.regencyoils.co.uk/WEBPLUS/Portal.aspx?action=quote",
+        "order_page": "https://order.regencyoils.co.uk/WEBPLUS/Portal.aspx?action=quote",
+        "product_value": "3302"
+      },
+      "notes": "Fuelsoft WEBPLUS platform (scraped via browser connector)."
     },
-    "notes": "The quote page is the wpforms form (id 1933), whose first field is a Receive a Quote / Place an Order choice; the winter-heating-oil page embeds the same form, so both take the same field numbers. Checked 2026-09-18: the page holds no price, so quote_by_request. Also phone 01224 877575."
-  },
-  {
-    "name": "Highland Fuels",
-    "website": "https://www.highlandfuels.co.uk/home-heating",
-    "status": "active",
-    "phone": "0800 224 224",
-    "connector_type": "manual",
-    "notes": "Quote via form / phone."
-  },
-  {
-    "name": "Fueltool",
-    "website": "https://www.fueltool.co.uk/",
-    "status": "active",
-    "connector_type": "manual",
-    "notes": "UK-average benchmark (scraped via HTTP). Not a local supplier."
-  },
-  {
-    "name": "Turriff Fuels",
-    "website": "https://www.turrifffuels.com/",
-    "status": "active",
-    "phone": "01888 562706",
-    "connector_type": "manual",
-    "notes": "Website recorded 2026-09-18 (the old turriff-fuels.co.uk entry was wrong). Three pages - contact-us, faq, our-products - with no quote form and no published price, so it stays a phone quote; 01888 562706 is the number on the site."
-  },
-  {
-    "name": "Compass Fuels",
-    "website": "https://compassfuels.co.uk/",
-    "status": "active",
-    "phone": "0330 128 9838",
-    "connector_type": "manual",
-    "connector_config": {
-      "order_page": "https://compassfuels.co.uk/"
+    {
+      "name": "Gleaner Oils",
+      "website": "https://www.gleaner.co.uk/",
+      "status": "active",
+      "phone": "01224 877575",
+      "connector_type": "manual",
+      "connector_config": {
+        "order_page": "https://www.gleaner.co.uk/get-a-quote-or-place-an-order/"
+      },
+      "quote_request": {
+        "form": "gleaner_oils"
+      },
+      "notes": "The quote page is the wpforms form (id 1933), whose first field is a Receive a Quote / Place an Order choice; the winter-heating-oil page embeds the same form, so both take the same field numbers. Checked 2026-09-18: the page holds no price, so quote_by_request. Also phone 01224 877575."
     },
-    "notes": "Aberdeen depot (covers AB21). The homepage carries the 'Get Fuel Price' form (WordPress action compass_sector_lead), the same one on /aberdeen-fuel/; checked 2026-09-18. It asks for name, phone, email, postcode and litres and replies, so there is no price to read - hence quote_by_request rather than no_quote_page. Also phone 0330 128 9838."
-  },
-  {
-    "name": "Carnegie Fuels",
-    "website": "https://carnegiefuels.co.uk/",
-    "status": "active",
-    "phone": "01356 648 648",
-    "email": "info@carnegiefuels.co.uk",
-    "connector_type": "manual",
-    "notes": "East Scotland (Dunfermline to Fraserburgh). Online ordering is suspended by their own notice (carnegiefuels.co.uk/online-ordering-temporarily-unavailable/), which points customers to phone/email. Checked 2026-09-18: that page carries no form and no price, so there is no order_page to record and no_quote_page is the honest reason - phone 01356 648 648 or info@carnegiefuels.co.uk."
-  },
-  {
-    "name": "Nationwide Fuels",
-    "website": "https://www.nationwidefuels.co.uk/",
-    "status": "active",
-    "phone": "0330 678 0880",
-    "connector_type": "manual",
-    "connector_config": {
-      "order_page": "https://www.nationwidefuels.co.uk/"
+    {
+      "name": "Highland Fuels",
+      "website": "https://www.highlandfuels.co.uk/home-heating",
+      "status": "active",
+      "phone": "0800 224 224",
+      "connector_type": "manual",
+      "notes": "Quote via form / phone."
     },
-    "notes": "UK-wide. The quote form (quote[fullname]/quote[email]/quote[telephone]/quote[postcode]/quote[litres], the same fields on /fuel-products/kerosene/) posts to eforms.nationwidefuels.co.uk behind Cloudflare Turnstile and replies by email; checked 2026-09-18. No price to read, so quote_by_request. Also phone 0330 678 0880."
-  },
-  {
-    "name": "Crown Oil",
-    "website": "https://www.crownoil.co.uk/",
-    "status": "active",
-    "phone": "0330 123 1444",
-    "connector_type": "manual",
-    "connector_config": {
-      "order_page": "https://www.crownoil.co.uk/#quote-form-wrapper"
+    {
+      "name": "Fueltool",
+      "website": "https://www.fueltool.co.uk/",
+      "status": "active",
+      "connector_type": "manual",
+      "notes": "UK-average benchmark (scraped via HTTP). Not a local supplier."
     },
-    "notes": "UK-wide. The homepage quote form (quote[fullname] etc., the same fields on /products/kerosene/) posts to eforms.crownoil.co.uk behind Cloudflare Turnstile and replies by email; checked 2026-09-18. No price to read, so quote_by_request. Also phone 0330 123 1444."
-  },
-  {
-    "name": "Oilfast Insch",
-    "website": "https://oilfast.co.uk/depot/insch/",
-    "status": "active",
-    "phone": "03302 320 104",
-    "email": "insch@oilfast.co.uk",
-    "connector_type": "manual",
-    "connector_config": {
-      "order_page": "https://oilfast.co.uk/depot/insch/"
+    {
+      "name": "Turriff Fuels",
+      "website": "https://www.turrifffuels.com/",
+      "status": "active",
+      "phone": "01888 562706",
+      "connector_type": "manual",
+      "quote_request": {
+        "phone": true
+      },
+      "notes": "Website recorded 2026-09-18 (the old turriff-fuels.co.uk entry was wrong). Three pages - contact-us, faq, our-products - with no quote form and no published price, so it stays a phone quote; 01888 562706 is the number on the site."
     },
-    "notes": "The Insch depot. The depot page is the quote page: two Gravity Forms (ids 10 and 2) behind reCAPTCHA, checked 2026-09-18, driven by oilwatch.form_submit; no published price, so quote_by_request. Depot line 01464 635999, general 03302 320 104."
-  },
-  {
-    "name": "BoilerJuice",
-    "website": "https://www.boilerjuice.com/",
-    "status": "active",
-    "connector_type": "manual",
-    "notes": "Broker/aggregator, deliberately not discovered (settings list boilerjuice.com in excluded_domains). Quotes by email; the inclusive total carries a service charge the headline PPL omits, so the quote is read from that total. Its browser connector exists but does not yet collect a price."
-  },
-  {
-    "name": "Brogan Fuels",
-    "website": "https://www.brogans.co.uk/",
-    "status": "inactive",
-    "phone": "0345 300 8844",
-    "email": "domestic@brogans.co.uk",
-    "connector_type": "manual",
-    "notes": "RETIRED 2026-09-18: Brogan Fuels is part of Scottish Fuels, so it is not a supplier in its own right and no longer appears in any list, quote run or report. Kept as an inactive tombstone for two reasons: `init()` upserts on website, so simply dropping the entry would leave the live row active rather than retired, and the entry is where the retirement is recorded. brogans.co.uk is also in settings.excluded_domains, so discovery cannot re-add it."
-  }
-]
+    {
+      "name": "Compass Fuels",
+      "website": "https://compassfuels.co.uk/",
+      "status": "active",
+      "phone": "0330 128 9838",
+      "connector_type": "manual",
+      "connector_config": {
+        "order_page": "https://compassfuels.co.uk/"
+      },
+      "quote_request": {
+        "form": "compass_fuels"
+      },
+      "notes": "Aberdeen depot (covers AB21). The homepage carries the 'Get Fuel Price' form (WordPress action compass_sector_lead), the same one on /aberdeen-fuel/; checked 2026-09-18. It asks for name, phone, email, postcode and litres and replies, so there is no price to read - hence quote_by_request rather than no_quote_page. Also phone 0330 128 9838."
+    },
+    {
+      "name": "Carnegie Fuels",
+      "website": "https://carnegiefuels.co.uk/",
+      "status": "active",
+      "phone": "01356 648 648",
+      "email": "info@carnegiefuels.co.uk",
+      "connector_type": "manual",
+      "quote_request": {
+        "phone": true
+      },
+      "notes": "East Scotland (Dunfermline to Fraserburgh). Online ordering is suspended by their own notice (carnegiefuels.co.uk/online-ordering-temporarily-unavailable/), which points customers to phone/email. Checked 2026-09-18: that page carries no form and no price, so there is no order_page to record and no_quote_page is the honest reason - phone 01356 648 648 or info@carnegiefuels.co.uk."
+    },
+    {
+      "name": "Nationwide Fuels",
+      "website": "https://www.nationwidefuels.co.uk/",
+      "status": "active",
+      "phone": "0330 678 0880",
+      "connector_type": "manual",
+      "connector_config": {
+        "order_page": "https://www.nationwidefuels.co.uk/"
+      },
+      "quote_request": {
+        "form": "nationwide_fuels"
+      },
+      "notes": "UK-wide. The quote form (quote[fullname]/quote[email]/quote[telephone]/quote[postcode]/quote[litres], the same fields on /fuel-products/kerosene/) posts to eforms.nationwidefuels.co.uk behind Cloudflare Turnstile and replies by email; checked 2026-09-18. No price to read, so quote_by_request. Also phone 0330 678 0880."
+    },
+    {
+      "name": "Crown Oil",
+      "website": "https://www.crownoil.co.uk/",
+      "status": "active",
+      "phone": "0330 123 1444",
+      "connector_type": "manual",
+      "connector_config": {
+        "order_page": "https://www.crownoil.co.uk/#quote-form-wrapper"
+      },
+      "quote_request": {
+        "form": "crown_oil"
+      },
+      "notes": "UK-wide. The homepage quote form (quote[fullname] etc., the same fields on /products/kerosene/) posts to eforms.crownoil.co.uk behind Cloudflare Turnstile and replies by email; checked 2026-09-18. No price to read, so quote_by_request. Also phone 0330 123 1444."
+    },
+    {
+      "name": "Oilfast Insch",
+      "website": "https://oilfast.co.uk/depot/insch/",
+      "status": "active",
+      "phone": "03302 320 104",
+      "email": "insch@oilfast.co.uk",
+      "connector_type": "manual",
+      "connector_config": {
+        "order_page": "https://oilfast.co.uk/depot/insch/"
+      },
+      "quote_request": {
+        "form": "oilfast"
+      },
+      "notes": "The Insch depot. The depot page is the quote page: two Gravity Forms (ids 10 and 2) behind reCAPTCHA, checked 2026-09-18, driven by oilwatch.form_submit; no published price, so quote_by_request. Depot line 01464 635999, general 03302 320 104."
+    },
+    {
+      "name": "BoilerJuice",
+      "website": "https://www.boilerjuice.com/",
+      "status": "active",
+      "connector_type": "manual",
+      "notes": "Broker/aggregator, deliberately not discovered (excluded_domains above lists boilerjuice.com). Quotes by email; the inclusive total carries a service charge the headline PPL omits, so the quote is read from that total. Its browser connector exists but does not yet collect a price."
+    },
+    {
+      "name": "Brogan Fuels",
+      "website": "https://www.brogans.co.uk/",
+      "status": "inactive",
+      "phone": "0345 300 8844",
+      "email": "domestic@brogans.co.uk",
+      "connector_type": "manual",
+      "notes": "RETIRED 2026-09-18: Brogan Fuels is part of Scottish Fuels, so it is not a supplier in its own right and no longer appears in any list, quote run or report. Kept as an inactive tombstone for two reasons: `init()` upserts on website, so simply dropping the entry would leave the live row active rather than retired, and the entry is where the retirement is recorded. brogans.co.uk is also in excluded_domains above, so discovery cannot re-add it."
+    }
+  ]
+}

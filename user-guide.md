@@ -112,9 +112,18 @@ forms; `monitor-email` then reads the reply, records the price and **deletes the
 message** so a processed reply cannot be counted twice.
 
 ```powershell
-python -m oilwatch.cli submit-requests --suppliers gleaner_oils,oilfast
+python -m oilwatch.cli submit-requests                      # every supplier the register asks
+python -m oilwatch.cli submit-requests --suppliers gleaner_oils
 python -m oilwatch.cli monitor-email
 ```
+
+With no `--suppliers`, the run is read from the **supplier register**
+(`config/supplier_overrides.json`), where a record can say how it is asked:
+`"quote_request": {"form": "gleaner_oils"}` names a form in `SUPPLIER_FORMS`
+(`oilwatch/form_submit.py`), and `{"phone": true}` means there is no form, so the
+run prints the number to ring from that record's own `phone` instead of failing.
+The register is version controlled; `config/settings.json` is not, so the list of
+suppliers this install chases lives where it can be reviewed and shared.
 
 Supplier replies are one-off quotes: check the inbox after requesting, and once
 the price is recorded let the monitor delete it. A reply from a supplier not yet

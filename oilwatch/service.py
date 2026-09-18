@@ -7,7 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from oilwatch.analytics import AnalyticsService
-from oilwatch.config import CHECKOUT_ROOT, Settings, load_settings, load_supplier_overrides
+from oilwatch.config import (
+    CHECKOUT_ROOT,
+    Settings,
+    load_settings,
+    load_supplier_registry,
+)
 from oilwatch.db import Database
 from oilwatch.discovery import DiscoveryService
 from oilwatch.geo import GeoService
@@ -35,7 +40,7 @@ class OilWatchApp:
     def init(self) -> dict[str, Any]:
         self.db.init_schema()
         imported = 0
-        for supplier in load_supplier_overrides(self.root):
+        for supplier in load_supplier_registry(self.root)["suppliers"]:
             self.db.upsert_supplier(supplier)
             imported += 1
         return {
