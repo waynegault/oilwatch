@@ -168,6 +168,7 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="manual_action_required",
+                reason="no_price_found",
                 source="homefuels_direct_browser",
                 notes=f"Could not extract automated price. Contact: enquiries@homefuelsdirect.co.uk. Browser error: {error}",
             )
@@ -179,6 +180,7 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="error",
+                reason="site_error",
                 source="homefuels_direct_browser",
                 notes=f"HTTP fallback failed: {e!s}",
             )

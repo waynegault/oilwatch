@@ -103,6 +103,10 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                             quantity_liters,
                             "Not signed in and no stored credentials for "
                             "scottish_fuels. Run `oilwatch register` first.",
+                            # The portal is fine and the stored session is not;
+                            # only a sign-in fixes it. Same reading as the
+                            # `is_logged_in` case below.
+                            reason="login_not_confirmed",
                         )
                     log.info("Scottish Fuels session expired; signing in again")
                     try:
@@ -113,6 +117,9 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                             quantity_liters,
                             f"Session expired and automatic sign-in failed: {exc}. "
                             "Run `oilwatch login scottish_fuels` by hand.",
+                            # The sign-in *raised* — a timeout or a broken page —
+                            # which is a fault rather than a refused session.
+                            reason="site_error",
                         )
                     if not signed_in:
                         return self._manual(
@@ -121,6 +128,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                             "Session expired and the automatic sign-in did not take "
                             "after retrying. Run `oilwatch login scottish_fuels` by "
                             "hand.",
+                            reason="login_not_confirmed",
                         )
                     # Refresh the saved cookie backup too. The persistent profile
                     # already holds the session, but the file is what
@@ -136,6 +144,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                             supplier,
                             quantity_liters,
                             "Signed in but /quote/ still redirects to the account page.",
+                            reason="login_not_confirmed",
                         )
 
                 # select fuel type, tolerating a changed/renumbered option list
@@ -148,6 +157,9 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                         "No fuel-type options on the quote form (expected a "
                         f"productSelection radio; saw {options or 'none'}). "
                         "The form may have been redesigned.",
+                        # The page answered and the control it needs was not on
+                        # it, which is a page to look at rather than a session.
+                        reason="no_price_found",
                     )
                 driver.execute_script(
                     "arguments[0].click();",
@@ -177,7 +189,12 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             finally:
                 auth.close()
         except Exception as exc:  # noqa: BLE001
-            return self._manual(supplier, quantity_liters, f"Browser automation error: {exc}")
+            return self._manual(
+                supplier,
+                quantity_liters,
+                f"Browser automation error: {exc}",
+                reason="site_error",
+            )
 
         if final_url and self.is_login_page(final_url):
             return self._manual(
@@ -185,6 +202,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                 quantity_liters,
                 "Session expired mid-quote (redirected back to "
                 "/customer/account/). Run `oilwatch login scottish_fuels` and retry.",
+                reason="login_not_confirmed",
             )
 
         if not self.is_logged_in(body_text):
@@ -208,7 +226,12 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                 final_url or self.quote_url,
                 body_text[:2000],
             )
-            return self._manual(supplier, quantity_liters, "Could not find a price on the quote result page.")
+            return self._manual(
+                supplier,
+                quantity_liters,
+                "Could not find a price on the quote result page.",
+                reason="no_price_found",
+            )
 
         # What the site states, not what we multiply out: its own inclusive
         # total for the quantity it quoted, with the per-litre rate derived from

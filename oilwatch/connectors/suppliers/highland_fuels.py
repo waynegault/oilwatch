@@ -91,11 +91,17 @@ class HighlandFuelsConnector(BaseConnector):
             response.raise_for_status()
         except httpx.HTTPError as exc:
             log.warning("Highland Fuels quote request failed: %s", exc)
-            return self._manual(supplier, quantity_liters, f"HTTP error: {exc}")
+            return self._manual(supplier, quantity_liters, f"HTTP error: {exc}", "site_error")
 
         parsed = self.parse_offers_response(response.text)
         if parsed is None:
-            return self._manual(supplier, quantity_liters, "No offer/price in the getoffers.php response.")
+            return self._manual(
+                supplier,
+                quantity_liters,
+                "No offer/price in the getoffers.php response.",
+                # It answered; there was no offer in it.
+                "no_price_found",
+            )
 
         price_per_liter, offer_total = parsed
         return QuoteResult(
@@ -152,7 +158,15 @@ class HighlandFuelsConnector(BaseConnector):
         _, price_per_liter, total = next((o for o in offers if "standard" in o[0]), offers[0])
         return round(price_per_liter, 4), round(total, 2)
 
-    def _manual(self, supplier: dict[str, Any], quantity_liters: int, notes: str) -> QuoteResult:
+    def _manual(
+        self, supplier: dict[str, Any], quantity_liters: int, notes: str, reason: str
+    ) -> QuoteResult:
+        """A quote this connector cannot give, with the reason it cannot.
+
+        ``reason`` is required rather than defaulted: both callers below know
+        which case they are in, and a default would be this function guessing on
+        their behalf — the one thing an unclassified row already fails to do.
+        """
         contact = ", ".join(p for p in [supplier.get("phone"), supplier.get("email"), supplier.get("website")] if p)
         return QuoteResult(
             supplier_id=int(supplier["id"]),
@@ -160,6 +174,7 @@ class HighlandFuelsConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
+            reason=reason,
             source="highland_fuels",
             notes=f"{notes} Contact: {contact or 'supplier website'}",
         )

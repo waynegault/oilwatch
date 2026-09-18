@@ -200,6 +200,7 @@ class ValueOilsBrowserConnector(BrowserConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="manual_action_required",
+                reason="no_price_found",
                 source="valueoils_browser",
                 notes=f"Could not extract the standard-delivery total. Browser error: {error}",
             )
@@ -211,6 +212,7 @@ class ValueOilsBrowserConnector(BrowserConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="error",
+                reason="site_error",
                 source="valueoils_browser",
                 notes=f"HTTP fallback failed: {e!s}",
             )

@@ -283,6 +283,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                         observed_at=self.now(),
                         quantity_liters=quantity_liters,
                         status="manual_action_required",
+                        reason="no_price_found",
                         source="boilerjuice_browser",
                         notes="Logged in but could not extract automated price. Please complete quote manually at: https://www.boilerjuice.com/uk/journeys/core/quote",
                     )
@@ -317,6 +318,7 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="error",
+                reason="site_error",
                 source="boilerjuice_browser",
                 notes=f"Browser automation error: {e!s}",
             )

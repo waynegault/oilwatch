@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import ast
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
+import oilwatch
 from oilwatch.connectors.http_form import HTTPFormConnector
 from oilwatch.connectors.manual import ManualConnector
 from oilwatch.connectors.price_page import PricePageConnector
+from oilwatch.models import QUOTE_REASONS
 
 
 def fake_response(text: str, url: str = "https://example.com/prices", status_code: int = 200) -> Mock:
@@ -50,6 +54,48 @@ class ManualConnectorTests(unittest.TestCase):
         self.assertEqual(result.reason, "no_quote_page")
         # No order page to name, so the note must not imply one.
         self.assertNotIn("Quote page:", result.notes)
+
+
+class QuoteResultContractTests(unittest.TestCase):
+    """Every non-ok result a connector builds says why, from the documented set.
+
+    Read from the code rather than from the rows, because the rows are the
+    symptom: on 2026-09-18 the latest attempts for ten suppliers carried
+    ``reason: null`` because the sites that produce them had never been given a
+    value, and a consumer cannot act on a gap nobody explained. A new connector
+    that returns a manual or error result with no reason — or with a reason
+    invented outside ``QUOTE_REASONS`` — fails here rather than in a report.
+    """
+
+    def test_every_non_ok_result_carries_a_documented_reason(self) -> None:
+        package = Path(oilwatch.__file__).resolve().parent
+        offenders: list[str] = []
+
+        for path in sorted(package.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+                if name != "QuoteResult":
+                    continue
+                keywords = {kw.arg: kw.value for kw in node.keywords}
+                status = keywords.get("status")
+                # Only a literal status is judgeable; a computed one is skipped
+                # rather than guessed at.
+                if not (isinstance(status, ast.Constant) and isinstance(status.value, str)):
+                    continue
+                if status.value == "ok":
+                    continue
+                where = f"{path.name}:{node.lineno}"
+                reason = keywords.get("reason")
+                if reason is None:
+                    offenders.append(f"{where} status={status.value} with no reason")
+                elif isinstance(reason, ast.Constant) and reason.value not in QUOTE_REASONS:
+                    offenders.append(f"{where} reason={reason.value!r} is not in QUOTE_REASONS")
+
+        self.assertEqual(offenders, [], "these results cannot say why they are not ok")
 
 
 class PricePageConnectorTests(unittest.TestCase):

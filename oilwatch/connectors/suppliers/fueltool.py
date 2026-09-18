@@ -39,6 +39,7 @@ class FueltoolConnector(BaseConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="error",
+                reason="site_error",
                 source="fueltool",
                 notes=f"HTTP error fetching quote: {exc}",
             )
@@ -51,6 +52,7 @@ class FueltoolConnector(BaseConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="manual_action_required",
+                reason="no_price_found",
                 source="fueltool",
                 notes=f"Could not extract the Fueltool average price from {self.quote_url}",
             )

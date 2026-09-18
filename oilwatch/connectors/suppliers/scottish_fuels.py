@@ -49,6 +49,9 @@ class ScottishFuelsConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
+            # The quote generator needs a driving browser and a signed-in
+            # session, neither of which this path has.
+            reason="browser_required",
             source="scottish_fuels_manual",
             notes=self._build_quote_instructions(quantity_liters, postcode),
             raw_payload={

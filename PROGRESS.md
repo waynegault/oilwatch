@@ -25,7 +25,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 15 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 683, all passing offline |
+| Tests | 685, all passing offline |
 | Database | 17 active suppliers (28 including retired), 602 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -98,7 +98,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 683 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 685 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -201,6 +201,22 @@ suppliers whose only priced row came from the spreadsheet import won on
   rather than after the slowest supplier, which is what makes mid-flight progress
   possible; the writes stay in the one thread, so the SQLite contention the
   original comment guards against is untouched.
+- **Every result can now say why it is not `ok` (2026-09-18).** The last gap Hal
+  had flagged: ten suppliers' latest attempts carried `reason: null`, because the
+  sites producing them had never been given a value — the HTTP connectors whose
+  quote form needs driving, and the parse fallbacks that found nothing. Filling
+  them in needed a vocabulary decision, so two values joined the set:
+  `browser_required` (this path cannot price it and browser automation can — Rix,
+  Scottish Fuels, Regency Oils, which `no_quote_page` would have misstated and
+  `site_error` would have libelled) and `no_price_found` (the page answered and
+  carried no price, as against `site_error` where the attempt raised — the
+  distinction that tells a reader whether to retry or to look at the connector).
+  All 15 manual and 10 error sites now carry one. `QUOTE_REASONS` in `models.py`
+  is the set, `tests/test_docs.py` fails if the README or AGENTS.md stops naming a
+  value, and `tests/test_connectors.py` parses the package for a `QuoteResult`
+  with a non-`ok` status and no reason, so the next connector cannot reintroduce
+  the gap. The rows already on record keep their nulls: they are older than the
+  reasons, and rewriting them would falsify what those attempts actually said.
 - **On demand, not on a timer (changed 2026-09-15).** Prices are refreshed when
   someone asks for them — `oilwatch quote-all --browser`, `refresh_prices` over
   MCP, or an agent turn — rather than on a schedule. The scheduler's per-user

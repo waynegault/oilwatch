@@ -77,11 +77,17 @@ Every row that is not `ok` carries a machine-readable `reason` beside the prose 
 - `quote_by_request` — a quote page exists, but it answers a **person**: it takes
   the details and replies, so there is no price to read. Say this, and not "no
   quote page" — the two send a reader to different places.
+- `browser_required` — this path cannot price the supplier and browser automation
+  can: quote it with a browser rather than by hand.
+- `no_price_found` — the page answered and carried no price; `site_error` is the
+  other one, where the attempt raised. Which of the two says whether to retry or
+  to look at the connector.
 - `login_not_confirmed` — an authenticated portal did not sign in.
 - `captcha` — a bot check stopped the flow.
 - `site_error` — the attempt raised: a timeout, an HTTP error, or a parse failure.
-- `null` — unclassified, not "no reason": most connectors do not attribute one
-  yet, and that is not a claim that none applies.
+- `null` — unclassified, not "no reason": no connector returns it for a new
+  result any more, so a row carrying it is older than the day the reasons were
+  filled in, and says nothing about the supplier.
 
 ## Who is being asked, and where
 

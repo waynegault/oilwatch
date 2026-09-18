@@ -81,10 +81,12 @@ class SyncBrowserConnector(BaseConnector):
                     page, supplier, quantity_liters, context
                 )
         except Exception as exc:  # noqa: BLE001
-            return self._manual(supplier, quantity_liters, f"Browser automation error: {exc}")
+            return self._manual(
+                supplier, quantity_liters, f"Browser automation error: {exc}", "site_error"
+            )
 
         if ex_vat_price is None:
-            return self._manual(supplier, quantity_liters, self.no_price_note)
+            return self._manual(supplier, quantity_liters, self.no_price_note, "no_price_found")
 
         if self.price_is_inclusive:
             price_per_liter = round(ex_vat_price, 4)
@@ -110,7 +112,14 @@ class SyncBrowserConnector(BaseConnector):
             raw_payload=raw_payload,
         )
 
-    def _manual(self, supplier: dict[str, Any], quantity_liters: int, notes: str) -> QuoteResult:
+    def _manual(
+        self, supplier: dict[str, Any], quantity_liters: int, notes: str, reason: str
+    ) -> QuoteResult:
+        """A quote this connector cannot give, with the reason it cannot.
+
+        ``reason`` is required: both callers know which case they are in, and a
+        default here would be guessing where the row must not be a guess.
+        """
         contact = ", ".join(
             p for p in [supplier.get("phone"), supplier.get("email"), supplier.get("website")] if p
         )
@@ -120,6 +129,7 @@ class SyncBrowserConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
+            reason=reason,
             source=self.source,
             notes=f"{notes} Contact: {contact or 'supplier website'}",
         )

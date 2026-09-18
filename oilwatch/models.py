@@ -29,6 +29,25 @@ def utcnow_naive() -> datetime:
 #: these three describe.
 QUOTE_STATUSES = ("ok", "manual_action_required", "error")
 
+#: The ``reason`` vocabulary of a quote row that is not ``ok`` — why the app could
+#: not price that supplier this time. Also a closed set, and read by the same kind
+#: of consumer: each value is a different instruction, so inventing a variant
+#: leaves a reader with no rule to follow.
+#:
+#: ``None`` means unclassified rather than "no reason applies". It is not a
+#: synonym for any of these: it says the code that produced the row did not
+#: attribute one, which is a gap in this repository rather than a statement about
+#: the supplier.
+QUOTE_REASONS = (
+    "no_quote_page",  # no web quote exists at all: ask by phone or email
+    "quote_by_request",  # a quote page exists but answers a person, not a scraper
+    "browser_required",  # this path cannot price it; browser automation can
+    "no_price_found",  # the page answered, and carried no price to read
+    "login_not_confirmed",  # an authenticated portal did not sign in
+    "captcha",  # a bot check stopped the flow
+    "site_error",  # the attempt raised: timeout, HTTP error, or a parse failure
+)
+
 
 @dataclass(slots=True)
 class SupplierCandidate:
@@ -68,13 +87,21 @@ class QuoteResult:
     #: ``notes``. Deliberately a field rather than more ``status`` values: a
     #: consumer branches on ``status``, so a reason it does not recognise
     #: degrades gracefully where an unrecognised status does not. Connectors
-    #: should draw from this set rather than inventing variants:
+    #: should draw from ``QUOTE_REASONS`` rather than inventing variants:
     #:
     #: - ``no_quote_page`` — no web quote exists (phone/email only)
     #: - ``quote_by_request`` — a quote page exists but only answers a person:
     #:   it takes your details and replies, so there is no price to read. Not
     #:   the same thing as ``no_quote_page``, and the two were once conflated:
     #:   five suppliers with a working quote form were reported as having none
+    #: - ``browser_required`` — this path cannot price the supplier, and browser
+    #:   automation can. The HTTP connector's answer for a site whose quote form
+    #:   has to be driven, sometimes behind a sign-in (Rix, Scottish Fuels,
+    #:   Regency Oils); the actionable reading is "quote it with a browser"
+    #: - ``no_price_found`` — the page answered and carried no price: a parse
+    #:   that found nothing, as against ``site_error``, where the attempt raised.
+    #:   The distinction is what tells a reader whether to retry or to look at the
+    #:   connector
     #: - ``login_not_confirmed`` — an authenticated portal did not sign in
     #: - ``captcha`` — a bot check stopped the flow
     #: - ``site_error`` — the attempt raised: timeout, HTTP error, or a parse

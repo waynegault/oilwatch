@@ -29,7 +29,7 @@ import unittest
 from pathlib import Path
 
 from oilwatch.logging_setup import LOG_FILE_ENV
-from oilwatch.models import QUOTE_STATUSES
+from oilwatch.models import QUOTE_REASONS, QUOTE_STATUSES
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRESS = (ROOT / "PROGRESS.md").read_text(encoding="utf-8")
@@ -239,8 +239,20 @@ class ReferenceTests(unittest.TestCase):
         """
         for document, name in ((README, "README.md"), (AGENTS, "AGENTS.md")):
             missing = sorted(value for value in QUOTE_STATUSES if value not in document)
-            with self.subTest(document=name):
+            with self.subTest(document=name, vocabulary="status"):
                 self.assertEqual(missing, [], f"{name} does not name these statuses: {missing}")
+
+    def test_every_quote_reason_is_documented(self) -> None:
+        """Same contract, same failure mode: each reason is a different action.
+
+        A reason a consumer has never been told about is one it cannot act on,
+        which is how ``quote_by_request`` sat undocumented and got reported as
+        "no quote page" for the five suppliers that have a quote form.
+        """
+        for document, name in ((README, "README.md"), (AGENTS, "AGENTS.md")):
+            missing = sorted(value for value in QUOTE_REASONS if value not in document)
+            with self.subTest(document=name, vocabulary="reason"):
+                self.assertEqual(missing, [], f"{name} does not name these reasons: {missing}")
 
 
 #: Settings objects whose keys are schema. Every other object in the file is

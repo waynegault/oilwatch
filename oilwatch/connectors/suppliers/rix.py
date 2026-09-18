@@ -50,6 +50,9 @@ class RixConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
+            # This path exists to say why it cannot price Rix; the browser
+            # connector can, so the reason names that rather than the supplier.
+            reason="browser_required",
             source="rix_manual",
             notes=self._build_quote_instructions(quantity_liters, postcode),
             raw_payload={

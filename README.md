@@ -276,6 +276,8 @@ beside the prose in `notes`, so a gap can be explained without parsing English:
 |----------|-------|
 | `no_quote_page` | no web quote exists at all — ask by phone or email |
 | `quote_by_request` | a quote page exists, but it answers a *person*: it takes your details and replies, so there is no price to read |
+| `browser_required` | this path cannot price the supplier and browser automation can — a quote form that has to be driven, sometimes behind a sign-in |
+| `no_price_found` | the page answered and carried no price: a parse that found nothing, as against `site_error`, where the attempt raised. Which of the two tells you whether to retry or to look at the connector |
 | `login_not_confirmed` | an authenticated portal did not sign in |
 | `captcha` | a bot check stopped the flow |
 | `site_error` | the attempt raised — timeout, HTTP error, or a parse failure |

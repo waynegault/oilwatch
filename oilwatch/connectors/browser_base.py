@@ -323,6 +323,7 @@ class BrowserConnector(BaseConnector, ABC):
                     observed_at=self.now(),
                     quantity_liters=quantity_liters,
                     status="error",
+                    reason="site_error",
                     source=f"{self.supplier_key}_browser",
                     notes=f"Browser automation error: {e!s}",
                 )
@@ -352,10 +353,13 @@ class BrowserConnector(BaseConnector, ABC):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="manual_action_required",
+                # The portal wants an account before it will quote, and this run
+                # has none: registering or signing in is the fix.
+                reason="login_not_confirmed",
                 source=f"{self.supplier_key}_browser",
                 notes=self._build_registration_instructions(creds, error),
             )
-        
+
         # No registration - return error
         return QuoteResult(
             supplier_id=int(supplier["id"]),
@@ -363,6 +367,7 @@ class BrowserConnector(BaseConnector, ABC):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="error",
+            reason="site_error",
             source=f"{self.supplier_key}_browser",
             notes=f"Login failed: {error}. Manual action required.",
         )

@@ -50,6 +50,9 @@ class RegencyOilsConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
+            # The instant quote system needs a driven browser; the Fuelsoft
+            # connector does that.
+            reason="browser_required",
             source="regency_oils_manual",
             notes=self._build_quote_instructions(quantity_liters, postcode),
             raw_payload={

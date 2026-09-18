@@ -100,6 +100,8 @@ class ValueOilsConnector(BaseConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="manual_action_required",
+                # The page answered; the total was not in it.
+                reason="no_price_found",
                 source="valueoils_auto",
                 notes=f"Could not extract the Standard total. Call: 03300 570 857 or use Quick Quote at: {self.regional_url}",
             )
@@ -111,6 +113,7 @@ class ValueOilsConnector(BaseConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="error",
+                reason="site_error",
                 source="valueoils_auto",
                 notes=f"HTTP error fetching quote: {e!s}",
             )
@@ -121,6 +124,7 @@ class ValueOilsConnector(BaseConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="error",
+                reason="site_error",
                 source="valueoils_auto",
                 notes=f"Error fetching quote: {e!s}",
             )

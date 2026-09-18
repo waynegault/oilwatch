@@ -90,10 +90,11 @@ class HomeFuelsDirectConnector(BaseConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="manual_action_required",
+                reason="no_price_found",
                 source="homefuels_direct_auto",
                 notes=f"Could not extract a live price (site is JavaScript-rendered). Contact: enquiries@homefuelsdirect.co.uk. Page: {self.aberdeenshire_url}",
             )
-                
+
         except httpx.HTTPError as e:
             return QuoteResult(
                 supplier_id=int(supplier["id"]),
@@ -101,6 +102,7 @@ class HomeFuelsDirectConnector(BaseConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="error",
+                reason="site_error",
                 source="homefuels_direct_auto",
                 notes=f"HTTP error fetching quote: {e!s}",
             )
@@ -111,6 +113,7 @@ class HomeFuelsDirectConnector(BaseConnector):
                 observed_at=self.now(),
                 quantity_liters=quantity_liters,
                 status="error",
+                reason="site_error",
                 source="homefuels_direct_auto",
                 notes=f"Error fetching quote: {e!s}",
             )
