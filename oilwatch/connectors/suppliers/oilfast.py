@@ -15,14 +15,15 @@ class OilfastConnector(BaseConnector):
     This supplier uses an enquiry form (no instant pricing).
     Requires: Full Name, Phone, Email, Postcode, Address, Message
     Response time: Usually within 24 hours
-    
-    Quote mechanism: Form submission via HubSpot or similar CRM
+
+    Quote mechanism: Form submission - two Gravity Forms on the depot page,
+    checked 2026-09-18, which ``oilwatch.form_submit`` drives.
     """
-    
+
     def __init__(self) -> None:
-        # Manual contact only: there is no price page to fetch, so no HTTP client
-        # is built. An unused one here would just leak a connection pool, since
-        # the registry builds a connector per call.
+        # No price page to fetch, so no HTTP client is built. An unused one here
+        # would just leak a connection pool, since the registry builds a
+        # connector per call.
         self.base_url = "https://oilfast.co.uk"
         self.enquiry_url = "https://oilfast.co.uk/depot/insch/"
         self.phone = "01464 635999"
@@ -50,9 +51,10 @@ class OilfastConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
-            # Contact-only by design: there is no price page to fetch, so this
-            # is the answer rather than a failed scrape.
-            reason="no_quote_page",
+            # The depot page carries an enquiry form, so there *is* a quote page -
+            # it just answers a person rather than the app. That is a different
+            # instruction from "none exists", so it gets the different reason.
+            reason="quote_by_request",
             source="oilfast_manual",
             notes=self._build_quote_instructions(quantity_liters, postcode),
             raw_payload={

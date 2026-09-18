@@ -21,11 +21,11 @@ It is a working system, not a prototype:
 
 | Area | State |
 |------|-------|
-| Modules under `oilwatch/` | 55 Python files |
-| Supplier connectors | 16 supplier-specific, plus 4 generic |
+| Modules under `oilwatch/` | 54 Python files |
+| Supplier connectors | 15 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 641, all passing offline |
+| Tests | 642, all passing offline |
 | Database | 27 suppliers, 524 quotes, 0 orders (2026-09-15) |
 
 ---
@@ -67,11 +67,11 @@ It is a working system, not a prototype:
 Generic: `base.py`, `manual.py`, `price_page.py`, `http_form.py`,
 `browser_base.py`.
 
-Supplier-specific (`oilwatch/connectors/suppliers/`, 16): `valueoils`,
+Supplier-specific (`oilwatch/connectors/suppliers/`, 15): `valueoils`,
 `valueoils_browser`, `homefuels_direct`, `homefuels_direct_browser`, `rix`,
 `rix_browser`, `scottish_fuels`, `scottish_fuels_browser`, `regency_oils`,
 `fuelsoft`, `fueltool`, `boilerjuice`, `highland_fuels`, `oilfast`,
-`brogan_fuels`, `telephone`.
+`telephone`.
 
 Collection methods split three ways: plain HTTP where the price is
 server-rendered, browser automation (Playwright) where a form or login gates it,
@@ -98,7 +98,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 641 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 642 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -159,8 +159,12 @@ suppliers whose only priced row came from the spreadsheet import won on
   inclusive `You Pay £…` total (ex-VAT fuel + VAT + the broker's service charge,
   the total the supplier note names) — £1.1957/L inc-VAT for 1000L on the day —
   not from the headline `ppl`, which is ex-VAT and omits the charge.
-- **Phone-only:** Oilfast Insch, Turriff Fuels, Brogan Fuels, Carnegie Fuels,
-  Compass Fuels, Gleaner Oils, Highland Fuels.
+- **Phone-only:** Turriff Fuels, Carnegie Fuels.
+- **Quote by request (2026-09-18):** Oilfast Insch, Compass Fuels, Gleaner Oils,
+  Nationwide Fuels and Crown Oil each have a live quote page that answers a
+  person rather than the app — a wpforms form, a Gravity Forms pair, or a lead
+  form behind Turnstile — so they carry `reason: quote_by_request` and their
+  `order_page` in the register, not `no_quote_page`.
 - **On demand, not on a timer (changed 2026-09-15).** Prices are refreshed when
   someone asks for them — `oilwatch quote-all --browser`, `refresh_prices` over
   MCP, or an agent turn — rather than on a schedule. The scheduler's per-user

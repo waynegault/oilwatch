@@ -24,6 +24,33 @@ class ManualConnectorTests(unittest.TestCase):
         self.assertEqual(result.status, "manual_action_required")
         self.assertIn("01224 123456", result.notes)
 
+    def test_a_supplier_with_a_quote_page_is_not_reported_as_having_none(self) -> None:
+        """The reason has to say which way the supplier is out of reach.
+
+        A quote page that answers a person is not the same as no quote page, and
+        the two were conflated: five suppliers with a working quote form
+        (Compass Fuels, Crown Oil, Gleaner Oils, Nationwide Fuels, Oilfast Insch)
+        were all reported as ``no_quote_page``, which tells a reader there is
+        nowhere to go - the opposite of the truth.
+        """
+        supplier = {
+            "id": 2,
+            "name": "B",
+            "phone": "01224 123456",
+            "website": "https://b.example.com",
+            "connector_config": {"order_page": "https://b.example.com/get-a-quote/"},
+        }
+        result = ManualConnector().quote(supplier, 1000, {})
+        self.assertEqual(result.reason, "quote_by_request")
+        self.assertIn("https://b.example.com/get-a-quote/", result.notes)
+
+    def test_a_supplier_with_no_quote_page_still_says_so(self) -> None:
+        supplier = {"id": 3, "name": "C", "phone": "01224 123456", "website": "https://c.example.com"}
+        result = ManualConnector().quote(supplier, 1000, {})
+        self.assertEqual(result.reason, "no_quote_page")
+        # No order page to name, so the note must not imply one.
+        self.assertNotIn("Quote page:", result.notes)
+
 
 class PricePageConnectorTests(unittest.TestCase):
     def setUp(self) -> None:

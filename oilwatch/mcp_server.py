@@ -169,6 +169,8 @@ def refresh_prices(postcode: str | None = None, force: bool = False) -> dict[str
     partial results are normal. Do not call it in a loop. Each row carries a
     ``status`` and, when it is not ``ok``, a machine-readable ``reason`` —
     ``no_quote_page`` (no web quote exists; use the contact details),
+    ``quote_by_request`` (a quote page exists but answers a person, so the
+    supplier must be asked rather than scraped),
     ``login_not_confirmed`` (an authenticated portal did not sign in),
     ``captcha``, or ``site_error`` — so a failure is reportable without reading
     ``notes``. ``None`` means unclassified, not "no reason".

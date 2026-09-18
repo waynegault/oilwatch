@@ -20,7 +20,6 @@ _CONNECTORS = {
     "RixConnector": "rix",
     "RegencyOilsConnector": "regency_oils",
     "ScottishFuelsConnector": "scottish_fuels",
-    "BroganFuelsConnector": "brogan_fuels",
     "TelephoneQuoteScript": "telephone",
     "BoilerJuiceBrowserConnector": "boilerjuice",
     "FueltoolConnector": "fueltool",
@@ -44,7 +43,9 @@ _SUPPLIER_CONNECTORS: dict[str, tuple[str | None, str | None]] = {
     "rix.co.uk": ("RixConnector", "RixBrowserConnector"),
     "regencyoils.com": ("RegencyOilsConnector", "FuelsoftConnector"),
     "scottishfuels.co.uk": ("ScottishFuelsConnector", "ScottishFuelsBrowserConnector"),
-    "brogans.co.uk": ("BroganFuelsConnector", None),
+    # Brogan Fuels is part of Scottish Fuels (same phone number, same group), so
+    # it is no longer a supplier of its own: the Scottish Fuels connector above
+    # covers its price, and its row is retired in config/supplier_overrides.json.
     # Browser-only: Fuelsoft WebOrdering (Connon Bros, Johnson Oils) and
     # BoilerJuice expose no HTTP-scrapable price, so these resolve only when
     # ``prefer_browser=True``; otherwise the caller falls back to a manual quote.

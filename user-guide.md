@@ -141,12 +141,12 @@ notice the reply without watching the inbox.
 | **Johnson Oils** | Browser (`fuelsoft`) | Fuelsoft WebOrdering |
 | **Scottish Fuels** | Browser (`scottish_fuels_browser`) plus emailed replies | Session lasts ~15 min; re-signs in automatically |
 | **BoilerJuice** | Browser (`boilerjuice_browser`) | Broker; also quotes by email |
-| **Oilfast, Turriff, Carnegie, Compass, Nationwide, Crown, Gleaner** | Enquiry form and/or phone | No scrapable price — see `phone-script` |
+| **Oilfast, Turriff, Carnegie, Compass, Nationwide, Crown, Gleaner** | Enquiry form and/or phone | No machine-readable price — see `phone-script` and each supplier's `order_page` |
 
-Brogan Fuels trades as part of Scottish Fuels, so the Scottish Fuels figure
-covers it. Last verified live **2026-09-15**; prices move daily, so run
-`oilwatch cheapest` for today's numbers rather than trusting any figure written
-in a document.
+Brogan Fuels is part of Scottish Fuels, so the Scottish Fuels figure covers it;
+Brogan was retired as a supplier of its own on 2026-09-18. Last verified live
+**2026-09-15**; prices move daily, so run `oilwatch cheapest` for today's numbers
+rather than trusting any figure written in a document.
 
 ---
 
@@ -293,7 +293,6 @@ Resolution is lazy (PEP 562), so an HTTP-only run never imports Playwright.
 | `rix.co.uk` | `RixConnector` | `RixBrowserConnector` |
 | `regencyoils.com` | `RegencyOilsConnector` | `FuelsoftConnector` |
 | `scottishfuels.co.uk` | `ScottishFuelsConnector` | `ScottishFuelsBrowserConnector` |
-| `brogans.co.uk` | `BroganFuelsConnector` | — |
 | `boilerjuice.com` | — | `BoilerJuiceBrowserConnector` |
 | `fuelsoft.co.uk` | — | `FuelsoftConnector` |
 | `johnstonfuels.co.uk` | — | `FuelsoftConnector` |
@@ -313,7 +312,6 @@ implementation (Connon Bros, Johnson Oils, Regency Oils' WebOrdering).
 | `RixConnector` | `https://www.rix.co.uk/fuels/heating-oil` |
 | `RegencyOilsConnector` | `https://www.regencyoils.com` |
 | `ScottishFuelsConnector` | `https://scottishfuels.co.uk/heating-oil-in-aberdeenshire/` |
-| `BroganFuelsConnector` | `https://www.brogans.co.uk` (trades as Scottish Fuels) |
 
 ### Browser entry points
 
@@ -352,7 +350,12 @@ Used by the manual connectors, the enquiry-form path and `phone-script`.
 | Rix | Aberdeen 01224 455477 · general 0800 542 4207 · montsales@rix.co.uk |
 | Regency Oils | 0800 838500 · https://www.regencyoils.com |
 | Scottish Fuels | 0345 300 8844 · Aberdeen 01224 213 132 · info@scottishfuels.co.uk |
-| Brogan Fuels | 0345 300 8844 · domestic@brogans.co.uk · https://www.brogans.co.uk |
+| Gleaner Oils | 01224 877575 · https://www.gleaner.co.uk/get-a-quote-or-place-an-order/ |
+| Compass Fuels | 0330 128 9838 · https://compassfuels.co.uk/ |
+| Crown Oil | 0330 123 1444 · https://www.crownoil.co.uk/#quote-form-wrapper |
+| Nationwide Fuels | 0330 678 0880 · https://www.nationwidefuels.co.uk/ |
+| Turriff Fuels | 01888 562706 · https://www.turrifffuels.com/ |
+| Carnegie Fuels | 01356 648 648 · info@carnegiefuels.co.uk (online ordering suspended) |
 
 ### Adding a connector
 
@@ -387,7 +390,6 @@ oilwatch/connectors/
     ├── rix.py / rix_browser.py
     ├── regency_oils.py
     ├── scottish_fuels.py / scottish_fuels_browser.py
-    ├── brogan_fuels.py
     ├── boilerjuice.py
     ├── fuelsoft.py
     └── telephone.py          # TelephoneQuoteScript

@@ -42,11 +42,12 @@ phone/email-only suppliers and the connector each domain resolves to, is in
 | **Johnson Oils** | Browser (`fuelsoft`) | Fuelsoft WebOrdering |
 | **Scottish Fuels** | Browser (`scottish_fuels_browser`) + email replies | Session lasts ~15 min; re-signs in automatically |
 | **BoilerJuice** | Browser (`boilerjuice_browser`) + email replies | Broker/aggregator; quotes by email too |
-| **Oilfast Insch, Turriff, Carnegie, Compass, Nationwide, Crown, Gleaner** | Phone / email | No scrapable quote; see `oilwatch phone-script` |
+| **Oilfast Insch, Turriff, Carnegie, Compass, Nationwide, Crown, Gleaner** | Phone / email / quote form | No machine-readable price; see `oilwatch phone-script`, and the quote pages in the supplier register |
 
-Brogan Fuels trades as part of Scottish Fuels, so the Scottish Fuels figure
-covers it. Where a supplier replies to an enquiry by email, `oilwatch
-monitor-email` records the price and removes the message from the inbox.
+Brogan Fuels is part of Scottish Fuels, so the Scottish Fuels figure covers it
+and Brogan is no longer a supplier of its own. Where a supplier replies to an
+enquiry by email, `oilwatch monitor-email` records the price and removes the
+message from the inbox.
 
 ---
 
@@ -342,7 +343,7 @@ HomeFuels Direct was compared at 20% VAT, producing a misleading ranking.
 | **HTTP scraping** | One request; price parsed from the response (HTML or XML) | ValueOils, HomeFuels Direct, Fueltool, Highland Fuels |
 | **Browser automation** | Playwright drives the supplier's own quote form, sometimes behind a login session | Rix, Regency Oils, Connon Bros, Johnson Oils, Scottish Fuels, BoilerJuice |
 | **Enquiry form + email** | Form submitted once; the reply price is read from the inbox and the message deleted | Gleaner Oils, Oilfast, Compass, Nationwide, Crown Oil |
-| **Manual / phone** | Contact details plus a generated call sheet | Turriff Fuels, Carnegie Fuels, Brogan Fuels |
+| **Manual / phone** | Contact details plus a generated call sheet | Turriff Fuels, Carnegie Fuels |
 
 ---
 
@@ -359,11 +360,18 @@ endpoint, and the contact details the phone and enquiry flows use — is in
 - **HTTP scrape:** ValueOils, HomeFuels Direct, Fueltool, Highland Fuels.
 - **Browser, driving the supplier's own form:** Rix, Regency Oils, Connon Bros,
   Johnson Oils, Scottish Fuels, BoilerJuice.
-- **Enquiry form, then emailed reply:** Gleaner Oils (wpforms), Oilfast Insch,
-  Compass Fuels (EasyOil), Nationwide Fuels, Crown Oil.
-- **Phone only:** Turriff Fuels (01888 562706), Carnegie Fuels (01356 648 648,
-  info@carnegiefuels.co.uk — its online ordering is suspended by its own
-  notice), Brogan Fuels (0345 300 8844, domestic@brogans.co.uk).
+- **Enquiry form, then emailed reply:** Gleaner Oils (wpforms 1933), Oilfast Insch
+  (Gravity Forms), Compass Fuels (the `compass_sector_lead` lead form),
+  Nationwide Fuels and Crown Oil (both posting to an `eforms.` host behind
+  Cloudflare Turnstile).
+- **No quote page — phone or email only:** Turriff Fuels (01888 562706,
+  turrifffuels.com) and Carnegie Fuels (01356 648 648, info@carnegiefuels.co.uk,
+  whose online ordering is suspended by its own notice).
+
+Brogan Fuels was retired on 2026-09-18: it is part of Scottish Fuels, so it is no
+longer listed, quoted or reported on separately. Its connector is gone; the
+Scottish Fuels connector covers the price, and `settings.excluded_domains` stops
+discovery re-adding the domain.
 
 Supplier accounts, where required, live in `config/supplier_credentials.json`
 (gitignored). Scottish Fuels needs a live session; see §7 of the user guide.

@@ -1,9 +1,9 @@
 """Submit price-enquiry forms to the manual suppliers.
 
-Suppliers without a public price (Gleaner Oils, Oilfast, and, where located,
-Highland Fuels / Regency Oils) quote by email after an enquiry form is
-submitted. This module drives those forms with the undetected browser so the
-replies can later be captured by ``oilwatch.graph_email``.
+Suppliers without a public price (Gleaner Oils, Oilfast, Compass Fuels, Crown
+Oil, Nationwide Fuels, and Highland Fuels / Regency Oils) quote by email after an
+enquiry form is submitted. This module drives those forms with the undetected
+browser so the replies can later be captured by ``oilwatch.graph_email``.
 
 Field mappings are data-driven; each entry describes the form and which fields
 map to name/email/phone/postcode/quantity.
@@ -24,7 +24,10 @@ from oilwatch.waiting import wait_until
 SUPPLIER_FORMS: dict[str, dict[str, Any]] = {
     "gleaner_oils": {
         "name": "Gleaner Oils",
-        "url": "https://www.gleaner.co.uk/home-heating/winter-heating-oil/",
+        # The quote page Wayne recorded on 2026-09-18. Both it and the
+        # winter-heating-oil page embed wpforms form 1933, so the field numbers
+        # below hold on either; this one is the page titled for the job.
+        "url": "https://www.gleaner.co.uk/get-a-quote-or-place-an-order/",
         "quote_type": {"name": "wpforms[fields][15]", "value": "Receive a Quote"},
         "fields": {
             "name": "wpforms[fields][1]",

@@ -32,7 +32,10 @@ SUPPLIER_DOMAINS = {
     "scottishfuels.co.uk": "scottishfuels.co.uk",
     "certasenergy.co.uk": "scottishfuels.co.uk",  # Scottish Fuels = Certas Energy
     "rix.co.uk": "rix.co.uk",
-    "brogans.co.uk": "brogans.co.uk",
+    # Brogan Fuels is part of Scottish Fuels (same company), so a reply from its
+    # domain is a Scottish Fuels quote and is filed against that supplier's row.
+    # Brogan is retired as a supplier of its own in config/supplier_overrides.json.
+    "brogans.co.uk": "scottishfuels.co.uk",
     "connon-oils.co.uk": "connon",  # Connon Bros/Oils (Fuelsoft, website connon.fuelsoft.co.uk)
     "connon.fuelsoft.co.uk": "connon",
     # Senders whose mail carries prices or discount codes. ValueOils was missing,

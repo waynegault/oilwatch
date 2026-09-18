@@ -56,6 +56,10 @@ class QuoteResult:
     #: should draw from this set rather than inventing variants:
     #:
     #: - ``no_quote_page`` — no web quote exists (phone/email only)
+    #: - ``quote_by_request`` — a quote page exists but only answers a person:
+    #:   it takes your details and replies, so there is no price to read. Not
+    #:   the same thing as ``no_quote_page``, and the two were once conflated:
+    #:   five suppliers with a working quote form were reported as having none
     #: - ``login_not_confirmed`` — an authenticated portal did not sign in
     #: - ``captcha`` — a bot check stopped the flow
     #: - ``site_error`` — the attempt raised: timeout, HTTP error, or a parse
