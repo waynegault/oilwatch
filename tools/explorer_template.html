@@ -1,0 +1,465 @@
+<style>
+  :root {
+    --ink: #1f2430;
+    --ink-soft: #5b6474;
+    --ink-faint: #8b93a3;
+    --rule: #e3e6ec;
+    --surface: #ffffff;
+    --surface-2: #f7f8fa;
+    --cheapest: #1d4ed8;
+    --average: #b45309;
+    --brent: #166534;
+    --good: #166534;
+    --warn: #b45309;
+    --bad: #be123c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface-2);
+    color: var(--ink);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 64px; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 17px; margin: 40px 0 4px; letter-spacing: -0.005em; }
+  h2 + .sub { margin: 0 0 14px; color: var(--ink-soft); font-size: 14px; }
+  .lede { color: var(--ink-soft); margin: 0 0 4px; max-width: 78ch; }
+  .meta { color: var(--ink-faint); font-size: 13px; margin: 0; }
+  code { background: #eef0f4; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .cardgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 18px; }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+  .card .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); }
+  .card .value { font-size: 24px; font-weight: 600; margin: 4px 0 2px; letter-spacing: -0.01em; }
+  .card .note { font-size: 13px; color: var(--ink-soft); }
+  .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; margin-top: 14px; }
+  .panel.flush { padding: 10px 16px 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); font-weight: 600; white-space: nowrap; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--ink); }
+  th[aria-sort]::after { content: " ▾"; color: var(--ink); }
+  th[aria-sort="ascending"]::after { content: " ▴"; color: var(--ink); }
+  td.num, th.num { text-align: right; }
+  tbody tr:hover { background: var(--surface-2); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink-soft); }
+  .pill.ok { border-color: #bcd7c2; background: #eef7f0; color: var(--good); }
+  .pill.gap { border-color: #e6d3b8; background: #fdf6ec; color: var(--warn); }
+  .pill.bad { border-color: #eeccd4; background: #fdeff2; color: var(--bad); }
+  .scroll { overflow-x: auto; }
+  .chartwrap { position: relative; }
+  svg.chart { display: block; width: 100%; height: auto; }
+  svg.chart text { font-size: 12px; fill: var(--ink-soft); }
+  svg.chart .axis { stroke: var(--rule); }
+  svg.chart .grid { stroke: var(--rule); stroke-dasharray: 2 4; }
+  svg.chart .label { font-weight: 600; }
+  .key { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin: 0 0 8px; font-size: 13px; color: var(--ink-soft); }
+  .key span.swatch { display: inline-block; width: 22px; height: 0; border-top-width: 3px; border-top-style: solid; margin-right: 6px; vertical-align: middle; }
+  .fx { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 13px; color: var(--ink-soft); flex-wrap: wrap; }
+  .fx input { font: inherit; padding: 4px 8px; border: 1px solid var(--rule); border-radius: 6px; width: 92px; }
+  .facets { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 10px; margin-top: 14px; }
+  .facet { background: var(--surface); border: 1px solid var(--rule); border-radius: 9px; padding: 10px 12px; }
+  .facet .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .facet .nm { font-size: 13px; font-weight: 600; }
+  .facet .val { font-size: 13px; color: var(--ink); }
+  .facet .rng { font-size: 12px; color: var(--ink-faint); }
+  .tooltip {
+    position: absolute; pointer-events: none; background: #1f2430; color: #fff;
+    font-size: 12.5px; line-height: 1.45; padding: 8px 10px; border-radius: 7px;
+    box-shadow: 0 6px 20px rgba(31, 36, 48, 0.25); opacity: 0; transition: opacity 0.08s; max-width: 280px;
+  }
+  .tooltip b { font-weight: 600; }
+  .limits li { margin-bottom: 6px; }
+  .muted { color: var(--ink-faint); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 820px) { .two { grid-template-columns: 1fr; } }
+</style>
+
+<main class="wrap">
+  <header>
+    <h1>Heating oil, priced against crude</h1>
+    <p class="lede" id="finding">Loading…</p>
+    <p class="meta" id="meta"></p>
+  </header>
+
+  <div class="cardgrid" id="cards"></div>
+
+  <h2>Who is quoting today</h2>
+  <p class="sub">The suppliers behind the current comparison, and the ones it cannot include — each with the reason its last attempt recorded.</p>
+  <div class="panel">
+    <div class="scroll"><table id="nowTable"></table></div>
+  </div>
+
+  <div class="two">
+    <div>
+      <h2>Not in the comparison</h2>
+      <p class="sub">Why each supplier is missing from today's market.</p>
+      <div class="panel"><div class="scroll"><table id="gapTable"></table></div></div>
+    </div>
+    <div>
+      <h2>Discounts on file</h2>
+      <p class="sub">Applied to today's prices only; a code is single-use or dated, so history is compared on headline prices.</p>
+      <div class="panel"><div class="scroll"><table id="discTable"></table></div></div>
+    </div>
+  </div>
+
+  <h2 id="chartHeading">Best value over time, against Brent</h2>
+  <p class="sub" id="chartSub"></p>
+  <div class="panel">
+    <div class="key">
+      <span><span class="swatch" style="border-top-color: var(--cheapest)"></span>daily cheapest</span>
+      <span><span class="swatch" style="border-top-color: var(--average)"></span>daily average</span>
+      <span><span class="swatch" style="border-top-color: var(--brent); border-top-style: dashed"></span><span id="brentKey">Brent crude</span></span>
+    </div>
+    <div class="fx">
+      <label for="fx">Brent is quoted in US dollars and priced here in pounds at <b id="fxSrc">no rate available</b>. Change the rate to see the comparison move; clear it to read Brent in USD/litre on the right-hand axis.</label>
+      <input id="fx" type="number" step="0.0001" min="0.1" max="3" placeholder="GBP per USD" inputmode="decimal">
+    </div>
+    <div class="chartwrap">
+      <svg class="chart" id="chart" viewBox="0 0 1040 430" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Daily cheapest and average heating-oil price per litre, with Brent crude"></svg>
+      <div class="tooltip" id="tip"></div>
+    </div>
+  </div>
+
+  <h2>Each supplier, on the same scale</h2>
+  <p class="sub" id="facetSub"></p>
+  <div class="facets" id="facets"></div>
+
+  <h2>Best-value league table</h2>
+  <p class="sub">Ranked by how often each supplier was the day's cheapest, with the variation behind it. Click a column to sort.</p>
+  <div class="panel"><div class="scroll"><table id="leagueTable"></table></div></div>
+
+  <h2>What was bought</h2>
+  <p class="sub">Recorded purchases, each against the market it landed in. The market figure is that day's cheapest <em>headline</em> price; the price paid is what was actually paid, after any code.</p>
+  <div class="panel"><div class="scroll"><table id="buyTable"></table></div></div>
+
+  <h2>What this page can and cannot say</h2>
+  <div class="panel"><ul class="limits" id="limits"></ul></div>
+</main>
+
+<script>
+const DATA = __PAYLOAD__;
+
+const $ = (id) => document.getElementById(id);
+const gbp = (v, d = 4) => v == null ? "—" : "£" + Number(v).toFixed(d);
+const num = (v, d = 2) => v == null ? "—" : Number(v).toFixed(d);
+const dayMs = (s) => Date.parse(s + "T00:00:00Z");
+const shortDate = (s) => s;
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const MARKET = DATA.market;            // [day, cheapest, mean, variance, count]
+const SERIES = DATA.series;            // name -> [[day, price]]
+const BRENT = DATA.brent;              // [[day, usd_per_barrel]]
+const LEAGUE = DATA.league;
+const CURRENT = DATA.current;
+const META = DATA.meta;
+
+// ---------------------------------------------------------------- summary
+
+function renderSummary() {
+  const snap = DATA.snapshot || {};
+  const winner = snap.cheapest_supplier || {};
+  const label = (r) => r.name + (r.reason ? " — " + r.reason : "");
+  $("finding").textContent =
+    `${winner.name || "no supplier"} is cheapest at ${gbp(winner.price_per_liter)}/litre` +
+    (winner.effective_price_per_liter && winner.effective_price_per_liter !== winner.price_per_liter
+      ? `, or ${gbp(winner.effective_price_per_liter)} once ${winner.discount ? winner.discount.code : "a code"} is applied` : "") +
+    `, against a market average of ${gbp(snap.average_price_per_liter)} across ${snap.quotes_considered || 0} suppliers. ` +
+    `${CURRENT.no_quote_suppliers.length} suppliers gave no quote and ${CURRENT.failed_suppliers.length} could not be retrieved.`;
+  $("meta").textContent =
+    `${META.quotes} priced quotes across ${META.days} quoted days · ${Object.keys(SERIES).length} suppliers · ` +
+    `${META.brent_points} Brent points · latest observation ${DATA.current.as_of || "—"} · generated ${META.generated_at}Z`;
+
+  const cards = [
+    ["Cheapest now", gbp(winner.price_per_liter), (winner.order_page ? "order page recorded" : "website only") + (winner.valid_until ? " · valid until " + winner.valid_until.slice(0, 10) : "")],
+    ["Market average", gbp(snap.average_price_per_liter), `${snap.quotes_considered || 0} suppliers, window ${snap.window_days} day(s)`],
+    ["Spread (variance)", String(snap.variance == null ? "—" : snap.variance), "variance across today's quotes"],
+    ["Brent benchmark", (snap.benchmark ? gbp(snap.benchmark.price_per_liter) : "—"), snap.benchmark ? snap.benchmark.name + ", a UK average — not orderable" : ""],
+    ["Bought so far", DATA.purchases.length ? gbp(DATA.purchases[DATA.purchases.length - 1].agreed_price_per_liter) : "—", DATA.purchases.length ? `${DATA.purchases.length} recorded purchase(s)` : "nothing recorded yet"],
+    ["Quoting / silent", `${CURRENT.quotes.length} / ${CURRENT.no_quote_suppliers.length + CURRENT.failed_suppliers.length}`, `${CURRENT.excluded_suppliers.length} excluded as too old, ${CURRENT.never_quoted.length} never asked`],
+  ];
+  $("cards").innerHTML = cards.map(([l, v, n]) =>
+    `<div class="card"><div class="label">${esc(l)}</div><div class="value">${esc(v)}</div><div class="note">${esc(n)}</div></div>`).join("");
+
+  const brentNow = BRENT.length ? BRENT[BRENT.length - 1] : null;
+  if (brentNow) {
+    const perLitre = brentNow[1] / META.litres_per_barrel;
+    const pounds = fxRate ? ` = £${(perLitre * fxRate).toFixed(4)}/litre` : "";
+    $("brentKey").textContent =
+      `Brent crude (${brentNow[0]}: $${num(brentNow[1])}/barrel = $${perLitre.toFixed(4)}/litre${pounds})`;
+  }
+}
+
+function renderNow() {
+  const rows = CURRENT.quotes.map((q) => `<tr>
+    <td>${esc(q.name)}</td>
+    <td class="num">${gbp(q.price_per_liter)}</td>
+    <td class="num">${q.discount ? gbp(q.effective_price_per_liter) : '<span class="muted">no code</span>'}</td>
+    <td>${q.discount ? `<code>${esc(q.discount.code || "—")}</code> <span class="muted">£${num(q.discount.amount_gbp, 2)} off</span>` : "—"}</td>
+    <td>${esc(q.observed_at.slice(0, 16).replace("T", " "))}</td>
+    <td>${q.order_page ? `<a href="${esc(q.order_page)}" rel="noopener">order</a>` : (q.website ? `<a href="${esc(q.website)}" rel="noopener">site</a>` : "—")}</td>
+  </tr>`).join("");
+  $("nowTable").innerHTML = `<thead><tr><th>Supplier</th><th class="num">Headline</th><th class="num">Effective</th><th>Discount</th><th>Quoted at</th><th>Link</th></tr></thead><tbody>${rows}</tbody>`;
+
+  const groups = [
+    ["Gave no quote", CURRENT.no_quote_suppliers, "gap"],
+    ["Retrieval failed", CURRENT.failed_suppliers, "bad"],
+    ["Excluded: too old to compare", CURRENT.excluded_suppliers, ""],
+    ["Never quoted at all", CURRENT.never_quoted, ""],
+    ["Priced earlier, latest attempt failed", CURRENT.not_refreshed_suppliers, "gap"],
+  ];
+  const byName = Object.fromEntries(DATA.suppliers.map((s) => [s.name, s]));
+  const body = groups.flatMap(([why, list, cls]) => (list || []).map((r) => {
+    const detail = r.reason || r.last_attempt_status || (r.last_quote_at ? "last " + String(r.last_quote_at).slice(0, 10) : "");
+    const named = r.name || r.supplier_name;
+    const s = byName[named] || {};
+    const href = s.order_page || s.website;
+    const link = href ? `<a href="${esc(href)}" rel="noopener">${s.order_page ? "order page" : "website"}</a>` : '<span class="muted">none recorded</span>';
+    const contact = [s.phone, s.email].filter(Boolean).join(" · ");
+    return `<tr><td>${esc(named)}</td><td><span class="pill ${cls}">${esc(why)}</span></td><td>${esc(detail)}</td><td class="num">${r.last_price_per_liter != null ? gbp(r.last_price_per_liter) : (r.price_per_liter != null ? gbp(r.price_per_liter) : "—")}</td><td>${link}${contact ? `<br><span class="muted">${esc(contact)}</span>` : ""}</td></tr>`;
+  }));
+  $("gapTable").innerHTML = `<thead><tr><th>Supplier</th><th>Why</th><th>Reason recorded</th><th class="num">Last price</th><th>Where to ask</th></tr></thead><tbody>${body.join("") || '<tr><td colspan="5" class="muted">every supplier is in the comparison</td></tr>'}</tbody>`;
+
+  const disc = DATA.discounts || [];
+  $("discTable").innerHTML = disc.length
+    ? `<thead><tr><th>Code</th><th class="num">Worth</th><th>Limits</th><th>Source</th></tr></thead><tbody>${disc.map((d) => `<tr><td>${d.code ? `<code>${esc(d.code)}</code>` : '<span class="muted">no code parsed</span>'}</td><td class="num">${d.amount_gbp != null ? "£" + num(d.amount_gbp, 2) : "—"}</td><td class="muted">${d.min_litres != null || d.max_litres != null ? `${d.min_litres ?? "-"}–${d.max_litres ?? "-"} L` : "any"}</td><td>${esc(d.source || "")}</td></tr>`).join("")}</tbody>`
+    : '<tbody><tr><td class="muted">none on file</td></tr></tbody>';
+}
+
+// ------------------------------------------------------------------ chart
+
+// Brent is quoted in dollars. The build fetches a reference rate, so the page
+// converts it to pounds on its own. The input stays because one rate for
+// nineteen years of history is indicative, and a reader may prefer their own.
+const FX = DATA.fx;
+let fxRate = FX && FX.rate ? FX.rate : null;
+
+function niceTicks(min, max, count) {
+  const span = (max - min) || 1;
+  const raw = span / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || mag * 10;
+  const out = [];
+  for (let t = Math.ceil(min / step) * step; t <= max + 1e-9; t += step) out.push(t);
+  return out;
+}
+
+function renderChart() {
+  const svg = $("chart");
+  const W = 1040, H = 430, L = 62, R = fxRate ? 22 : 78, T = 18, B = 46;
+  const plotW = W - L - R, plotH = H - T - B;
+
+  const days = MARKET.map((r) => dayMs(r[0]));
+  const x0 = Math.min(...days), x1 = Math.max(...days);
+  const prices = MARKET.flatMap((r) => [r[1], r[2]]);
+  const yMin = 0, yMax = Math.max(...prices) * 1.08;
+  const brentPerLitre = BRENT.map(([d, usd]) => [d, usd / META.litres_per_barrel]);
+  const brentVals = brentPerLitre.map(([, v]) => fxRate ? v * fxRate : v);
+  const y2Max = Math.max(...brentVals) * 1.08;
+
+  const X = (ms) => L + ((ms - x0) / ((x1 - x0) || 1)) * plotW;
+  const Y = (v) => T + plotH - (v / (yMax || 1)) * plotH;
+  const Y2 = (v) => T + plotH - (v / (y2Max || 1)) * plotH;
+
+  const path = (points, mapX, mapY) => points.map((p, i) => `${i ? "L" : "M"}${mapX(p[0]).toFixed(1)},${mapY(p[1]).toFixed(1)}`).join(" ");
+
+  let s = "";
+  // gridlines + left axis
+  for (const t of niceTicks(yMin, yMax, 5)) {
+    s += `<line class="grid" x1="${L}" y1="${Y(t).toFixed(1)}" x2="${L + plotW}" y2="${Y(t).toFixed(1)}"></line>`;
+    s += `<text x="${L - 8}" y="${(Y(t) + 4).toFixed(1)}" text-anchor="end">£${t.toFixed(2)}</text>`;
+  }
+  if (!fxRate) {
+    for (const t of niceTicks(0, y2Max, 5)) {
+      s += `<text x="${W - R + 8}" y="${(Y2(t) + 4).toFixed(1)}" text-anchor="start">$${t.toFixed(3)}</text>`;
+    }
+  }
+  s += `<line class="axis" x1="${L}" y1="${T + plotH}" x2="${L + plotW}" y2="${T + plotH}"></line>`;
+  // x ticks: one per year with data
+  const years = {};
+  for (const r of MARKET) years[r[0].slice(0, 4)] = dayMs(r[0]);
+  for (const [year, ms] of Object.entries(years)) {
+    s += `<text x="${X(ms).toFixed(1)}" y="${T + plotH + 20}" text-anchor="middle">${year}</text>`;
+  }
+
+  // Brent first, so the price lines sit on top
+  s += `<path fill="none" stroke="var(--brent)" stroke-width="2" stroke-dasharray="6 4" d="${path(brentPerLitre.map(([d, v]) => [dayMs(d), v]), X, fxRate ? Y : Y2)}"></path>`;
+  s += `<path fill="none" stroke="var(--average)" stroke-width="2.5" d="${path(MARKET.map((r) => [dayMs(r[0]), r[2]]), X, Y)}"></path>`;
+  s += `<path fill="none" stroke="var(--cheapest)" stroke-width="2.5" d="${path(MARKET.map((r) => [dayMs(r[0]), r[1]]), X, Y)}"></path>`;
+
+  // direct labels at the right edge, no legend lookup needed
+  const last = MARKET[MARKET.length - 1];
+  const labels = [
+    [Y(last[1]) - 6, "cheapest", "var(--cheapest)"],
+    [Y(last[2]) + 14, "average", "var(--average)"],
+    [fxRate ? Y(brentVals[brentVals.length - 1]) + 4 : Y2(brentVals[brentVals.length - 1]) - 6, "Brent", "var(--brent)"],
+  ];
+  for (const [y, text, color] of labels) {
+    if (!isFinite(y)) continue;
+    s += `<text class="label" x="${L + plotW - 4}" y="${y.toFixed(1)}" text-anchor="end" fill="${color}">${text}</text>`;
+  }
+  s += `<text x="${L}" y="${T - 4}" fill="var(--ink-faint)" font-size="11">${fxRate ? "£ per litre (Brent converted at 1 USD = " + fxRate + " GBP)" : "£ per litre — Brent on the right axis in USD per litre"}</text>`;
+
+  svg.innerHTML = s;
+  $("chartSub").textContent =
+    `Daily cheapest and average across the ${MARKET.length} days on which anything was quoted, ` +
+    `${MARKET[0][0]} → ${MARKET[MARKET.length - 1][0]}. Brent is divided by ${META.litres_per_barrel} litres per barrel to give a per-litre figure; ` +
+    `crude is not kerosene, so read the shape, not the gap.`;
+
+  svg.onmousemove = (ev) => {
+    const box = svg.getBoundingClientRect();
+    const vx = ((ev.clientX - box.left) / box.width) * W;
+    const ms = x0 + ((vx - L) / plotW) * (x1 - x0);
+    let best = 0, bestGap = Infinity;
+    MARKET.forEach((r, i) => { const g = Math.abs(dayMs(r[0]) - ms); if (g < bestGap) { bestGap = g; best = i; } });
+    const row = MARKET[best];
+    const bIdx = BRENT.reduce((acc, b, i) => Math.abs(dayMs(b[0]) - dayMs(row[0])) < Math.abs(dayMs(BRENT[acc][0]) - dayMs(row[0])) ? i : acc, 0);
+    const tip = $("tip");
+    tip.innerHTML =
+      `<b>${esc(row[0])}</b><br>cheapest ${gbp(row[1])} · average ${gbp(row[2])}<br>` +
+      `variance ${num(row[3], 6)} across ${row[4]} supplier(s)<br>` +
+      `<span style="color:#9fb0d0">Brent ${esc(BRENT[bIdx][0])}: $${num(BRENT[bIdx][1])}/bbl = $${(BRENT[bIdx][1] / META.litres_per_barrel).toFixed(4)}/litre</span>`;
+    tip.style.opacity = 1;
+    const px = X(dayMs(row[0])) / W * box.width;
+    tip.style.left = Math.min(Math.max(px + 14, 8), box.width - tip.offsetWidth - 8) + "px";
+    tip.style.top = "10px";
+  };
+  svg.onmouseleave = () => { $("tip").style.opacity = 0; };
+}
+
+function renderFacets() {
+  const sorted = Object.entries(SERIES).sort((a, b) => a[1][a[1].length - 1][1] - b[1][b[1].length - 1][1]);
+  $("facetSub").textContent =
+    `One small chart per supplier, all on the same price scale, with the market average as the grey reference. ` +
+    `Sorted by latest price; a line that stops early is a supplier that stopped quoting.`;
+  const w = 208, h = 54, pad = 4;
+  const all = Object.values(SERIES).flat();
+  const lo = Math.min(...all.map((p) => p[1])), hi = Math.max(...all.map((p) => p[1]));
+  const X0 = Math.min(...all.map((p) => dayMs(p[0]))), X1 = Math.max(...all.map((p) => dayMs(p[0])));
+  const avg = MARKET.map((r) => [dayMs(r[0]), r[2]]);
+  const fx = (ms) => pad + ((ms - X0) / ((X1 - X0) || 1)) * (w - 2 * pad);
+  const fy = (v) => h - pad - ((v - lo) / ((hi - lo) || 1)) * (h - 2 * pad);
+  const line = (pts) => pts.map((p, i) => `${i ? "L" : "M"}${fx(p[0]).toFixed(1)},${fy(p[1]).toFixed(1)}`).join(" ");
+
+  $("facets").innerHTML = sorted.map(([name, points]) => {
+    const last = points[points.length - 1];
+    const prices = points.map((p) => p[1]);
+    const span = Math.max(...prices) - Math.min(...prices);
+    return `<div class="facet">
+      <div class="top"><span class="nm">${esc(name)}</span><span class="val">${gbp(last[1])}</span></div>
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;margin:4px 0 2px">
+        <path fill="none" stroke="#c9ced8" stroke-width="1.5" d="${line(avg)}"></path>
+        <path fill="none" stroke="var(--cheapest)" stroke-width="1.8" d="${line(points.map((p) => [dayMs(p[0]), p[1]]))}"></path>
+      </svg>
+      <div class="rng">${esc(points[0][0].slice(0, 7))} → ${esc(last[0].slice(0, 7))} · ${points.length} quotes · range ${span.toFixed(4)}</div>
+    </div>`;
+  }).join("");
+}
+
+// ------------------------------------------------------------------ table
+
+const COLS = [
+  ["name", "Supplier", "text", (r) => r.name],
+  ["wins", "Days cheapest", "num", (r) => r.wins],
+  ["recent_wins", "Cheapest, last 7 days", "num", (r) => r.recent_wins],
+  ["days", "Days quoted", "num", (r) => r.days],
+  ["quotes", "Quotes", "num", (r) => r.quotes],
+  ["best", "Best ever", "num", (r) => r.best],
+  ["latest", "Latest", "num", (r) => r.latest],
+  ["mean", "Mean", "num", (r) => r.mean],
+  ["spread", "Spread", "num", (r) => r.spread],
+  ["stdev", "Std dev", "num", (r) => r.stdev],
+  ["cv", "Variation", "num", (r) => r.cv],
+  ["first", "First quoted", "text", (r) => r.first],
+  ["last", "Last quoted", "text", (r) => r.last],
+];
+let sortKey = "wins", sortDir = -1;
+
+function renderLeague() {
+  const rows = [...LEAGUE].sort((a, b) => {
+    const va = COLS.find((c) => c[0] === sortKey)[3](a), vb = COLS.find((c) => c[0] === sortKey)[3](b);
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    return (typeof va === "string" ? String(va).localeCompare(String(vb)) : va - vb) * sortDir;
+  });
+  const head = COLS.map(([key, label, kind]) =>
+    `<th class="sortable ${kind}" data-key="${key}" ${key === sortKey ? `aria-sort="${sortDir === 1 ? "ascending" : "descending"}"` : ""}>${esc(label)}</th>`).join("");
+  const body = rows.map((r) => `<tr>${COLS.map(([key, , kind, get]) => {
+    const v = get(r);
+    const text = key === "name" ? esc(v)
+      : kind === "num" ? (key === "cv" ? (v == null ? "—" : (v * 100).toFixed(1) + "%") : (key === "days" || key === "quotes" ? String(v) : gbp(v)))
+      : esc(v);
+    return `<td class="${kind}">${text}</td>`;
+  }).join("")}</tr>`).join("");
+  $("leagueTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  document.querySelectorAll("#leagueTable th.sortable").forEach((th) => {
+    th.onclick = () => {
+      const key = th.dataset.key;
+      sortDir = key === sortKey ? -sortDir : (COLS.find((c) => c[0] === key)[2] === "num" ? -1 : 1);
+      sortKey = key;
+      renderLeague();
+    };
+  });
+}
+
+function renderBuys() {
+  const rows = DATA.purchases.map((p) => {
+    const delta = p.market_best != null ? p.agreed_price_per_liter - p.market_best : null;
+    return `<tr>
+      <td>${esc(p.created_at.slice(0, 10))}</td>
+      <td>${esc(p.supplier_name)}</td>
+      <td class="num">${p.quantity_liters} L</td>
+      <td class="num">${gbp(p.agreed_price_per_liter)}</td>
+      <td class="num">${p.total_price != null ? "£" + num(p.total_price, 2) : "—"}</td>
+      <td>${p.discount_code ? `<code>${esc(p.discount_code)}</code>` : '<span class="muted">none recorded</span>'}</td>
+      <td class="num">${gbp(p.market_best)}</td>
+      <td class="num">${delta == null ? "—" : `<span class="pill ${delta <= 0 ? "ok" : "bad"}">${gbp(Math.abs(delta))} ${delta <= 0 ? "below" : "above"}</span>`}</td>
+    </tr>`;
+  }).join("");
+  $("buyTable").innerHTML = DATA.purchases.length
+    ? `<thead><tr><th>Date</th><th>Supplier</th><th class="num">Quantity</th><th class="num">Price paid</th><th class="num">Total</th><th>Code</th><th class="num">Day's best headline</th><th class="num">Paid against it</th></tr></thead><tbody>${rows}</tbody>`
+    : '<tbody><tr><td class="muted">No purchase recorded yet. Recording is a deliberate CLI act: <code>oilwatch record-purchase</code>.</td></tr></tbody>';
+}
+
+function renderLimits() {
+  const items = [
+    `<b>Headline prices, not discounted ones, on the history.</b> A discount code is single-use or dated, so applying today's code to a 2007 price would invent a comparison. The current window shows both.`,
+    `<b>Brent is crude, rescaled by volume only.</b> $/barrel ÷ ${META.litres_per_barrel} L/barrel gives $/litre of crude, converted to pounds at the reference rate named above the chart — fetched when the page was built, so it is exactly as old as the page. The EIA series itself runs to ${BRENT.length ? BRENT[BRENT.length - 1][0] : "—"}, so its tail can sit behind the last quote; every tooltip prints the Brent date it actually used. Kerosene is a refined product with its own crack spread, and one rate covers nineteen years: read the shape, not the level.`,
+    `<b>The history is sparse before 2026.</b> ${META.days} days carry a price: roughly monthly check-ins recorded in the original workbook between 2007 and 2025, then the 2026 runs. The league table's totals are therefore dominated by whichever suppliers the workbook followed.`,
+    `<b>Dates, not times, decide "cheapest".</b> A day with several quotes for one supplier compares its lowest; a supplier that did not quote that day does not win or lose it.`,
+    `<b>No forecast, no interpolation.</b> A line joins only the days that carry a price; a flat stretch between two dated points is the absence of data, not evidence that the price held.`,
+  ];
+  $("limits").innerHTML = items.map((t) => `<li>${t}</li>`).join("");
+}
+
+// ------------------------------------------------------------------- boot
+
+$("fx").addEventListener("input", (ev) => {
+  const v = parseFloat(ev.target.value);
+  fxRate = isFinite(v) && v > 0 ? v : null;
+  $("fxSrc").textContent = fxRate
+    ? `1 USD = ${fxRate} GBP (entered by hand)`
+    : "no rate — Brent is shown in dollars";
+  renderChart();
+});
+
+// The build fetched a reference rate, so Brent is priced in pounds without being
+// asked for one. Its date is on screen, because a rate is only as good as its
+// vintage and this page may be read weeks later.
+if (FX && FX.rate) {
+  $("fx").value = FX.rate;
+  $("fxSrc").textContent = `1 USD = ${FX.rate} GBP (${FX.source}, ${FX.as_of})`;
+} else {
+  $("fxSrc").textContent = "no rate available — Brent is shown in dollars";
+}
+
+renderSummary();
+renderNow();
+renderChart();
+renderFacets();
+renderLeague();
+renderBuys();
+renderLimits();
+</script>

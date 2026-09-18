@@ -491,7 +491,7 @@ class OrderChannelTests(AppTestCase):
         entry = next(
             row
             for row in self.app.current_prices()["no_quote_suppliers"]
-            if row["name"] == "Page Only"
+            if row["supplier_name"] == "Page Only"
         )
 
         self.assertEqual(entry["reason"], "quote_by_request")
@@ -807,9 +807,13 @@ class SupplierOutcomeTests(AppTestCase):
 
         prices = self.app.current_prices()
 
-        self.assertEqual([row["name"] for row in prices["no_quote_suppliers"]], ["ValueOils"])
+        self.assertEqual(
+            [row["supplier_name"] for row in prices["no_quote_suppliers"]], ["ValueOils"]
+        )
         self.assertEqual(prices["no_quote_suppliers"][0]["reason"], "no_quote_page")
-        self.assertEqual([row["name"] for row in prices["failed_suppliers"]], ["Scottish Fuels"])
+        self.assertEqual(
+            [row["supplier_name"] for row in prices["failed_suppliers"]], ["Scottish Fuels"]
+        )
         self.assertEqual(prices["failed_suppliers"][0]["reason"], "site_error")
         # Neither list holds a supplier that did give a price, and the supplier
         # never asked appears in neither — it is `never_quoted`'s business.
@@ -818,8 +822,12 @@ class SupplierOutcomeTests(AppTestCase):
 
         # A run is read back with `status`, so the same two groups are there.
         report = self.app.status()
-        self.assertEqual([row["name"] for row in report["no_quote_suppliers"]], ["ValueOils"])
-        self.assertEqual([row["name"] for row in report["failed_suppliers"]], ["Scottish Fuels"])
+        self.assertEqual(
+            [row["supplier_name"] for row in report["no_quote_suppliers"]], ["ValueOils"]
+        )
+        self.assertEqual(
+            [row["supplier_name"] for row in report["failed_suppliers"]], ["Scottish Fuels"]
+        )
 
 
 if __name__ == "__main__":

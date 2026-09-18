@@ -577,6 +577,9 @@ Oil Price Webscraper/
 │           ├── boilerjuice.py
 │           ├── scottish_fuels_browser.py
 │           └── ...
+├── tools/
+│   ├── build_explorer.py        # Builds the data explorer page (see below)
+│   └── explorer_template.html   # Its template
 └── tests/
     └── test_app.py              # Unit tests
 ```
@@ -677,6 +680,25 @@ python -m oilwatch.cli phone-script --postcode "AB21 0YA"
 ```
 
 ---
+
+## Data Explorer
+
+`tools/build_explorer.py` renders everything the database knows — today's quotes,
+the historical league table, variance per supplier, the recorded purchases, and
+Brent rescaled to £ per litre — into a single self-contained page:
+
+```powershell
+python tools/build_explorer.py           # writes data/oilwatch-explorer.html
+python tools/build_explorer.py --check   # print the payload summary, write nothing
+start data\oilwatch-explorer.html
+```
+
+It reads the database read-only and writes two files: the standalone page above,
+and the body-only fragment the Artifact publisher wants. Both are gitignored —
+each embeds a snapshot of the database, so they are rebuilt rather than
+committed. The one network call is the USD→GBP reference rate the page converts
+Brent with, fetched at build time and named on the page with its date; when that
+fetch fails the page shows Brent in dollars rather than inventing a rate.
 
 ## Support & Documentation
 

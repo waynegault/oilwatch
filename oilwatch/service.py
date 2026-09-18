@@ -422,7 +422,11 @@ class OilWatchApp:
         failed: list[dict[str, Any]] = []
         for row in self.db.latest_attempts():
             entry = {
-                "name": row["supplier_name"],
+                # `supplier_name` rather than `name`, matching the priced rows and
+                # `never_quoted`: the envelope named the supplier two ways, and a
+                # consumer reading `.name` off one bucket and `.supplier_name` off
+                # the next is a trap that needs no purpose.
+                "supplier_name": row["supplier_name"],
                 "website": row["website"],
                 "last_attempt_at": row["observed_at"],
                 "reason": row["reason"],

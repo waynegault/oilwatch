@@ -1,0 +1,306 @@
+"""Build the OilWatch data explorer: a self-contained, offline HTML page.
+
+Reads the live database read-only and writes two files beside the generated
+charts: a standalone page that opens from disk, and the body-only fragment the
+Artifact publisher wants. Nothing is written to the database.
+
+    python tools/build_explorer.py [--check]
+
+``--check`` prints the payload summary and stops, without writing the page.
+
+One network call, at build time: the USD->GBP reference rate the page converts
+Brent with. Fetched rather than assumed, so the page carries a real rate and its
+date; when the fetch fails the page falls back to showing Brent in dollars.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import statistics
+import subprocess
+import sys
+from pathlib import Path
+
+import httpx
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from oilwatch.config import CHECKOUT_ROOT  # noqa: E402
+from oilwatch.models import utcnow_naive  # noqa: E402
+from oilwatch.service import OilWatchApp  # noqa: E402
+
+TEMPLATE = Path(__file__).with_name("explorer_template.html")
+STANDALONE = CHECKOUT_ROOT / "data" / "oilwatch-explorer.html"
+FRAGMENT = CHECKOUT_ROOT / "data" / "oilwatch-explorer.fragment.html"
+
+#: A barrel is a volume: 158.987 litres of anything. Crude is not kerosene, so
+#: the rescaled Brent line is context rather than a like-for-like benchmark.
+LITRES_PER_BARREL = 158.987
+
+#: How recent "recent" is for the league table's second reading: the last seven
+#: days on which anything was quoted. That is form, where the total wins figure
+#: is history — the two differ sharply for a supplier who stopped being cheap in
+#: 2013 or stopped quoting in 2025.
+RECENT_DAYS = 7
+
+#: Keyless source of the ECB's USD->GBP reference rate. The page converts Brent
+#: with it, so its date matters as much as its value.
+FX_URL = "https://api.frankfurter.app/latest?from=USD&to=GBP"
+
+
+def fetch_usd_gbp() -> dict | None:
+    """The USD->GBP reference rate, or None when there is no network.
+
+    Fetched rather than assumed: an invented rate would silently mis-scale every
+    Brent comparison on the page. The date and source travel with it so a stale
+    rate is visible instead of implied, and no rate is better than a wrong one -
+    the page falls back to showing Brent in dollars.
+    """
+    try:
+        response = httpx.get(FX_URL, follow_redirects=True, timeout=30)
+        response.raise_for_status()
+        body = response.json()
+        return {
+            "rate": float(body["rates"]["GBP"]),
+            "as_of": body.get("date"),
+            "source": "ECB reference rate via frankfurter.app",
+            "url": FX_URL,
+        }
+    except Exception as exc:  # noqa: BLE001 - report it and carry on without
+        print(f"fx: unavailable ({type(exc).__name__}: {exc})")
+        return None
+
+
+def day_of(observed_at: str) -> str:
+    return observed_at[:10]
+
+
+def build_payload(app: OilWatchApp) -> dict:
+    quotes = [row for row in app.db.all_quotes() if row["status"] == "ok" and row["price_per_liter"]]
+    suppliers = app.db.list_suppliers()
+    orders = app.purchases()
+
+    by_supplier: dict[str, list[tuple[str, float]]] = {}
+    for row in quotes:
+        by_supplier.setdefault(row["supplier_name"], []).append(
+            (day_of(row["observed_at"]), float(row["price_per_liter"]))
+        )
+    for points in by_supplier.values():
+        points.sort()
+
+    # Per-day market figures and the historical league table.
+    per_day: dict[str, list[tuple[str, float]]] = {}
+    for name, points in by_supplier.items():
+        for day, price in points:
+            per_day.setdefault(day, []).append((name, price))
+    days = sorted(per_day)
+    market = [
+        [
+            day,
+            round(min(price for _, price in per_day[day]), 4),
+            round(statistics.fmean(price for _, price in per_day[day]), 4),
+            round(
+                statistics.pvariance([price for _, price in per_day[day]]), 6
+            )
+            if len(per_day[day]) > 1
+            else 0.0,
+            len(per_day[day]),
+        ]
+        for day in days
+    ]
+    recent_cutoff = days[-RECENT_DAYS:] if len(days) > RECENT_DAYS else days
+    wins: dict[str, int] = {}
+    recent_wins: dict[str, int] = {}
+    for day in days:
+        best = min(per_day[day], key=lambda pair: pair[1])[0]
+        wins[best] = wins.get(best, 0) + 1
+        if day in recent_cutoff:
+            recent_wins[best] = recent_wins.get(best, 0) + 1
+
+    league = []
+    for name, points in sorted(by_supplier.items()):
+        prices = [price for _, price in points]
+        best_day, best_price = min(points, key=lambda pair: pair[1])
+        last_day, last_price = points[-1]
+        spread = max(prices) - min(prices)
+        stdev = statistics.pstdev(prices) if len(prices) > 1 else 0.0
+        league.append(
+            {
+                "name": name,
+                "quotes": len(points),
+                "days": len({day for day, _ in points}),
+                "first": points[0][0],
+                "last": last_day,
+                "best": round(best_price, 4),
+                "best_at": best_day,
+                "latest": round(last_price, 4),
+                "mean": round(statistics.fmean(prices), 4),
+                "min": round(min(prices), 4),
+                "max": round(max(prices), 4),
+                "spread": round(spread, 4),
+                "stdev": round(stdev, 4),
+                "cv": round(stdev / statistics.fmean(prices), 4) if prices else None,
+                "wins": wins.get(name, 0),
+                "recent_wins": recent_wins.get(name, 0),
+                "share": round(wins.get(name, 0) / len(days), 4),
+            }
+        )
+
+    # Purchases, each against the market it landed in.
+    priced_by_day = {row[0]: row for row in market}
+    purchases = []
+    for order in orders:
+        day = day_of(order["created_at"])
+        context = priced_by_day.get(day)
+        purchases.append(
+            {
+                **order,
+                "market_day": day,
+                "market_best": context[1] if context else None,
+                "market_mean": context[2] if context else None,
+                "suppliers_that_day": context[4] if context else None,
+            }
+        )
+
+    envelope = app.current_prices()
+    current = {
+        "as_of": envelope["as_of"],
+        "window_days": envelope["window_days"],
+        "quotes": [
+            {
+                "name": row["supplier_name"],
+                "website": row["website"],
+                "order_page": row.get("order_page"),
+                "price_per_liter": row["price_per_liter"],
+                "effective_price_per_liter": row.get("effective_price_per_liter"),
+                "observed_at": row["observed_at"],
+                "valid_until": row.get("valid_until"),
+                "discount": row.get("discount"),
+                "reason": row.get("reason"),
+            }
+            for row in envelope["quotes"]
+        ],
+        "no_quote_suppliers": envelope["no_quote_suppliers"],
+        "failed_suppliers": envelope["failed_suppliers"],
+        "excluded_suppliers": envelope["excluded_suppliers"],
+        "not_refreshed_suppliers": envelope["not_refreshed_suppliers"],
+        "never_quoted": envelope["never_quoted"],
+    }
+    snapshot = app.status()["market_snapshot"]
+
+    return {
+        "meta": {
+            "generated_at": utcnow_naive().isoformat(timespec="seconds"),
+            "litres_per_barrel": LITRES_PER_BARREL,
+            "recent_days": RECENT_DAYS,
+            "quotes": len(quotes),
+            "brent_points": len(app.db.all_brent()),
+            "days": len(days),
+        },
+        # Fetched at build time, so the page converts Brent to pounds on its own.
+        "fx": fetch_usd_gbp(),
+        "suppliers": [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "website": row["website"],
+                "order_page": row.get("connector_config", {}).get("order_page"),
+                "connector_type": row["connector_type"],
+                "phone": row.get("phone"),
+                "email": row.get("email"),
+                "status": row.get("status"),
+            }
+            for row in suppliers
+        ],
+        "series": {name: [[day, round(price, 4)] for day, price in points] for name, points in by_supplier.items()},
+        "market": market,
+        "league": league,
+        "brent": [
+            [day_of(row["observed_at"]), round(float(row["price_usd_per_barrel"]), 2)]
+            for row in app.db.all_brent()
+        ],
+        "current": current,
+        "snapshot": snapshot,
+        "purchases": purchases,
+        "discounts": app.db.active_discounts(),
+    }
+
+
+def summarise(payload: dict) -> None:
+    meta = payload["meta"]
+    print(f"generated_at  {meta['generated_at']}")
+    print(f"quotes        {meta['quotes']} priced rows across {meta['days']} days")
+    print(f"brent         {meta['brent_points']} points")
+    print(f"series        {len(payload['series'])} suppliers")
+    print(f"league rows   {len(payload['league'])}")
+    print(f"purchases     {len(payload['purchases'])}")
+    print("\nleague (wins / quotes / best / latest):")
+    for row in sorted(payload["league"], key=lambda r: -r["wins"]):
+        print(
+            f"  {row['name']:38s} wins {row['wins']:4d}  recent {row['recent_wins']:3d}"
+            f"  quotes {row['quotes']:4d}  best {row['best']:.4f}  latest {row['latest']:.4f}"
+        )
+    brent = payload["brent"]
+    if brent:
+        print(f"\nbrent range   ${min(p for _, p in brent):.2f} .. ${max(p for _, p in brent):.2f} per barrel")
+    fx = payload["fx"]
+    print(
+        "fx            "
+        + (
+            f"{fx['rate']} GBP per USD as of {fx['as_of']} ({fx['source']})"
+            if fx
+            else "unavailable - Brent stays in dollars on the page"
+        )
+    )
+    print(f"current       {len(payload['current']['quotes'])} priced, "
+          f"{len(payload['current']['no_quote_suppliers'])} no quote, "
+          f"{len(payload['current']['failed_suppliers'])} failed")
+    for order in payload["purchases"]:
+        print(
+            f"purchase      {order['supplier_name']} {order['quantity_liters']}L "
+            f"£{order['agreed_price_per_liter']}/L total £{order['total_price']} "
+            f"on {order['created_at'][:10]} (market best {order['market_best']})"
+        )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true", help="print the payload summary only")
+    args = parser.parse_args()
+
+    payload = build_payload(OilWatchApp())
+    summarise(payload)
+
+    if args.check:
+        return
+
+    fragment = TEMPLATE.read_text(encoding="utf-8").replace(
+        "__PAYLOAD__", json.dumps(payload, separators=(",", ":"))
+    )
+    FRAGMENT.write_text(fragment, encoding="utf-8")
+    standalone = (
+        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        "<title>OilWatch data explorer</title>\n</head>\n<body>\n"
+        f"{fragment}\n</body>\n</html>\n"
+    )
+    STANDALONE.write_text(standalone, encoding="utf-8")
+    kb = len(standalone) / 1024
+    print(f"\nwrote {STANDALONE} ({kb:.0f} KB)")
+    print(f"wrote {FRAGMENT} ({len(fragment) / 1024:.0f} KB)")
+
+    # Parse-check the inline JavaScript. A syntax error leaves the page blank and
+    # is invisible to every other check available here.
+    script = fragment.split("<script>")[-1].split("</script>")[0]
+    js = Path(__file__).with_name("explorer_inline.js")
+    js.write_text(script, encoding="utf-8")
+    result = subprocess.run(
+        ["node", "--check", str(js)], capture_output=True, text=True, check=False
+    )
+    print("node --check:", "ok" if result.returncode == 0 else result.stderr.strip()[:400])
+    js.unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    main()
