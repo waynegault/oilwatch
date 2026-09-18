@@ -448,6 +448,7 @@ envelope looks like this (`blob` is base64-encoded binary ciphertext):
 ```
 Oil Price Webscraper/
 ├── README.md                    # This file - overview, install, CLI/MCP reference
+├── AGENTS.md                    # The rules an agent needs - consumer contract
 ├── user-guide.md                # Day-to-day use, supplier reference, sign-in, agent brief
 ├── ROADMAP.md                   # Development roadmap
 ├── PROGRESS.md                  # Current progress status
@@ -594,6 +595,7 @@ python -m oilwatch.cli phone-script --postcode "AB21 0YA"
 | Document | Purpose |
 |----------|---------|
 | `README.md` | This file - overview, install, CLI and MCP reference |
+| `AGENTS.md` | The rules an agent needs: the shortest form of the brief, for anything driving the CLI or the MCP tools |
 | `user-guide.md` | Day-to-day use: prices, ordering, the supplier reference, accounts and sign-in, troubleshooting, and the brief to hand an AI agent |
 | `docs/inspection.md` | Repeatable audit checklist for this repository |
 | `ROADMAP.md` | Future development plans |
