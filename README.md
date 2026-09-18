@@ -251,6 +251,24 @@ Each tool carries MCP `ToolAnnotations`, so a client can distinguish a safe read
 (`readOnlyHint`) from a slow, world-touching scrape (`openWorldHint`) and gate
 approvals accordingly.
 
+Every quote row carries a **`status`**, and it is a closed three-value gate — a
+consumer branches on it, so an unrecognised value degrades badly:
+
+| `status` | Means | Other fields |
+|----------|-------|--------------|
+| `ok` | a price was read | `price_per_liter` and `total_price` are set |
+| `manual_action_required` | no price the app can read; the supplier is contactable instead | both prices are `null`; `reason` says which kind of gap it is |
+| `error` | the attempt itself raised | both prices are `null`; `reason` is usually `site_error` |
+
+So the nullability is part of the contract: **the price fields are `null` for
+everything except `ok`**, and `reason` is `null` when unclassified rather than
+meaning "no reason applies".
+
+Three separate vocabularies share the word `status` in this codebase, and only
+the first is a quote row's: quote rows (`ok` / `manual_action_required` /
+`error`), supplier rows (`active` / `inactive` / `manual_review`), and the result
+of a form submission or registration (`submitted`, `phone_only`, `pending`, …).
+
 Wherever a supplier row is not `ok`, it carries a machine-readable `reason`
 beside the prose in `notes`, so a gap can be explained without parsing English:
 

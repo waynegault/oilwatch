@@ -58,6 +58,16 @@ deliberately: `quote-all` and `refresh_prices` drive real browsers,
 - The **Scottish Fuels sign-in is intermittent.** It fails identically from the
   CLI, so it is not an MCP problem.
 
+## What a row's `status` can be
+
+A quote row's `status` is a closed set of three, and a consumer branches on it:
+**`ok`** (a price was read), **`manual_action_required`** (no price the app can
+read — the supplier is contactable instead) and **`error`** (the attempt itself
+raised). `price_per_liter` and `total_price` are `null` for everything except
+`ok`. Do not confuse it with a supplier row's `status`
+(`active`/`inactive`/`manual_review`) or with the result of a form submission,
+which uses `submitted`, `phone_only` and so on.
+
 ## When a price is missing, read its `reason`
 
 Every row that is not `ok` carries a machine-readable `reason` beside the prose in

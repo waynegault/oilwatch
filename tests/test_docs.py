@@ -29,6 +29,7 @@ import unittest
 from pathlib import Path
 
 from oilwatch.logging_setup import LOG_FILE_ENV
+from oilwatch.models import QUOTE_STATUSES
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRESS = (ROOT / "PROGRESS.md").read_text(encoding="utf-8")
@@ -226,6 +227,20 @@ class ReferenceTests(unittest.TestCase):
     def test_every_mcp_tool_is_named_in_agents_md(self) -> None:
         missing = sorted(name for name in _mcp_tool_names() if f"`{name}`" not in AGENTS)
         self.assertEqual(missing, [], f"AGENTS.md does not name these tools: {missing}")
+
+    def test_every_quote_status_is_documented(self) -> None:
+        """The vocabulary a consumer branches on has to be written down.
+
+        ``QUOTE_STATUSES`` is a closed set, and the nullability is part of the
+        contract — the price fields are set only for ``ok``. A consumer that has
+        to guess either of those reads the wrong thing out of a row, so this
+        checks the docs against the constant rather than against a list copied
+        into this file.
+        """
+        for document, name in ((README, "README.md"), (AGENTS, "AGENTS.md")):
+            missing = sorted(value for value in QUOTE_STATUSES if value not in document)
+            with self.subTest(document=name):
+                self.assertEqual(missing, [], f"{name} does not name these statuses: {missing}")
 
 
 #: Settings objects whose keys are schema. Every other object in the file is

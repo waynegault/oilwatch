@@ -613,6 +613,11 @@ without saying so is the one way to get this wrong.
   (1000 L). Say which basis you are quoting.
 - **Fueltool is a UK-average benchmark, not a supplier you can order from** —
   say so rather than presenting it as the winner.
+- **`status` is a closed set of three, and the price fields are only set for the
+  first**: `ok` (a price was read), `manual_action_required` (nothing the app can
+  read — the supplier is contactable instead) and `error` (the attempt raised).
+  `price_per_liter` and `total_price` are `null` for the last two, so never read a
+  price without checking that `status` is `ok`.
 - Several suppliers **cannot be priced by a scraper at all**. They come back
   `manual_action_required` with contact details and a `reason` saying which kind
   of gap it is: `quote_by_request` means there *is* a quote page and it answers a

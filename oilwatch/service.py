@@ -177,12 +177,19 @@ class OilWatchApp:
             # reports each supplier as it lands instead of making the caller wait
             # for the slowest, which is what lets a job show progress.
             with ThreadPoolExecutor(max_workers=min(workers, len(suppliers))) as pool:
-                futures = {pool.submit(quote_one, supplier): supplier for supplier in suppliers}
-                payloads = []
+                futures = {
+                    pool.submit(quote_one, supplier): index
+                    for index, supplier in enumerate(suppliers)
+                }
+                by_index: dict[int, dict[str, Any]] = {}
                 for future in as_completed(futures):
-                    payloads.append(future.result())
+                    by_index[futures[future]] = future.result()
                     if job_id is not None:
-                        self.db.progress_refresh_job(job_id, len(payloads))
+                        self.db.progress_refresh_job(job_id, len(by_index))
+                # Rebuilt in supplier order rather than left as they landed:
+                # ``as_completed`` is for reporting progress, but the result list
+                # is a contract callers read in the order they asked for.
+                payloads = [by_index[index] for index in range(len(suppliers))]
 
         results: list[dict[str, Any]] = []
         for supplier, payload in zip(suppliers, payloads, strict=True):

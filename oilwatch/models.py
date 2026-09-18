@@ -15,6 +15,21 @@ def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+#: The ``status`` vocabulary of a *quote* row, and the gate a consumer branches
+#: on. Deliberately three values and no more: ``ok`` carries a price,
+#: ``manual_action_required`` means the supplier is contactable instead (its
+#: ``reason`` says how), and ``error`` means the attempt itself raised. A
+#: consumer that meets a fourth value has no sensible behaviour for it, so this
+#: is a closed set rather than a free-form string.
+#:
+#: Not to be confused with two other status fields in this codebase: a supplier
+#: row's ``status`` (``active``/``inactive``/``manual_review``) and the result of
+#: a form submission or registration, which have their own vocabularies
+#: (``submitted``, ``phone_only``, ``pending``, …). Quote rows are the only ones
+#: these three describe.
+QUOTE_STATUSES = ("ok", "manual_action_required", "error")
+
+
 @dataclass(slots=True)
 class SupplierCandidate:
     name: str
