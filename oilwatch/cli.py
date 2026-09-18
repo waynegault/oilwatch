@@ -106,7 +106,7 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument(
         "--suppliers",
         default="",
-        help="Comma-separated supplier keys (defaults to the configured list)",
+        help="Comma-separated supplier keys (defaults to the register's quote_request entries)",
     )
 
     # Monitor email for supplier replies (Microsoft Graph / OAuth2)
