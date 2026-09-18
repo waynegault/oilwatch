@@ -92,6 +92,10 @@ def current_prices() -> list[dict[str, Any]]:
     prices. ``cheapest`` and ``status`` name the suppliers it omits; because this
     tool returns a bare list it cannot carry the window's value, and ``cheapest``
     reports that as ``window_days``.
+
+    Each row carries the supplier's ``order_page`` when its config records one -
+    where a person would order from. ``None`` means unrecorded rather than
+    "there is no page", so fall back to ``website`` only as a general link.
     """
     return _get_app().current_prices()
 
@@ -103,7 +107,9 @@ def cheapest() -> dict[str, Any]:
     ``excluded_suppliers`` lists any supplier whose newest quote fell outside
     ``max_quote_age_days``, so a thin market is visible as "not re-quoted yet".
     ``window_days`` states the window that comparison was made against, so an
-    empty market is not read as a broken one.
+    empty market is not read as a broken one. ``order_page`` on the winner is
+    where a person would order from, when the supplier's config records one;
+    ``website`` stays the general link, and may be a marketing page.
     """
     return _get_app().cheapest()
 

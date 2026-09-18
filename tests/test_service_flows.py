@@ -220,5 +220,75 @@ class MaintenanceTests(AppTestCase):
             self.app.import_spreadsheet()
 
 
+#: Suppliers for the ordering-page tests: one whose config names the page a human
+#: orders from, one that names none. ``AppTestCase`` writes these to the
+#: throwaway root's overrides file, and ``init()`` imports them.
+ORDERING_OVERRIDES = [
+    {
+        "name": "Formy Fuels",
+        "website": "https://formy.example.com/",
+        "connector_type": "manual",
+        "connector_config": {"order_page": "https://formy.example.com/order"},
+    },
+    {
+        "name": "Marketing Only",
+        "website": "https://marketing.example.com/",
+        "connector_type": "manual",
+    },
+]
+
+
+class OrderingPageTests(AppTestCase):
+    """The page a human orders from, carried as its own field.
+
+    ``website`` is frequently a marketing page, so a supplier whose own config
+    names the ordering page carries it as ``order_page`` — and one that names
+    none reports None rather than falling back to the URL the connector scrapes,
+    which for some suppliers is an API endpoint rather than anything clickable.
+    """
+
+    overrides = ORDERING_OVERRIDES
+
+    def _record(self, supplier_id: int, payload: dict) -> None:
+        self.app.db.record_quote(
+            {
+                "supplier_id": supplier_id,
+                "observed_at": utcnow_naive().isoformat(),
+                "quantity_liters": 1000,
+                "status": "ok",
+                "price_per_liter": 1.10,
+                "total_price": 1100.0,
+                "currency": "GBP",
+                "source": "test",
+                "notes": "",
+                "raw_payload": payload,
+            }
+        )
+
+    def test_the_ordering_page_comes_from_the_supplier_config(self) -> None:
+        ids = self._init()
+        self._record(
+            ids["Formy Fuels"], {"quote_url": "https://formy.example.com/api/getoffers.php"}
+        )
+        self._record(ids["Marketing Only"], {"quote_url": "https://marketing.example.com/api/quote"})
+
+        rows = {row["supplier_name"]: row for row in self.app.current_prices()}
+
+        self.assertEqual(rows["Formy Fuels"]["order_page"], "https://formy.example.com/order")
+        # The scrape endpoint in the quote's payload is deliberately not used:
+        # for Highland Fuels that value is an API endpoint, so promoting it would
+        # hand an agent a link that cannot be ordered from.
+        self.assertIsNone(rows["Marketing Only"]["order_page"])
+
+    def test_the_winner_carries_its_ordering_page(self) -> None:
+        ids = self._init()
+        self._record(ids["Formy Fuels"], {})
+
+        cheapest = self.app.cheapest()["cheapest_supplier"]
+
+        self.assertEqual(cheapest["name"], "Formy Fuels")
+        self.assertEqual(cheapest["order_page"], "https://formy.example.com/order")
+
+
 if __name__ == "__main__":
     unittest.main()

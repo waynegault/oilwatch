@@ -6,6 +6,7 @@
     "connector_type": "price_page",
     "connector_config": {
       "quote_url": "https://example.com/heating-oil",
+      "order_page": "https://example.com/heating-oil",
       "price_regex": "(\\d+\\.\\d+)\\s*p(?:ence)?\\s*/\\s*l"
     }
   },

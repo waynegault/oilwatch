@@ -109,6 +109,11 @@ class AnalyticsService:
                 "supplier_id": cheapest["supplier_id"],
                 "name": cheapest["supplier_name"],
                 "website": cheapest["website"],
+                # The page to order from, when the supplier's own config names
+                # one (`order_page`). None means "not recorded", not "no page
+                # exists", so the general `website` above stays the fallback for
+                # a reader who needs something to cite.
+                "order_page": cheapest.get("order_page"),
                 "price_per_liter": cheapest["price_per_liter"],
                 "observed_at": cheapest["observed_at"],
                 # Surfaced so a comparison says how long the offer stands, not

@@ -6,7 +6,8 @@
     "phone": "01358 720320",
     "connector_type": "manual",
     "connector_config": {
-      "quote_url": "https://oilweb.johnstonfuels.co.uk/Connon/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore"
+      "quote_url": "https://oilweb.johnstonfuels.co.uk/Connon/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore",
+      "order_page": "https://oilweb.johnstonfuels.co.uk/Connon/Pages/WebOrdering/OnlineQuote.aspx?iframe=ignore"
     },
     "notes": "Connon Oils is now part of Johnston Oils; Fuelsoft WebOrdering form (scraped via browser connector)."
   },
@@ -26,6 +27,7 @@
     "connector_type": "manual",
     "connector_config": {
       "quote_url": "https://order.regencyoils.co.uk/WEBPLUS/Portal.aspx?action=quote",
+      "order_page": "https://order.regencyoils.co.uk/WEBPLUS/Portal.aspx?action=quote",
       "product_value": "3302"
     },
     "notes": "Fuelsoft WEBPLUS platform (scraped via browser connector)."

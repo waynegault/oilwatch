@@ -219,6 +219,18 @@ class OilWatchApp:
             litres = int(row.get("quantity_liters") or configured_quantity)
             best = best_discount_for(offers, litres) if offers else None
 
+            # The page a human would order from, when the supplier's own config
+            # names one (`order_page`). Three deliberate choices here. It is not
+            # taken from the quote's payload, because that URL is whatever the
+            # connector fetches and for some suppliers it is an API endpoint
+            # (Highland Fuels' getoffers.php), so promoting it would put a link an
+            # agent then cites onto a row that cannot be ordered from it. The key
+            # is not `order_url`, which the shipped config example already uses
+            # for the POST target of the retired automated ordering path. And an
+            # absent value means "not recorded", not "no page exists".
+            config = json.loads(enriched.pop("connector_config_json", None) or "{}")
+            enriched["order_page"] = config.get("order_page")
+
             price = row.get("price_per_liter")
             if price is not None:
                 effective = effective_price_per_litre(float(price), litres, best)

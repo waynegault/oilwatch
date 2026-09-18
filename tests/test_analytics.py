@@ -52,6 +52,31 @@ class SnapshotTests(unittest.TestCase):
         )
         self.assertEqual(populated["window_days"], 3)
 
+    def test_the_cheapest_supplier_carries_the_ordering_page(self) -> None:
+        """An agent citing the winner needs somewhere to order from.
+
+        ``website`` is often a marketing page, so the ordering page travels from
+        the supplier's own config as its own field. Absence means "not recorded",
+        not "no page exists", so the key is always present.
+        """
+        quotes = [
+            {
+                **make_quote(1, "A", "2026-03-20T10:00:00", 0.71),
+                "order_page": "https://a.example.com/order",
+            },
+            make_quote(2, "B", "2026-03-20T11:00:00", 0.74),
+        ]
+        result = AnalyticsService.latest_market_snapshot(quotes)
+        self.assertEqual(
+            result["cheapest_supplier"]["order_page"], "https://a.example.com/order"
+        )
+
+        # And a winner without one reports None rather than dropping the key.
+        result = AnalyticsService.latest_market_snapshot(
+            [make_quote(1, "A", "2026-03-20T10:00:00", 0.71)]
+        )
+        self.assertIsNone(result["cheapest_supplier"]["order_page"])
+
     def test_cheapest_and_average(self) -> None:
         quotes = [
             make_quote(1, "A", "2026-03-20T10:00:00", 0.71),

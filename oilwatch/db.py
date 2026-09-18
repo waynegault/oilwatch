@@ -313,7 +313,7 @@ class Database:
         with closing(self.connect()) as conn:
             rows = conn.execute(
                 """
-                SELECT q.*, s.name AS supplier_name, s.website
+                SELECT q.*, s.name AS supplier_name, s.website, s.connector_config_json
                 FROM quotes q
                 JOIN suppliers s ON s.id = q.supplier_id
                 JOIN (
