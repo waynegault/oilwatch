@@ -192,6 +192,9 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                 supplier,
                 quantity_liters,
                 "Not signed in. Run `oilwatch login scottish_fuels` once to establish a session.",
+                # Distinct from a broken connector: the portal is fine, the
+                # stored session is not, and only a sign-in fixes it.
+                reason="login_not_confirmed",
             )
 
         quoted = self.parse_quote_row(body_text)
@@ -407,7 +410,19 @@ class ScottishFuelsBrowserConnector(BaseConnector):
 
         return driver.find_element(By.TAG_NAME, "body").text
 
-    def _manual(self, supplier: dict[str, Any], quantity_liters: int, notes: str) -> QuoteResult:
+    def _manual(
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        notes: str,
+        reason: str | None = None,
+    ) -> QuoteResult:
+        """A non-quote result, optionally classified.
+
+        ``reason`` stays optional because the callers here do not all know one:
+        an unrecognised case reports ``None`` — "unclassified" — rather than a
+        guess that a consumer would then branch on.
+        """
         contact = ", ".join(p for p in [supplier.get("phone"), supplier.get("email"), supplier.get("website")] if p)
         return QuoteResult(
             supplier_id=int(supplier["id"]),
@@ -415,6 +430,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
+            reason=reason,
             source="scottish_fuels_browser",
             notes=f"{notes} Contact: {contact or 'supplier website'}",
         )

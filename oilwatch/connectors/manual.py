@@ -21,6 +21,9 @@ class ManualConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
+            # Not a failure and not a broken connector: this supplier has no web
+            # quote to fetch, so the contact details in the note are the answer.
+            reason="no_quote_page",
             source="manual",
             notes=f"Manual quote required for {quantity_liters}L. Contact via: {contact or 'supplier website'}",
         )

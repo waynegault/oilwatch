@@ -50,6 +50,9 @@ class OilfastConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
+            # Contact-only by design: there is no price page to fetch, so this
+            # is the answer rather than a failed scrape.
+            reason="no_quote_page",
             source="oilfast_manual",
             notes=self._build_quote_instructions(quantity_liters, postcode),
             raw_payload={

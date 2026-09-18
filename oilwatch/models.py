@@ -49,6 +49,21 @@ class QuoteResult:
     currency: str = "GBP"
     source: str = "unknown"
     notes: str = ""
+    #: Why this quote is not ``ok``, machine-readably; the prose stays in
+    #: ``notes``. Deliberately a field rather than more ``status`` values: a
+    #: consumer branches on ``status``, so a reason it does not recognise
+    #: degrades gracefully where an unrecognised status does not. Connectors
+    #: should draw from this set rather than inventing variants:
+    #:
+    #: - ``no_quote_page`` — no web quote exists (phone/email only)
+    #: - ``login_not_confirmed`` — an authenticated portal did not sign in
+    #: - ``captcha`` — a bot check stopped the flow
+    #: - ``site_error`` — the attempt raised: timeout, HTTP error, or a parse
+    #:   failure
+    #:
+    #: ``None`` means unclassified rather than "no reason" — most connectors do
+    #: not attribute one yet, and that is not a claim that none applies.
+    reason: str | None = None
     raw_payload: dict[str, Any] = field(default_factory=dict)
     #: When this quote stops being a valid offer. A connector may set it from
     #: what the supplier states on the page; otherwise it defaults below, so

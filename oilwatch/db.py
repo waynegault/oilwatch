@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS quotes (
     currency TEXT NOT NULL,
     source TEXT NOT NULL,
     notes TEXT,
+    reason TEXT,
     valid_until TEXT,
     raw_payload_json TEXT NOT NULL DEFAULT '{}',
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
@@ -118,6 +119,8 @@ class Database:
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(quotes)")}
             if "valid_until" not in columns:
                 conn.execute("ALTER TABLE quotes ADD COLUMN valid_until TEXT")
+            if "reason" not in columns:
+                conn.execute("ALTER TABLE quotes ADD COLUMN reason TEXT")
             # Give pre-existing rows a validity too, so an older database compares
             # on the same footing as a fresh one instead of reporting null. Idempotent:
             # only rows where it is still unset are touched.
@@ -186,8 +189,9 @@ class Database:
                 """
                 INSERT INTO quotes (
                     supplier_id, observed_at, quantity_liters, status, price_per_liter,
-                    total_price, currency, source, notes, valid_until, raw_payload_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    total_price, currency, source, notes, reason, valid_until,
+                    raw_payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record["supplier_id"],
@@ -199,6 +203,7 @@ class Database:
                     record["currency"],
                     record["source"],
                     record.get("notes", ""),
+                    record.get("reason"),
                     record.get("valid_until"),
                     json.dumps(record.get("raw_payload", {})),
                 ),
@@ -385,6 +390,7 @@ class Database:
                        ok.observed_at AS observed_at, ok.price_per_liter,
                        attempt.observed_at AS last_attempt_at,
                        attempt.status AS last_attempt_status,
+                       attempt.reason AS last_attempt_reason,
                        attempt.notes AS last_attempt_note
                 FROM suppliers s
                 JOIN (

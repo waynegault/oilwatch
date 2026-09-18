@@ -80,6 +80,10 @@ class QuoteTests(AppTestCase):
         self.assertEqual(len(results), len(OVERRIDES))
         self.assertTrue(all(r["status"] == "error" for r in results))
         self.assertIn("site down", results[0]["notes"])
+        # Classified rather than left to the message: "site_error" is the one
+        # reason every raising path shares, and it is what a consumer branches on
+        # instead of parsing prose.
+        self.assertTrue(all(r["reason"] == "site_error" for r in results))
         notify.assert_called_once()
 
     def test_quote_all_quotes_suppliers_concurrently(self) -> None:
@@ -162,9 +166,14 @@ class ReportingTests(AppTestCase):
         """
         ids = self._init()
         now = utcnow_naive()
-        for observed, status, price in (
-            ((now - timedelta(hours=2)).isoformat(), "ok", 1.10),
-            ((now - timedelta(hours=1)).isoformat(), "manual_action_required", None),
+        for observed, status, price, reason in (
+            ((now - timedelta(hours=2)).isoformat(), "ok", 1.10, None),
+            (
+                (now - timedelta(hours=1)).isoformat(),
+                "manual_action_required",
+                None,
+                "login_not_confirmed",
+            ),
         ):
             self.app.db.record_quote(
                 {
@@ -177,6 +186,7 @@ class ReportingTests(AppTestCase):
                     "currency": "GBP",
                     "source": "scottish_fuels_browser",
                     "notes": "session expired and the automatic sign-in did not take",
+                    "reason": reason,
                     "raw_payload": {},
                 }
             )
@@ -187,6 +197,11 @@ class ReportingTests(AppTestCase):
         self.assertEqual(flagged[0]["price_per_liter"], 1.10)
         self.assertEqual(flagged[0]["last_attempt_status"], "manual_action_required")
         self.assertIn("session expired", flagged[0]["last_attempt_note"])
+        # The machine-readable companion to that note, and the reason this
+        # supplier needs a sign-in rather than a connector fix. It survives the
+        # round trip through the database column, which is the point: a consumer
+        # reading a later run gets the reason, not just the prose.
+        self.assertEqual(flagged[0]["last_attempt_reason"], "login_not_confirmed")
 
     def test_status_includes_the_snapshot_trend_and_last_purchase(self) -> None:
         self._init()

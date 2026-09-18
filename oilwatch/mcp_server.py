@@ -147,7 +147,12 @@ def refresh_prices(postcode: str | None = None) -> list[dict[str, Any]]:
     """Scrape fresh quotes from all suppliers (slow: uses browser automation).
 
     Takes minutes and may fail per-supplier (CAPTCHA, blocked, site down);
-    partial results are normal. Do not call it in a loop.
+    partial results are normal. Do not call it in a loop. Each row carries a
+    ``status`` and, when it is not ``ok``, a machine-readable ``reason`` —
+    ``no_quote_page`` (no web quote exists; use the contact details),
+    ``login_not_confirmed`` (an authenticated portal did not sign in),
+    ``captcha``, or ``site_error`` — so a failure is reportable without reading
+    ``notes``. ``None`` means unclassified, not "no reason".
     """
     return _get_app().quote_all(postcode=postcode or load_contact().postcode, prefer_browser=True)
 

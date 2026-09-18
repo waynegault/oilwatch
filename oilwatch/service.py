@@ -113,6 +113,10 @@ class OilWatchApp:
                     "currency": self.settings.currency,
                     "source": supplier.get("connector_type", "unknown"),
                     "notes": str(exc),
+                    # Classified rather than left to the exception's wording:
+                    # the message is prose, and this is the one reason every
+                    # raising path shares.
+                    "reason": "site_error",
                     "raw_payload": {},
                 }
 
@@ -192,6 +196,10 @@ class OilWatchApp:
                 "last_quote_at": row["observed_at"],
                 "last_attempt_at": row["last_attempt_at"],
                 "last_attempt_status": row["last_attempt_status"],
+                # The machine-readable companion to the note below, so a consumer
+                # can branch on *why* a supplier has no fresh price instead of
+                # reading prose to find out.
+                "last_attempt_reason": row["last_attempt_reason"],
                 "last_attempt_note": row["last_attempt_note"],
             }
             for row in self.db.not_refreshed_quotes(max_age_days=self.settings.max_quote_age_days)
