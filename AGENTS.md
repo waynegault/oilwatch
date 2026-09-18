@@ -8,10 +8,10 @@ reference — every flag and return shape — is in `README.md`, and status in
 
 ## What you can call
 
-**Over MCP — nine tools.** Reads: `list_suppliers`, `current_prices`, `cheapest`,
-`purchases`, `status`. Write a file and return its path: `chart`,
-`time_series_chart`. Costs minutes: `refresh_prices`. Reaches the network:
-`update_brent`.
+**Over MCP — ten tools.** Reads: `list_suppliers`, `current_prices`, `cheapest`,
+`purchases`, `status`, `refresh_status`. Write a file and return its path:
+`chart`, `time_series_chart`. Costs minutes: `refresh_prices`. Reaches the
+network: `update_brent`.
 
 **Through the CLI — twenty-one commands**, as `oilwatch <command>` or
 `python -m oilwatch.cli <command>`: `init`, `discover`, `suppliers`, `quote`,
@@ -40,6 +40,11 @@ deliberately: `quote-all` and `refresh_prices` drive real browsers,
   running** (`in_progress`, with `started_by` and `seconds_ago`), has finished, or
   started and never reported back (`stale`) — so you never have to guess, and a
   `refresh_prices` while one is running starts nothing.
+- **If you expect to outlive the call, pass `background=true`.** It returns a
+  `job_id` at once and runs the sweep as its own detached process; read
+  `refresh_status(job_id)` for `state`, `done` of `total`, and the `results`. A
+  `stale: true` there means the worker is gone — treat it as failed rather than
+  waiting.
 - **Always give the ordering link, the discount code, the `observed_at` date and
   the basis** (£/litre inc. 5% VAT, 1000 L) next to a price. Prefer a row's
   `order_page` when it carries one; `website` is often only a marketing page.

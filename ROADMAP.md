@@ -86,7 +86,7 @@ The orders table is unchanged and still the record of what was bought.
 **Status:** ✅ Complete
 
 **Implementation:**
-- `mcp_server.py` - 9 MCP tools exposed
+- `mcp_server.py` - 10 MCP tools exposed
 - `scheduler.py` - APScheduler background jobs for recurring discovery and quote collection
 - `cli.py` - Full CLI parity with MCP tools
 
@@ -106,10 +106,10 @@ The orders table is unchanged and still the record of what was bought.
 | Quote collection | ✅ Complete | Pluggable; live browser + HTTP collection working |
 | Analytics | ✅ Complete | Recency window (`max_quote_age_days`, default 30d) keeps 2007–2025 spreadsheet rows out of the current comparison |
 | Ordering | ❌ Dropped | Buying is manual; `record-purchase` records what was bought |
-| MCP server | ✅ Complete | 9 tools over streamable HTTP or stdio; OpenClaw spawns it on demand |
+| MCP server | ✅ Complete | 10 tools over streamable HTTP or stdio; OpenClaw spawns it on demand |
 | Scheduler | ✅ Complete | Background jobs for discovery and quotes |
 | CLI | ✅ Complete | 21 commands |
-| Tests | ✅ Complete | 671 tests, all offline |
+| Tests | ✅ Complete | 682 tests, all offline |
 | Email intake | ✅ Complete | Microsoft Graph monitor: extract reply price, record, delete mail |
 | Market context | ✅ Complete | Brent crude daily series from the EIA |
 

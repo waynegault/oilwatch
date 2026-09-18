@@ -105,8 +105,10 @@ class ServiceIntegrationTests(unittest.TestCase):
         # Both methods are bound, because quote_all now marks the sweep and then
         # delegates the work — the marker is part of what is under test here.
         bound = cast(OilWatchApp, app)
-        app._quote_every_supplier = lambda postcode, prefer_browser, max_workers: (
-            OilWatchApp._quote_every_supplier(bound, postcode, prefer_browser, max_workers)
+        app._quote_every_supplier = lambda postcode, prefer_browser, max_workers, job_id=None: (
+            OilWatchApp._quote_every_supplier(
+                bound, postcode, prefer_browser, max_workers, job_id=job_id
+            )
         )
         app.quote_all = lambda **kwargs: OilWatchApp.quote_all(bound, **kwargs)
         return app

@@ -229,7 +229,7 @@ OilWatch exposes all functionality through an **MCP (Model Context Protocol) ser
 
 ### MCP Tools Available
 
-The server exposes nine tools, all read-mostly. There is **no** ordering tool:
+The server exposes ten tools, all read-mostly. There is **no** ordering tool:
 `place_order` does not exist, and an agent must never claim an order was placed.
 Recording a purchase is a deliberate CLI act by the owner
 (`oilwatch record-purchase`); agents can only read them back via `purchases`.
@@ -243,7 +243,8 @@ Recording a purchase is a deliberate CLI act by the owner
 | `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase, the same `no_quote_suppliers` / `failed_suppliers` split, and `refresh` (whether a sweep is running now) | None |
 | `chart` | Market summary chart; returns a file path | None |
 | `time_series_chart` | Per-supplier prices with Brent crude on a second axis; returns a path | None |
-| `refresh_prices` | Scrape fresh quotes from all suppliers — **slow** (minutes, browser automation). Returns `{cached, cooldown_minutes, refreshed_at, results}`; within the 10-minute cooldown it returns `cached: true` and starts nothing, and if a sweep is **already running** it returns `in_progress: true` with `started_at`/`started_by`/`seconds_ago` and starts nothing either | `postcode: str`, `force: bool` |
+| `refresh_prices` | Scrape fresh quotes from all suppliers — **slow** (minutes, browser automation). Returns `{cached, cooldown_minutes, refreshed_at, results}`; within the 10-minute cooldown it returns `cached: true` and starts nothing, and if a sweep is **already running** it returns `in_progress: true` with `started_at`/`started_by`/`seconds_ago` and starts nothing either. `background: true` instead starts the sweep as its own **detached process** and returns `{job_id, state, started_at, total}` at once | `postcode: str`, `force: bool`, `background: bool` |
+| `refresh_status` | A background sweep's progress and results: `state` (`running`/`finished`/`failed`), `done` of `total`, the `error` when it failed, the same `results` a foreground call returns, and `stale: true` when a job still says running but its worker is gone | `job_id: str` (defaults to the newest) |
 | `update_brent` | Fetch the latest Brent crude daily series from the EIA | None |
 
 Each tool carries MCP `ToolAnnotations`, so a client can distinguish a safe read

@@ -560,6 +560,12 @@ change, a shut depot. Partial results are normal and are not an error.
 - Do **not** call it in a loop.
 - Do **not** call it just to look at a price.
 - Call it when the quotes are stale — see below.
+- **If your own call is likely to be cut short, pass `background=true`** instead.
+  It returns `{job_id, state, started_at, total}` at once and runs the sweep as
+  its own **detached process**, which outlives your session; then poll
+  `refresh_status(job_id)` for `state`, `done` of `total`, and the `results` a
+  foreground call would have returned. A `stale: true` there means the worker is
+  gone — treat it as failed rather than waiting.
 - If the call does hit the 300 s timeout, do **not** assume the scrape failed:
   read `current_prices` and look at the `observed_at` dates to see what actually
   landed. Its `refresh` block answers the question you were about to re-run the

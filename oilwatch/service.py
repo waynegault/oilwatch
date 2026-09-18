@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
-from concurrent.futures import ThreadPoolExecutor
+import os
+import subprocess
+import sys
+import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -99,6 +103,7 @@ class OilWatchApp:
         prefer_browser: bool = False,
         max_workers: int | None = None,
         started_by: str = "cli",
+        job_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Quote every active supplier, with the sweep marked while it runs.
 
@@ -107,11 +112,17 @@ class OilWatchApp:
         out reads it to tell "still running" from "died", which nothing else on
         record can answer: quote rows appear only as each supplier finishes, so
         a sweep thirty seconds in has left no trace at all yet.
+
+        Pass ``job_id`` to run this as a recorded job — the detached worker does,
+        and it is what makes progress and results readable after the caller that
+        asked for the sweep is gone.
         """
         sweep_started_at = utcnow_naive().isoformat()
         self.db.start_sweep(sweep_started_at, started_by)
         try:
-            return self._quote_every_supplier(postcode, prefer_browser, max_workers)
+            return self._quote_every_supplier(
+                postcode, prefer_browser, max_workers, job_id=job_id
+            )
         finally:
             self.db.finish_sweep(sweep_started_at)
 
@@ -120,6 +131,7 @@ class OilWatchApp:
         postcode: str | None,
         prefer_browser: bool,
         max_workers: int | None,
+        job_id: str | None = None,
     ) -> list[dict[str, Any]]:
         self.db.init_schema()
         suppliers = self.db.list_suppliers(include_inactive=False)
@@ -161,9 +173,16 @@ class OilWatchApp:
             # scaled linearly with the supplier count. Several run at once, but
             # the pool is capped: there is no per-supplier rate limiting, and a
             # wide fan-out risks the CAPTCHA/bot heuristics the connectors
-            # already work around. ``map`` keeps results in supplier order.
+            # already work around. ``as_completed`` rather than ``map``: it
+            # reports each supplier as it lands instead of making the caller wait
+            # for the slowest, which is what lets a job show progress.
             with ThreadPoolExecutor(max_workers=min(workers, len(suppliers))) as pool:
-                payloads = list(pool.map(quote_one, suppliers))
+                futures = {pool.submit(quote_one, supplier): supplier for supplier in suppliers}
+                payloads = []
+                for future in as_completed(futures):
+                    payloads.append(future.result())
+                    if job_id is not None:
+                        self.db.progress_refresh_job(job_id, len(payloads))
 
         results: list[dict[str, Any]] = []
         for supplier, payload in zip(suppliers, payloads, strict=True):
@@ -447,6 +466,112 @@ class OilWatchApp:
             "started_by": row["started_by"],
             "seconds_ago": int(age),
             "finished_at": finished,
+        }
+
+    def start_background_sweep(
+        self, started_by: str = "mcp", postcode: str | None = None
+    ) -> dict[str, Any]:
+        """Start a sweep as its own process and return its job id immediately.
+
+        A detached process, not a thread or a task: the MCP server is spawned per
+        session over stdio, so anything living inside it dies with the session —
+        and the whole reason to ask for a background sweep is that the session is
+        likely to end, or to time out, before the sweep is done. The job row is
+        written first, so the id returned here is readable at once and the client
+        gets "running, 0 of 17" rather than "no such job".
+        """
+        self.db.init_schema()
+        job_id = uuid.uuid4().hex
+        started_at = utcnow_naive().isoformat()
+        total = len(self.db.list_suppliers())
+        self.db.create_refresh_job(job_id, started_at, started_by, total)
+
+        command = [
+            sys.executable,
+            "-m",
+            "oilwatch.cli",
+            "quote-all",
+            "--browser",
+            "--job-id",
+            job_id,
+        ]
+        if postcode:
+            command += ["--postcode", postcode]
+        spawn: dict[str, Any] = {
+            # The checkout as cwd, so the worker reads the same config and the
+            # same database as the process that launched it.
+            "cwd": str(self.root),
+            "stdin": subprocess.DEVNULL,
+            # Output is discarded rather than inherited: the parent's stdout may
+            # be an MCP transport, and a stray line on it breaks the protocol.
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "close_fds": True,
+        }
+        if os.name == "nt":
+            # Its own process group and no console, so the client going away
+            # cannot take the sweep with it.
+            spawn["creationflags"] = (
+                subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            spawn["start_new_session"] = True
+        subprocess.Popen(command, **spawn)
+
+        return {
+            "job_id": job_id,
+            "state": "running",
+            "started_at": started_at,
+            "started_by": started_by,
+            "total": total,
+        }
+
+    def run_refresh_job(self, job_id: str, postcode: str | None = None) -> list[dict[str, Any]]:
+        """Run a recorded job to completion, closing the job either way.
+
+        The exception is re-raised rather than swallowed: the worker's exit code
+        is what a person debugging it by hand reads, and the job row already
+        records the failure for the caller that asked for it.
+        """
+        try:
+            results = self.quote_all(
+                postcode=postcode,
+                prefer_browser=True,
+                started_by="job",
+                job_id=job_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - recorded on the job, then re-raised
+            self.db.finish_refresh_job(job_id, "failed", error=f"{type(exc).__name__}: {exc}")
+            raise
+        self.db.finish_refresh_job(job_id, "finished", results=results)
+        return results
+
+    def refresh_job_status(self, job_id: str | None = None) -> dict[str, Any]:
+        """What a sweep job is doing now, or what it did.
+
+        ``stale`` is the honest answer for a job whose worker is gone: it still
+        says running, but nothing has updated it for longer than any sweep takes,
+        so waiting on it is waiting for a process that is not there.
+        """
+        job = self.db.refresh_job(job_id)
+        if job is None:
+            return {"found": False, "job_id": job_id}
+        age = max(
+            0.0, (utcnow_naive() - datetime.fromisoformat(job["started_at"])).total_seconds()
+        )
+        return {
+            "found": True,
+            "job_id": job["job_id"],
+            "state": job["state"],
+            "stale": job["state"] == "running" and age > SWEEP_STALE_AFTER_MINUTES * 60,
+            "started_at": job["started_at"],
+            "started_by": job["started_by"],
+            "finished_at": job["finished_at"],
+            "seconds_ago": int(age),
+            "total": job["total"],
+            "done": job["done"],
+            "error": job["error"],
+            "results": job["results"],
         }
 
     def refresh_recently_done(self, minutes: int) -> dict[str, Any] | None:

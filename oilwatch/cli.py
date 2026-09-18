@@ -36,6 +36,15 @@ def build_parser() -> argparse.ArgumentParser:
     quote_all = subparsers.add_parser("quote-all")
     quote_all.add_argument("--postcode")
     quote_all.add_argument("--browser", action="store_true", help="Use browser automation")
+    quote_all.add_argument(
+        "--job-id",
+        default=None,
+        help=(
+            "Run as this recorded job, reporting progress and results into it. Used "
+            "by refresh_prices(background=true), which spawns this as a detached "
+            "worker; the flag is here so the same run can be reproduced by hand."
+        ),
+    )
 
     subparsers.add_parser("cheapest")
     subparsers.add_parser("status")

@@ -658,6 +658,120 @@ class SweepMarkerTests(AppTestCase):
         self.assertIsNotNone(state["finished_at"], "the marker was left standing")
 
 
+class RefreshJobTests(AppTestCase):
+    """A detached sweep, readable after the caller that asked for it is gone.
+
+    The job row is written by the launcher and updated by the worker, so the id
+    is readable from the moment it is returned and the outcome survives both
+    processes. Three states again, and for the same reason: running, finished,
+    and "the worker is gone" — which must not read as progress.
+    """
+
+    overrides = None
+
+    def _job(self, job_id: str = "job-1", age_minutes: int = 0, total: int = 3) -> str:
+        self.app.db.init_schema()
+        started = (utcnow_naive() - timedelta(minutes=age_minutes)).isoformat()
+        self.app.db.create_refresh_job(job_id, started, "mcp", total=total)
+        return job_id
+
+    def test_a_new_job_reads_as_running_from_the_moment_it_is_returned(self) -> None:
+        """The row is created by the launcher, not the worker.
+
+        Otherwise the client that just received a job_id would be told there is
+        no such job, which is exactly when it is most likely to ask.
+        """
+        job_id = self._job()
+        status = self.app.refresh_job_status(job_id)
+
+        self.assertTrue(status["found"])
+        self.assertEqual(status["state"], "running")
+        self.assertFalse(status["stale"])
+        self.assertEqual((status["done"], status["total"]), (0, 3))
+
+    def test_progress_and_results_are_readable(self) -> None:
+        job_id = self._job()
+        self.app.db.progress_refresh_job(job_id, 2)
+        self.assertEqual(self.app.refresh_job_status(job_id)["done"], 2)
+
+        self.app.db.finish_refresh_job(job_id, "finished", results=[{"supplier_name": "A"}])
+        status = self.app.refresh_job_status(job_id)
+
+        self.assertEqual(status["state"], "finished")
+        self.assertFalse(status["stale"])
+        self.assertEqual(status["results"], [{"supplier_name": "A"}])
+        self.assertIsNotNone(status["finished_at"])
+
+    def test_a_job_whose_worker_vanished_reads_as_stale(self) -> None:
+        """The state a killed worker leaves must not look like progress.
+
+        Nothing rewrites it — the process that would have is the one that died —
+        so the reader has to work it out from the age.
+        """
+        status = self.app.refresh_job_status(
+            self._job(age_minutes=SWEEP_STALE_AFTER_MINUTES + 1)
+        )
+
+        self.assertEqual(status["state"], "running")
+        self.assertTrue(status["stale"])
+
+    def test_an_unknown_job_is_not_found_rather_than_an_error(self) -> None:
+        self.app.db.init_schema()
+        self.assertEqual(
+            self.app.refresh_job_status("nope"), {"found": False, "job_id": "nope"}
+        )
+
+    def test_no_id_reads_the_newest_job(self) -> None:
+        self._job("older")
+        self.app.db.create_refresh_job("newer", utcnow_naive().isoformat(), "cli", total=1)
+
+        self.assertEqual(self.app.refresh_job_status()["job_id"], "newer")
+
+    def test_running_a_job_records_it_finished(self) -> None:
+        job_id = self._job(total=0)
+        self.app.run_refresh_job(job_id)  # this fixture has no suppliers
+        status = self.app.refresh_job_status(job_id)
+
+        self.assertEqual(status["state"], "finished")
+        self.assertEqual(status["results"], [])
+
+    def test_a_job_that_raises_is_recorded_as_failed_and_still_raises(self) -> None:
+        """The worker's exit code matters to whoever runs it by hand.
+
+        Swallowing the exception would leave a debugging session with a zero exit
+        and no reason, so it is recorded on the job *and* re-raised.
+        """
+        job_id = self._job(total=1)
+        with (
+            patch.object(self.app, "quote_all", side_effect=RuntimeError("browser died")),
+            self.assertRaises(RuntimeError),
+        ):
+            self.app.run_refresh_job(job_id)
+
+        status = self.app.refresh_job_status(job_id)
+        self.assertEqual(status["state"], "failed")
+        self.assertIn("browser died", status["error"])
+
+    def test_a_background_sweep_spawns_a_detached_worker(self) -> None:
+        """The command is what matters: it re-enters the CLI with the job id.
+
+        A separate process rather than a thread, because the session that asks
+        for a background sweep is the one expected to end before it finishes.
+        """
+        self._init()
+        with patch("oilwatch.service.subprocess.Popen") as popen:
+            started = self.app.start_background_sweep(started_by="mcp")
+
+        command = popen.call_args.args[0]
+        self.assertIn("quote-all", command)
+        self.assertIn("--job-id", command)
+        self.assertIn(started["job_id"], command)
+        # From the checkout, so the worker reads the same config and database.
+        self.assertEqual(popen.call_args.kwargs["cwd"], str(self.root))
+        # And the id it returned is already readable, before the worker starts.
+        self.assertEqual(self.app.refresh_job_status(started["job_id"])["state"], "running")
+
+
 class SupplierOutcomeTests(AppTestCase):
     """Which suppliers gave no price, and which ones we failed to retrieve one from.
 

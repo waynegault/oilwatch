@@ -44,6 +44,12 @@ def _cmd_quote(app: OilWatchApp, args: argparse.Namespace) -> None:
 
 
 def _cmd_quote_all(app: OilWatchApp, args: argparse.Namespace) -> None:
+    job_id = getattr(args, "job_id", None)
+    if job_id:
+        # The detached worker's path: the job row carries the outcome for whoever
+        # asked, so this only has to exit non-zero if the sweep raised.
+        _print(app.run_refresh_job(job_id, postcode=args.postcode))
+        return
     _print(app.quote_all(postcode=args.postcode, prefer_browser=args.browser, started_by="cli"))
 
 

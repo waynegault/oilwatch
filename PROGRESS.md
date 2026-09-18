@@ -24,8 +24,8 @@ It is a working system, not a prototype:
 | Modules under `oilwatch/` | 54 Python files |
 | Supplier connectors | 15 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
-| MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 671, all passing offline |
+| MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
+| Tests | 682, all passing offline |
 | Database | 17 active suppliers (28 including retired), 602 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -39,7 +39,7 @@ It is a working system, not a prototype:
 | `cli.py` | CLI entry point (21 commands) |
 | `cli_handlers.py` | One handler per CLI command; the browser/Graph ones live here |
 | `service.py` | `OilWatchApp` — orchestration used by both CLI and MCP |
-| `mcp_server.py` | FastMCP server, 9 tools; streamable HTTP on `/mcp`, or `--stdio` |
+| `mcp_server.py` | FastMCP server, 10 tools; streamable HTTP on `/mcp`, or `--stdio` |
 | `scheduler.py` | APScheduler jobs for recurring discovery / quotes |
 | `db.py` | SQLite layer (`data/oilwatch.sqlite`) |
 | `models.py`, `config.py`, `pricing.py` | Data models, settings, VAT + £/p normalisation |
@@ -91,14 +91,14 @@ whom and for how much.
 ### MCP tools
 
 `list_suppliers`, `current_prices`, `cheapest`, `purchases`, `status`, `chart`,
-`time_series_chart`, `refresh_prices`, `update_brent`.
+`time_series_chart`, `refresh_prices`, `refresh_status`, `update_brent`.
 
 `refresh_prices` runs browser automation and takes minutes; OpenClaw is
 configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 671 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 682 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -189,11 +189,17 @@ suppliers whose only priced row came from the spreadsheet import won on
   `refresh_prices` checks it *before* the cooldown and starts nothing when one is
   running, which closes a real hole: a running sweep's own rows appear only as
   each supplier finishes, so thirty seconds in the cooldown had nothing to
-  measure and a retry would have relaunched every browser. What is still not
-  built is the job model Hal asked for — no `background=true`, no
-  `refresh_status(job_id)`, because a stdio server spawned per session has no
-  process to hold a job; that needs a detached worker with its own stale-run
-  handling, and is recorded here as open rather than half-done.
+  measure and a retry would have relaunched every browser.
+- **The job model Hal asked for, as a detached worker (2026-09-18).**
+  `refresh_prices(background=true)` writes the job row, spawns
+  `quote-all --job-id <id>` as its own process from the checkout, and returns the
+  id at once; the worker reports `done` of `total` as each supplier lands and
+  closes the job `finished` or `failed`. `refresh_status` reads it by id or
+  newest, with `stale: true` for a job whose worker is gone — the same honest
+  reading the sweep marker gives. The sweep now records each quote as it lands
+  rather than after the slowest supplier, which is what makes mid-flight progress
+  possible; the writes stay in the one thread, so the SQLite contention the
+  original comment guards against is untouched.
 - **On demand, not on a timer (changed 2026-09-15).** Prices are refreshed when
   someone asks for them — `oilwatch quote-all --browser`, `refresh_prices` over
   MCP, or an agent turn — rather than on a schedule. The scheduler's per-user

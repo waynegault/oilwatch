@@ -180,7 +180,9 @@ REFRESH_COOLDOWN_MINUTES = 10
 
 
 @mcp.tool(title="Refresh prices (slow)", annotations=_EXTERNAL_SLOW)
-def refresh_prices(postcode: str | None = None, force: bool = False) -> dict[str, Any]:
+def refresh_prices(
+    postcode: str | None = None, force: bool = False, background: bool = False
+) -> dict[str, Any]:
     """Scrape fresh quotes from all suppliers (slow: uses browser automation).
 
     Takes minutes and may fail per-supplier (CAPTCHA, blocked, site down);
@@ -192,6 +194,12 @@ def refresh_prices(postcode: str | None = None, force: bool = False) -> dict[str
     ``login_not_confirmed`` (an authenticated portal did not sign in),
     ``captcha``, or ``site_error`` — so a failure is reportable without reading
     ``notes``. ``None`` means unclassified, not "no reason".
+
+    ``background=True`` starts the sweep as its own detached process and returns
+    ``{job_id, state, started_at, total}`` at once, for a client whose per-call
+    timeout is shorter than a sweep: read ``refresh_status(job_id)`` for progress
+    and results. Prefer it over a foreground call you expect to time out. The
+    worker outlives this session, which is the point — nothing here waits.
 
     Returns an envelope rather than a bare list, because the likeliest way to
     reach it twice is a client timeout mid-sweep followed by a retry. When a
@@ -206,6 +214,27 @@ def refresh_prices(postcode: str | None = None, force: bool = False) -> dict[str
     browser a second time. ``force=True`` sweeps regardless.
     """
     app = _get_app()
+
+    if background:
+        started = app.start_background_sweep(
+            started_by="mcp", postcode=postcode or load_contact().postcode
+        )
+        return {
+            "cached": False,
+            "in_progress": True,
+            "job_id": started["job_id"],
+            "state": started["state"],
+            "started_at": started["started_at"],
+            "started_by": started["started_by"],
+            "total": started["total"],
+            "minutes": 1,
+            "note": (
+                "The sweep is running as its own process and will outlive this "
+                f"session. Poll refresh_status('{started['job_id']}') for progress "
+                "and results, or read current_prices for the prices on record."
+            ),
+        }
+
     if not force:
         # A sweep already running is the more specific answer, and checked first:
         # its own rows land only as each supplier finishes, so the cooldown below
@@ -255,6 +284,27 @@ def refresh_prices(postcode: str | None = None, force: bool = False) -> dict[str
         "refreshed_at": max(observed) if observed else None,
         "results": results,
     }
+
+
+@mcp.tool(title="Refresh status", annotations=_READ_ONLY)
+def refresh_status(job_id: str | None = None) -> dict[str, Any]:
+    """Report a background sweep's progress and results.
+
+    Pass the ``job_id`` that ``refresh_prices(background=true)`` returned, or
+    omit it for the most recent job. ``state`` is ``running``, ``finished`` or
+    ``failed``; ``done`` of ``total`` says how many suppliers have come back, so
+    a sweep in flight is legible rather than a black box. ``failed`` carries the
+    ``error``, and ``finished`` carries the same per-supplier ``results`` a
+    foreground call returns.
+
+    ``stale`` is the honest answer when a job still says ``running`` but nothing
+    has updated it for longer than any sweep takes: its worker is gone, so
+    waiting for it is waiting for a process that is not there.
+
+    ``found: false`` means there is no such job — a mistyped id, or one asked for
+    before the sweep it names was ever started.
+    """
+    return _get_app().refresh_job_status(job_id)
 
 
 @mcp.tool(title="Update Brent crude", annotations=_EXTERNAL_FETCH)

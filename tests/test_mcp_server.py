@@ -163,6 +163,53 @@ class RefreshCooldownTests(unittest.TestCase):
         }
         return app
 
+    def test_background_returns_a_job_id_without_sweeping_here(self) -> None:
+        """The whole point: nothing in this process waits or sweeps.
+
+        The worker outlives the session, so the call has to return before the
+        sweep is anywhere near done — which is what a client whose per-call
+        budget is shorter than a sweep needs.
+        """
+        app = self._app(recent=None)
+        app.start_background_sweep.return_value = {
+            "job_id": "0f1e2d",
+            "state": "running",
+            "started_at": "2026-09-18T09:00:00",
+            "started_by": "mcp",
+            "total": 17,
+        }
+        with (
+            patch("oilwatch.mcp_server.load_contact", return_value=Contact(postcode="ZZ9 9ZZ")),
+            patch("oilwatch.mcp_server._get_app", return_value=app),
+        ):
+            result = mcp_server.refresh_prices(background=True)
+
+        app.quote_all.assert_not_called()
+        app.refresh_recently_done.assert_not_called()
+        self.assertFalse(result["cached"])
+        self.assertTrue(result["in_progress"])
+        self.assertEqual(result["job_id"], "0f1e2d")
+        self.assertEqual(result["total"], 17)
+        self.assertIn("refresh_status", result["note"])
+        self.assertEqual(app.start_background_sweep.call_args.kwargs["started_by"], "mcp")
+
+    def test_refresh_status_hands_the_id_through(self) -> None:
+        app = self._app(recent=None)
+        app.refresh_job_status.return_value = {"found": True, "state": "finished"}
+        with patch("oilwatch.mcp_server._get_app", return_value=app):
+            result = mcp_server.refresh_status("0f1e2d")
+
+        app.refresh_job_status.assert_called_once_with("0f1e2d")
+        self.assertTrue(result["found"])
+
+    def test_refresh_status_without_an_id_asks_for_the_newest(self) -> None:
+        app = self._app(recent=None)
+        app.refresh_job_status.return_value = {"found": True, "state": "running"}
+        with patch("oilwatch.mcp_server._get_app", return_value=app):
+            mcp_server.refresh_status()
+
+        app.refresh_job_status.assert_called_once_with(None)
+
     def test_a_sweep_already_running_is_not_started_again(self) -> None:
         """The case the cooldown cannot see.
 

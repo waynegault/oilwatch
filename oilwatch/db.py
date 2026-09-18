@@ -58,6 +58,22 @@ CREATE TABLE IF NOT EXISTS sweeps (
     started_by TEXT
 );
 
+-- A detached sweep, run as its own process so it outlives the MCP session that
+-- asked for it. `state` is running / finished / failed; progress counts and the
+-- results land here as the worker goes, because the caller's next question is
+-- "how far has it got?" and the worker may outlive the caller entirely.
+CREATE TABLE IF NOT EXISTS refresh_jobs (
+    job_id TEXT PRIMARY KEY,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    started_by TEXT,
+    state TEXT NOT NULL DEFAULT 'running',
+    total INTEGER,
+    done INTEGER NOT NULL DEFAULT 0,
+    results_json TEXT,
+    error TEXT
+);
+
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     supplier_id INTEGER NOT NULL,
@@ -369,6 +385,66 @@ class Database:
                 "ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
         return dict(row) if row else None
+
+    def create_refresh_job(
+        self, job_id: str, started_at: str, started_by: str, total: int
+    ) -> None:
+        """Record a detached sweep before its process is spawned.
+
+        Created by the caller rather than the worker, so the id it returns is
+        already readable: a client that asks for the status immediately gets
+        "running, 0 of 17" rather than "no such job".
+        """
+        with closing(self.connect()) as conn, conn:
+            conn.execute(
+                "INSERT INTO refresh_jobs (job_id, started_at, started_by, state, total, done) "
+                "VALUES (?, ?, ?, 'running', ?, 0)",
+                (job_id, started_at, started_by, total),
+            )
+
+    def progress_refresh_job(self, job_id: str, done: int) -> None:
+        """Say how many suppliers have come back so far."""
+        with closing(self.connect()) as conn, conn:
+            conn.execute("UPDATE refresh_jobs SET done = ? WHERE job_id = ?", (done, job_id))
+
+    def finish_refresh_job(
+        self,
+        job_id: str,
+        state: str,
+        results: list[dict[str, Any]] | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Close a job out as ``finished`` or ``failed``, with what it produced."""
+        with closing(self.connect()) as conn, conn:
+            conn.execute(
+                "UPDATE refresh_jobs SET finished_at = ?, state = ?, results_json = ?, error = ? "
+                "WHERE job_id = ?",
+                (
+                    utcnow_naive().isoformat(),
+                    state,
+                    json.dumps(results) if results is not None else None,
+                    error,
+                    job_id,
+                ),
+            )
+
+    def refresh_job(self, job_id: str | None = None) -> dict[str, Any] | None:
+        """A job by id, or the newest one when no id is given."""
+        query = "SELECT * FROM refresh_jobs"
+        params: tuple[Any, ...] = ()
+        if job_id:
+            query += " WHERE job_id = ?"
+            params = (job_id,)
+        else:
+            query += " ORDER BY started_at DESC LIMIT 1"
+        with closing(self.connect()) as conn:
+            row = conn.execute(query, params).fetchone()
+        if not row:
+            return None
+        job = dict(row)
+        raw = job.pop("results_json", None)
+        job["results"] = json.loads(raw) if raw else None
+        return job
 
     def newest_observation(self) -> str | None:
         """The newest ``observed_at`` in the quotes table, or None when empty.
