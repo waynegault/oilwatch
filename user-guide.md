@@ -603,6 +603,21 @@ PYTHONUNBUFFERED=1 .venv/Scripts/python.exe -m oilwatch.cli quote-all --browser
   `spawn .../Projects/Oil ENOENT`. Give such a client a space-free wrapper (a
   launcher that execs this venv's `python -m oilwatch.mcp_server --stdio`)
   rather than the raw path.
+
+  Verified against mcporter on 2026-09-18. This fails —
+
+  ```
+  mcporter call --stdio "/mnt/c/Users/wayne/GitHub/Python/Projects/Oil Price Webscraper/.venv/Scripts/python.exe" "current_prices()"
+  # Error: spawn /mnt/c/Users/wayne/GitHub/Python/Projects/Oil ENOENT
+  ```
+
+  — while a space-free wrapper (here `/home/wayne/.local/bin/oilwatch-mcp`,
+  containing `#!/bin/sh` and an `exec` of the venv's python with
+  `-m oilwatch.mcp_server --stdio`) succeeds. Two further traps in that client:
+  the tool argument must be **function syntax**, `"current_prices()"` — a dotted
+  selector like `oilwatch.current_prices` returns `Unknown tool` — and its
+  default per-call timeout is **60 s**, so `refresh_prices` (1-3 minutes) times
+  out unless `--timeout` or `MCPORTER_CALL_TIMEOUT` is raised.
 - The MCP server is **spawned per session over stdio** — there is no port to
   check and no server to start. If the tools look unhealthy,
   `openclaw mcp probe oilwatch` should report **9 tools**.
