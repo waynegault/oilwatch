@@ -27,14 +27,9 @@
           "quantity": "{quantity_liters}"
         },
         "price_regex": "\"price_per_liter\"\\s*:\\s*(\\d+\\.\\d+)",
-        "order_url": "https://example.com/api/order",
-        "order_method": "POST",
-        "order_fields": {
-          "quantity": "{quantity_liters}",
-          "price_per_liter": "{agreed_price_per_liter}"
-        },
-        "reference_regex": "\"order_reference\"\\s*:\\s*\"([^\"]+)\""
-      }
+        "order_page": "https://example.com/quote"
+      },
+      "notes": "`order_url`, `order_method`, `order_fields` and `reference_regex` used to be shown here, for a path that placed orders automatically. OilWatch does not order: the buying is done by phone or on the supplier's own site and then written down with `record-purchase`, so the keys are gone rather than left as a template nobody should copy. `order_page` is the page a human orders from, not a POST target."
     },
     {
       "name": "Example Enquiry Form Supplier",

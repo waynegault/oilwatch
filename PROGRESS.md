@@ -107,12 +107,13 @@ monitoring, and end-to-end app wiring.
 
 ---
 
-## Database (as of 2026-09-15)
+## Database (as of 2026-09-18)
 
 - **Path:** `data/oilwatch.sqlite`
-- **Suppliers:** 27 (18 `active`, the rest historical)
-- **Quotes:** 524
-- **Orders:** 0
+- **Suppliers:** 28 (17 `active`; the rest historical, including Brogan Fuels,
+  retired 2026-09-18 as part of Scottish Fuels)
+- **Quotes:** 602
+- **Orders:** 1
 
 **Added 2026-09-10 — purchases can be recorded.** The `orders` table was
 write-only: `place_order` wrote to it but nothing ever read it back, so "who did

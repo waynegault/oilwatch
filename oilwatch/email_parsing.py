@@ -43,8 +43,8 @@ SUPPLIER_DOMAINS = {
     # the discount offers it sends.
     "valueoils.com": "valueoils.com",
     "homefuelsdirect.co.uk": "homefuelsdirect.co.uk",
-    # BoilerJuice is a broker rather than a discovered supplier (settings list
-    # boilerjuice.com in excluded_domains), but it emails quotes and its total
+    # BoilerJuice is a broker rather than a discovered supplier (the register's
+    # excluded_domains lists boilerjuice.com), but it emails quotes and its total
     # carries a service charge the headline PPL omits. Quotes come from
     # boilerjuice.com, mail-outs from e.boilerjuice.com — subdomains are matched
     # by supplier_fragment_for(), so only the registrable domain is listed.

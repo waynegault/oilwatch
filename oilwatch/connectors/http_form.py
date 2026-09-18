@@ -33,7 +33,6 @@ class HTTPFormConnector(BaseConnector):
             fields=config.get("quote_fields", {}),
             supplier=supplier,
             quantity_liters=quantity_liters,
-            agreed_price_per_liter=None,
             context=context,
         )
         price_match = re.search(config["price_regex"], response.text, re.IGNORECASE)
@@ -59,11 +58,10 @@ class HTTPFormConnector(BaseConnector):
         fields: dict[str, Any],
         supplier: dict[str, Any],
         quantity_liters: int,
-        agreed_price_per_liter: float | None,
         context: dict[str, Any],
     ) -> httpx.Response:
         payload = {
-            key: self._render_value(value, supplier, quantity_liters, agreed_price_per_liter, context)
+            key: self._render_value(value, supplier, quantity_liters, context)
             for key, value in fields.items()
         }
         response = self.http_client().request(method.upper(), url, data=payload)
@@ -75,14 +73,17 @@ class HTTPFormConnector(BaseConnector):
         value: Any,
         supplier: dict[str, Any],
         quantity_liters: int,
-        agreed_price_per_liter: float | None,
         context: dict[str, Any],
     ) -> Any:
+        # The placeholders a quote_fields mapping may use. There was an
+        # ``agreed_price_per_liter`` among them, for a field that quoted back a
+        # price the app had already agreed; that is the automated ordering path,
+        # which is dropped, and it was only ever passed ``None`` — so a config
+        # using the placeholder silently sent the string "None".
         if not isinstance(value, str):
             return value
         return value.format(
             quantity_liters=quantity_liters,
-            agreed_price_per_liter=agreed_price_per_liter,
             postcode=context.get("postcode", ""),
             home_label=context.get("home_label", ""),
             supplier_name=supplier.get("name", ""),
