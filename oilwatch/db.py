@@ -293,6 +293,16 @@ class Database:
             return None
         return self._supplier_row_to_dict(row)
 
+    def newest_observation(self) -> str | None:
+        """The newest ``observed_at`` in the quotes table, or None when empty.
+
+        Ages a *refresh* rather than a price: it is the most recent attempt of
+        any kind, so it answers "when did we last go and look?".
+        """
+        with closing(self.connect()) as conn:
+            row = conn.execute("SELECT MAX(observed_at) AS newest FROM quotes").fetchone()
+        return row["newest"] if row else None
+
     def latest_quotes(self, max_age_days: int | None = None) -> list[dict[str, Any]]:
         """Return the most recent successful quote for each supplier.
 

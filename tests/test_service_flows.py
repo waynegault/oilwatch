@@ -326,5 +326,59 @@ class OrderingPageTests(AppTestCase):
         self.assertEqual(cheapest["order_page"], "https://formy.example.com/order")
 
 
+class RefreshCooldownStateTests(AppTestCase):
+    """The age a cooldown is measured against, read from the database.
+
+    The tool's own tests mock this out, so the arithmetic and the choice of
+    observation are checked here: it is the newest one *of any kind*, because
+    the question is "when did we last go and look?".
+    """
+
+    def _quote(self, supplier_id: int, observed) -> None:
+        self.app.db.record_quote(
+            {
+                "supplier_id": supplier_id,
+                "observed_at": observed.isoformat(),
+                "quantity_liters": 1000,
+                "status": "ok",
+                "price_per_liter": 1.10,
+                "total_price": 1100.0,
+                "currency": "GBP",
+                "source": "test",
+                "notes": "",
+                "raw_payload": {},
+            }
+        )
+
+    def test_the_age_comes_from_the_newest_observation(self) -> None:
+        ids = self._init()
+        now = utcnow_naive()
+        self._quote(ids["ValueOils"], now - timedelta(minutes=90))
+        self._quote(ids["Scottish Fuels"], now - timedelta(minutes=3))
+
+        recent = self.app.refresh_recently_done(10)
+
+        self.assertIsNotNone(recent)
+        assert recent is not None  # narrowed for the type checker
+        self.assertGreaterEqual(recent["minutes_ago"], 2.9)
+        self.assertLess(recent["minutes_ago"], 4.0)
+
+    def test_a_sweep_older_than_the_window_is_not_recent(self) -> None:
+        ids = self._init()
+        self._quote(ids["ValueOils"], utcnow_naive() - timedelta(minutes=30))
+
+        self.assertIsNone(self.app.refresh_recently_done(10))
+
+    def test_nothing_on_record_is_not_recent(self) -> None:
+        """'No age to report' must not read as 'zero minutes ago'.
+
+        Confusing the two would block the very first sweep of a new database,
+        which is the one refresh that certainly should happen.
+        """
+        self._init()
+
+        self.assertIsNone(self.app.refresh_recently_done(10))
+
+
 if __name__ == "__main__":
     unittest.main()

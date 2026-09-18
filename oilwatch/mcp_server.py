@@ -145,8 +145,17 @@ def time_series_chart() -> str:
     return _get_app().time_series_chart()
 
 
+#: How long a completed sweep is honoured before another one is started.
+#: A sweep is minutes of real browsers with CAPTCHA risk, and the likeliest way
+#: to start a second is a client whose per-call timeout expired mid-scrape and
+#: retried — mcporter's default is 60 s against a 1-3 minute sweep. Ten minutes
+#: is longer than any sweep and far shorter than a quote's one-day life, so it
+#: never costs a fresh answer.
+REFRESH_COOLDOWN_MINUTES = 10
+
+
 @mcp.tool(title="Refresh prices (slow)", annotations=_EXTERNAL_SLOW)
-def refresh_prices(postcode: str | None = None) -> list[dict[str, Any]]:
+def refresh_prices(postcode: str | None = None, force: bool = False) -> dict[str, Any]:
     """Scrape fresh quotes from all suppliers (slow: uses browser automation).
 
     Takes minutes and may fail per-supplier (CAPTCHA, blocked, site down);
@@ -156,8 +165,39 @@ def refresh_prices(postcode: str | None = None) -> list[dict[str, Any]]:
     ``login_not_confirmed`` (an authenticated portal did not sign in),
     ``captcha``, or ``site_error`` — so a failure is reportable without reading
     ``notes``. ``None`` means unclassified, not "no reason".
+
+    Returns an envelope rather than a bare list, because the likeliest way to
+    reach it twice is a client timeout mid-sweep followed by a retry. When a
+    sweep ran within ``cooldown_minutes``, nothing is scraped and ``cached`` is
+    true: ``results`` is then empty, and ``refreshed_at`` with ``minutes_ago``
+    date the prices already on record — read ``current_prices`` instead of
+    retrying. ``force=True`` sweeps regardless.
     """
-    return _get_app().quote_all(postcode=postcode or load_contact().postcode, prefer_browser=True)
+    app = _get_app()
+    if not force:
+        recent = app.refresh_recently_done(REFRESH_COOLDOWN_MINUTES)
+        if recent is not None:
+            return {
+                "cached": True,
+                "cooldown_minutes": REFRESH_COOLDOWN_MINUTES,
+                "refreshed_at": recent["refreshed_at"],
+                "minutes_ago": recent["minutes_ago"],
+                "results": [],
+                "note": (
+                    "No sweep was started: one ran "
+                    f"{recent['minutes_ago']} minutes ago. Read current_prices for "
+                    "the prices on record, or pass force=true for a fresh sweep."
+                ),
+            }
+
+    results = app.quote_all(postcode=postcode or load_contact().postcode, prefer_browser=True)
+    observed = [row["observed_at"] for row in results if row.get("observed_at")]
+    return {
+        "cached": False,
+        "cooldown_minutes": REFRESH_COOLDOWN_MINUTES,
+        "refreshed_at": max(observed) if observed else None,
+        "results": results,
+    }
 
 
 @mcp.tool(title="Update Brent crude", annotations=_EXTERNAL_FETCH)

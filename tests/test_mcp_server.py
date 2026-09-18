@@ -89,20 +89,28 @@ class ImportCostTests(unittest.TestCase):
 
 
 class DefaultPostcodeTests(unittest.TestCase):
-    def test_refresh_prices_defaults_to_the_configured_postcode(self) -> None:
+    def _app(self) -> MagicMock:
         app = MagicMock()
         app.quote_all.return_value = []
+        # No sweep on record, so the cooldown lets the scrape through: a bare
+        # MagicMock answers every question truthily, which would trip it.
+        app.refresh_recently_done.return_value = None
+        return app
+
+    def test_refresh_prices_defaults_to_the_configured_postcode(self) -> None:
+        app = self._app()
         with (
             patch("oilwatch.mcp_server.load_contact", return_value=Contact(postcode="ZZ9 9ZZ")),
             patch("oilwatch.mcp_server._get_app", return_value=app),
         ):
-            mcp_server.refresh_prices()
+            result = mcp_server.refresh_prices()
 
         self.assertEqual(app.quote_all.call_args.kwargs["postcode"], "ZZ9 9ZZ")
+        self.assertFalse(result["cached"])
+        self.assertEqual(result["results"], [])
 
     def test_an_explicit_postcode_is_used_as_given(self) -> None:
-        app = MagicMock()
-        app.quote_all.return_value = []
+        app = self._app()
         with (
             patch("oilwatch.mcp_server.load_contact", return_value=Contact(postcode="ZZ9 9ZZ")),
             patch("oilwatch.mcp_server._get_app", return_value=app),
@@ -110,6 +118,66 @@ class DefaultPostcodeTests(unittest.TestCase):
             mcp_server.refresh_prices("AB1 1AA")
 
         self.assertEqual(app.quote_all.call_args.kwargs["postcode"], "AB1 1AA")
+
+    def test_the_fresh_envelope_dates_itself_from_the_rows(self) -> None:
+        """refreshed_at is this sweep's own timestamp, not a second query."""
+        app = self._app()
+        app.quote_all.return_value = [
+            {"supplier_name": "A", "status": "ok", "observed_at": "2026-09-18T09:00:00"},
+            {"supplier_name": "B", "status": "error", "observed_at": "2026-09-18T09:04:00"},
+        ]
+        with (
+            patch("oilwatch.mcp_server.load_contact", return_value=Contact(postcode="ZZ9 9ZZ")),
+            patch("oilwatch.mcp_server._get_app", return_value=app),
+        ):
+            result = mcp_server.refresh_prices()
+
+        self.assertFalse(result["cached"])
+        self.assertEqual(result["refreshed_at"], "2026-09-18T09:04:00")
+        self.assertEqual(len(result["results"]), 2)
+
+
+class RefreshCooldownTests(unittest.TestCase):
+    """A sweep is minutes of real browsers, so a retry must not start another.
+
+    The likeliest cause of a second call is a client timeout mid-sweep — the
+    default per-call budget is 60 s against a 1-3 minute sweep — so the tool
+    refuses and points at the prices already on record instead.
+    """
+
+    def _app(self, recent: dict | None) -> MagicMock:
+        app = MagicMock()
+        app.quote_all.return_value = []
+        app.refresh_recently_done.return_value = recent
+        return app
+
+    def test_a_recent_sweep_is_not_repeated(self) -> None:
+        app = self._app({"refreshed_at": "2026-09-18T09:00:00", "minutes_ago": 2.5})
+        with (
+            patch("oilwatch.mcp_server.load_contact", return_value=Contact(postcode="ZZ9 9ZZ")),
+            patch("oilwatch.mcp_server._get_app", return_value=app),
+        ):
+            result = mcp_server.refresh_prices()
+
+        app.quote_all.assert_not_called()
+        self.assertTrue(result["cached"])
+        self.assertEqual(result["results"], [])
+        self.assertEqual(result["refreshed_at"], "2026-09-18T09:00:00")
+        self.assertEqual(result["minutes_ago"], 2.5)
+        self.assertIn("current_prices", result["note"])
+
+    def test_force_sweeps_anyway(self) -> None:
+        app = self._app({"refreshed_at": "2026-09-18T09:00:00", "minutes_ago": 2.5})
+        with (
+            patch("oilwatch.mcp_server.load_contact", return_value=Contact(postcode="ZZ9 9ZZ")),
+            patch("oilwatch.mcp_server._get_app", return_value=app),
+        ):
+            result = mcp_server.refresh_prices(force=True)
+
+        self.assertFalse(result["cached"])
+        self.assertTrue(app.quote_all.called)
+        # Skipped entirely rather than consulted and overruled.
+        app.refresh_recently_done.assert_not_called()
 
 
 class TransportSelectionTests(unittest.TestCase):

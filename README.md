@@ -207,7 +207,7 @@ Recording a purchase is a deliberate CLI act by the owner
 | `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase | None |
 | `chart` | Market summary chart; returns a file path | None |
 | `time_series_chart` | Per-supplier prices with Brent crude on a second axis; returns a path | None |
-| `refresh_prices` | Scrape fresh quotes from all suppliers — **slow** (minutes, browser automation) | `postcode: str` |
+| `refresh_prices` | Scrape fresh quotes from all suppliers — **slow** (minutes, browser automation). Returns `{cached, cooldown_minutes, refreshed_at, results}`; within the 10-minute cooldown it returns `cached: true` and starts nothing | `postcode: str`, `force: bool` |
 | `update_brent` | Fetch the latest Brent crude daily series from the EIA | None |
 
 Each tool carries MCP `ToolAnnotations`, so a client can distinguish a safe read

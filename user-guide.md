@@ -536,8 +536,15 @@ change, a shut depot. Partial results are normal and are not an error.
 - Call it when the quotes are stale — see below.
 - If the call does hit the 300 s timeout, do **not** assume the scrape failed:
   read `current_prices` and look at the `observed_at` dates to see what actually
-  landed, and only then decide whether to run it again. Optionally pass a
-  `postcode`; otherwise the configured delivery address is used.
+  landed. Optionally pass a `postcode`; otherwise the configured delivery address
+  is used.
+- **A repeat call within 10 minutes will not start a second sweep.** If one ran
+  that recently, the call returns `{"cached": true, "results": []}` with
+  `refreshed_at` and `minutes_ago` naming the sweep it reused — read
+  `current_prices` for the prices on record. This exists because the usual reason
+  to call twice is a client timeout mid-sweep (`mcporter`'s default per-call
+  budget is 60 s against a 1–3 minute sweep), and a second call would launch every
+  browser again. Pass `force=true` when a sweep really is wanted.
 
 ## Freshness: quotes are good for about a day
 

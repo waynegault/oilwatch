@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -265,6 +266,29 @@ class OilWatchApp:
             not_refreshed_suppliers=self._not_refreshed_suppliers(),
             window_days=self.settings.max_quote_age_days,
         )
+
+    def refresh_recently_done(self, minutes: int) -> dict[str, Any] | None:
+        """Whether a sweep ran within ``minutes``, and when.
+
+        Measured from the newest observation of *any* kind — "when did we last go
+        and look?" — so a caller can refuse to scrape again without keeping any
+        state of its own. Returns ``{refreshed_at, minutes_ago}``, or None when
+        nothing is on record, when the sweep is older than ``minutes``, or when
+        the stored timestamp cannot be parsed: "no age to report" and "zero
+        minutes ago" are not the same thing, and only the second should stop a
+        refresh.
+        """
+        newest = self.db.newest_observation()
+        if not newest:
+            return None
+        try:
+            observed = datetime.fromisoformat(newest)
+        except ValueError:
+            return None
+        age_minutes = (utcnow_naive() - observed).total_seconds() / 60
+        if age_minutes >= minutes:
+            return None
+        return {"refreshed_at": newest, "minutes_ago": round(age_minutes, 1)}
 
     def current_prices(self) -> dict[str, Any]:
         """The latest quote per supplier, with the scope it was read against.
