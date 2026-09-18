@@ -57,6 +57,19 @@ class ManualQuoteTests(unittest.TestCase):
                 self.assertIsNone(result.price_per_liter)
 
 class ContactDetailTests(unittest.TestCase):
+    def test_a_contact_only_connector_says_why_it_has_no_price(self) -> None:
+        """The reason is what tells a consumer a gap is expected, not a fault.
+
+        Both of these have no price page at all, so their contact details are the
+        answer. Brogan was the one that never said so, which made it the single
+        ``reason: null`` in the live output while its seven neighbours explained
+        themselves.
+        """
+        for connector_cls in (OilfastConnector, BroganFuelsConnector):
+            with self.subTest(connector=connector_cls.__name__):
+                result = connector_cls().quote(SUPPLIER, 1000, {})
+                self.assertEqual(result.reason, "no_quote_page")
+
     def test_oilfast_payload_carries_the_depot_email(self) -> None:
         payload = OilfastConnector().quote(SUPPLIER, 1000, {}).raw_payload
         self.assertEqual(payload["email"], "insch@oilfast.co.uk")

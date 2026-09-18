@@ -47,6 +47,10 @@ class BroganFuelsConnector(BaseConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="manual_action_required",
+            # There is no price page to fetch, so this is the answer rather than a
+            # failed scrape — the same reason the other contact-only connectors
+            # carry, and what keeps a gap readable as expected in a report.
+            reason="no_quote_page",
             source="brogan_fuels_manual",
             notes=self._build_quote_instructions(quantity_liters, postcode),
             raw_payload={
