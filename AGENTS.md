@@ -86,11 +86,13 @@ Every row that is not `ok` carries a machine-readable `reason` beside the prose 
 ## Who is being asked, and where
 
 The supplier register is **`config/suppliers.json`**, which is version controlled
-— unlike `config/settings.json`, which holds the owner's address, postcode and
-credentials. The register holds the suppliers, the domains never to treat as one,
-and each supplier's `quote_request` saying whether it is asked by form or by
-phone. So it, and not the code, is the list of suppliers this install chases: read
-it before saying who is or is not being asked.
+— unlike `config/settings.json`, which is gitignored. That file holds the owner's
+personal values and operational settings (address, postcode, credentials, the
+freshness window, the order quantity) but no supplier policy. The register holds
+the suppliers, the domains never to treat as one, and each supplier's
+`quote_request` saying whether it is asked by form or by phone. So it, and not the
+code, is the list of suppliers this install chases: read it before saying who is
+or is not being asked.
 
 A row's **`order_page`** is where a quote is actually requested; its `website` is
 often only a marketing page. Priced rows also carry **`kind`**

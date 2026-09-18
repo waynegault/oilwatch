@@ -57,7 +57,9 @@ class Settings:
     #: Domains never to treat as a supplier. Read from the *supplier register*
     #: rather than settings.json: it is policy about suppliers, and it is
     #: version controlled, where settings.json is not (that file holds the
-    #: owner's address, postcode and credentials).
+    #: owner's personal values and operational settings — address, postcode,
+    #: credentials, the freshness window, the order quantity — but no supplier
+    #: policy).
     excluded_domains: list[str] = field(default_factory=list)
     # Supplier keys the CLI signs in to, kept here rather than as literals in the
     # CLI.

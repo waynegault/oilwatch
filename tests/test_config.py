@@ -55,8 +55,10 @@ class ConfigTests(unittest.TestCase):
         """Supplier policy is version controlled; settings.json is not.
 
         excluded_domains decides which companies count as suppliers, so it lives
-        with the suppliers in the tracked register. settings.json holds the
-        owner's address, postcode and credentials, and is gitignored.
+        with the suppliers in the tracked register. settings.json is gitignored
+        and holds the owner's personal values and operational settings — address,
+        postcode, credentials, the freshness window, the order quantity — but no
+        supplier policy, which is the distinction this checks.
         """
         self._write_settings()
         self._write_register(excluded=["example.com", "yell.com"])

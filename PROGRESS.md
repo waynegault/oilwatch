@@ -168,8 +168,9 @@ suppliers whose only priced row came from the spreadsheet import won on
   `order_page` in the register, not `no_quote_page`. The register itself is
   `config/suppliers.json`: the suppliers it knows, the domains never to treat as
   one, and each supplier's `quote_request` saying whether it is asked by form or
-  by phone. It is version controlled; `config/settings.json` holds the owner's
-  address, postcode and credentials and is not.
+  by phone. It is version controlled; `config/settings.json` is not, and holds
+  the owner's personal values and operational settings — address, postcode,
+  credentials, the freshness window, the order quantity — but no supplier policy.
 - **Rows say what they are and how to act on them (2026-09-18).** Each priced row
   now carries `kind` (`supplier`/`benchmark` — Fueltool's record sets it, and the
   new column defaults to `supplier` for every other row), `order_channel` (`web`
