@@ -76,7 +76,7 @@ class FuelsoftConnector(SyncBrowserConnector):
             if "Quotes/deliveryschedules/quote" in resp.url:
                 try:
                     captured["body"] = resp.json()
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:  # noqa: BLE001 - the body may be text, not JSON
                     log.debug("quote response was not JSON, using text: %s", exc)
                     captured["body"] = resp.text()
 
@@ -115,13 +115,13 @@ class FuelsoftConnector(SyncBrowserConnector):
                     page.click(selector, timeout=3000)
                     page.wait_for_timeout(1000)
                     return
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
                 log.debug("cookie selector %r not clickable: %s", selector, exc)
                 continue
         try:
             page.keyboard.press("Escape")
             page.wait_for_timeout(500)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             log.debug("cookie dialog escape failed: %s", exc)
 
     def _fill_form(self, page, postcode: str, address_line1: str, email: str, quantity_liters: int, product_value: str) -> None:
@@ -130,7 +130,7 @@ class FuelsoftConnector(SyncBrowserConnector):
             if page.query_selector("#btnEnterAddressManually"):
                 page.click("#btnEnterAddressManually", timeout=5000)
                 page.wait_for_timeout(1000)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             log.debug("could not reveal manual address fields: %s", exc)
 
         for selector, value in (("#txtPostcode", postcode), ("#txtDelAdd1", address_line1), ("#txtEmail", email)):
@@ -141,7 +141,7 @@ class FuelsoftConnector(SyncBrowserConnector):
                 if field:
                     field.fill(value, timeout=5000)
                     page.wait_for_timeout(500)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
                 log.debug("could not fill %s: %s", selector, exc)
                 continue
 
@@ -150,7 +150,7 @@ class FuelsoftConnector(SyncBrowserConnector):
         for section_id in HIDDEN_SECTIONS:
             try:
                 page.evaluate(f"document.getElementById('{section_id}').style.display='block'")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
                 log.debug("could not reveal section %s: %s", section_id, exc)
         page.wait_for_timeout(300)
 
@@ -158,32 +158,32 @@ class FuelsoftConnector(SyncBrowserConnector):
             if page.query_selector("#btnGetProducts"):
                 page.click("#btnGetProducts", timeout=5000)
                 page.wait_for_timeout(5000)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             log.debug("get-products step failed: %s", exc)
 
         try:
             page.select_option("#mainContent_lstProduct", product_value, timeout=5000)
             page.wait_for_timeout(1200)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             log.debug("could not select product %s: %s", product_value, exc)
 
         try:
             page.fill("#txtQty", str(quantity_liters), timeout=5000)
             page.wait_for_timeout(500)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             log.debug("could not fill quantity: %s", exc)
 
         try:
             page.select_option("#mainContent_lstDeliveryOption", index=1, timeout=5000)
             page.wait_for_timeout(1000)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             log.debug("could not select delivery option: %s", exc)
 
     @staticmethod
     def _get_quote(page) -> None:
         try:
             page.click("#btnGetQuote", timeout=5000)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             log.debug("could not click Get Quote: %s", exc)
 
     @staticmethod

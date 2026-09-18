@@ -179,7 +179,7 @@ class AccountRegistrar:
                     await button.click(timeout=3000)
                     await page.wait_for_timeout(1000)
                     return
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
                 log.debug("cookie selector %r not clickable: %s", selector, exc)
 
         # Try to close cookie banner
@@ -188,7 +188,7 @@ class AccountRegistrar:
             if close_btn:
                 await close_btn.click(timeout=3000)
                 await page.wait_for_timeout(1000)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             log.debug("cookie close button not clickable: %s", exc)
 
     async def _fill_fields(self, page: PageLike, fields: dict[str, str]) -> int:
@@ -206,7 +206,7 @@ class AccountRegistrar:
                 if field:
                     await field.fill(value)
                     filled += 1
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
                 log.debug("could not fill %s: %s", selector, exc)
         return filled
 
@@ -278,7 +278,7 @@ class AccountRegistrar:
             await self._fill_registration_fields(page, form, name, email, password)
             result["status"], result["message"] = await self._submit(page, form)
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - any failure still stores the password and reports manual_review
             log.debug("registration on %s raised: %s", form.name, exc)
             result["status"] = "manual_review"
             # No password here: this message is printed and may be logged, and
@@ -308,7 +308,7 @@ class AccountRegistrar:
         try:
             await link.click()
             await page.wait_for_timeout(2000)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             log.debug("register link click failed: %s", exc)
 
     async def _fill_registration_fields(
@@ -332,7 +332,7 @@ class AccountRegistrar:
         try:
             await button.click(timeout=5000)
             await page.wait_for_timeout(5000)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a browser control that is absent is the normal case
             # A successful click often navigates away, which surfaces as an error
             # here; log it so a real failure stays distinguishable.
             log.debug("register click raised (likely navigation): %s", exc)

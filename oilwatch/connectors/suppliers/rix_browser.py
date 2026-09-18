@@ -86,7 +86,7 @@ class RixBrowserConnector(SyncBrowserConnector):
                 r"() => /PPL\s*\(ex\.?\s*VAT\)/i.test(document.body.innerText)",
                 timeout=timeout_ms,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - the caller parses the page after this wait
             log.debug("Rix results did not show a PPL within %d ms: %s", timeout_ms, exc)
 
     @staticmethod

@@ -137,7 +137,7 @@ class DiscoveryService:
             candidate.email = self._extract_email(str(soup))
             candidate.phone = self._extract_phone(page_text)
             candidate.address = self._extract_address(page_text)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - enrichment is best-effort; the note says what was lost
             candidate.notes = f"Enrichment limited: {exc}"
 
         geocode = self.geo.geocode_first(

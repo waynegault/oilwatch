@@ -207,7 +207,7 @@ def submit_request(
                 el.clear()
                 el.send_keys(value)
             time.sleep(0.3)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a field that will not take is reported as an error result
             return {"supplier": supplier_key, "status": "error", "message": f"field {semantic} ({field_name}): {exc}"}
 
     # submit
@@ -222,7 +222,7 @@ def submit_request(
             timeout_s=8.0,
             what="the enquiry form to be accepted",
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001 - a submit that raises is reported as an error result
         return {"supplier": supplier_key, "status": "error", "message": f"submit: {exc}"}
 
     return {"supplier": supplier_key, "status": "submitted", "message": "Form submitted; awaiting email reply."}
