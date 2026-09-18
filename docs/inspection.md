@@ -24,7 +24,8 @@ In scope for every audit pass:
 - `*.bat` launchers — `oilwatch_env.bat`, `start_mcp_server.bat`,
   `start_scheduler.bat`, `monitor_email.bat`
 - `pyproject.toml` — dependencies, coverage floor, console scripts
-- `README.md`, `user-guide.md`, `docs/inspection.md`, `PROGRESS.md`, `ROADMAP.md`
+- `README.md`, `AGENTS.md`, `user-guide.md`, `docs/inspection.md`, `PROGRESS.md`,
+  `ROADMAP.md`
 - `data/oilwatch.sqlite` and `data/oilwatch.log` — generated, gitignored: read
   for content, never commit
 - `.gitignore`
@@ -203,7 +204,7 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | # | Check | Command / Action | Expected |
 |---|-------|------------------|----------|
 | 10.1 | 🔧 The suite is offline | `grep -rn "requests.get\|httpx.get" tests/` | HTTP is mocked and SQLite is a temp database — no network, no supplier site contacted |
-| 10.2 | 🔍 Coverage at or above the floor | `.venv\Scripts\python.exe -m coverage report -m` | Total ≥ 94 (measured 95.5). A line ending in an ellipsis is excluded as a declaration, not behaviour (§15.17) |
+| 10.2 | 🔍 Coverage at or above the floor | `.venv\Scripts\python.exe -m coverage report -m` | Total ≥ 94 (measured 96.0 on 2026-09-18; it was 95.5 when this item was written). A line ending in an ellipsis is excluded as a declaration, not behaviour (§15.17) |
 | 10.3 | 🔧 Tests pin contracts, not coverage | Read the tests added by a change | Each pins a behaviour a change could break — not a restatement of a one-line delegation |
 | 10.4 | 🔧 A fake matches the real library | Read the fake for a changed connector | It accepts the real signature and models the real value (a control's pre-filled value, the DOM set actually used) — a fake that returns `None` for every lookup makes a path silently untested. Where the faked type is a third party's, the protocol in `oilwatch/connectors/protocols.py` — or in `geo.py`/`discovery.py` — is what `pyright tests` holds the fake to (§15.16) |
 | 10.5 | 🔧 A test that pinned wrong behaviour is inverted | Search the suite for the old assertion | When a defect is fixed, the test asserting the defect is rewritten, not deleted |
