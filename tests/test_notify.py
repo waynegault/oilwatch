@@ -92,13 +92,23 @@ class ServiceIntegrationTests(unittest.TestCase):
                     {"id": 2, "name": "Bad", "connector_type": "manual", "connector_config": {}},
                 ],
                 record_quote=lambda payload: None,
+                # The sweep marker quote_all writes and clears. Stubbed rather
+                # than omitted: a sweep that cannot mark itself is exactly the
+                # state this fake should not be able to hide.
+                start_sweep=lambda started_at, started_by: None,
+                finish_sweep=lambda started_at: None,
             ),
             settings=SimpleNamespace(quote_quantity_liters=1000, currency="GBP", quote_max_workers=4),
         )
         app.quotes = SimpleNamespace(quote_supplier=self._quote)
-        # One cast, at the boundary: the namespace above stands in for an app,
-        # and this is the one place the real method is called with it.
-        app.quote_all = lambda **kwargs: OilWatchApp.quote_all(cast(OilWatchApp, app), **kwargs)
+        # One cast, at the boundary: the namespace above stands in for an app.
+        # Both methods are bound, because quote_all now marks the sweep and then
+        # delegates the work — the marker is part of what is under test here.
+        bound = cast(OilWatchApp, app)
+        app._quote_every_supplier = lambda postcode, prefer_browser, max_workers: (
+            OilWatchApp._quote_every_supplier(bound, postcode, prefer_browser, max_workers)
+        )
+        app.quote_all = lambda **kwargs: OilWatchApp.quote_all(bound, **kwargs)
         return app
 
     @staticmethod

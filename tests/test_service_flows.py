@@ -14,6 +14,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from oilwatch.models import QuoteResult, SupplierCandidate, utcnow_naive
+from oilwatch.service import SWEEP_STALE_AFTER_MINUTES
 from tests.app_fixture import OVERRIDES, AppTestCase
 
 
@@ -561,6 +562,100 @@ class RefreshCooldownStateTests(AppTestCase):
         self._init()
 
         self.assertIsNone(self.app.refresh_recently_done(10))
+
+
+class SweepMarkerTests(AppTestCase):
+    """Still running, or dead? — the question a timed-out caller cannot answer.
+
+    A sweep's quote rows appear only as each supplier finishes, so a sweep thirty
+    seconds in has left nothing on record. The marker answers it, and the three
+    states have to stay distinct: running (block a second sweep), finished, and
+    "started but never reported back" (which is a crash, not progress).
+    """
+
+    overrides = None
+
+    def test_no_sweep_at_all_is_not_in_progress(self) -> None:
+        self.app.db.init_schema()
+        state = self.app.sweep_state()
+        self.assertFalse(state["in_progress"])
+        self.assertFalse(state["stale"])
+        self.assertIsNone(state["started_at"])
+
+    def test_a_fresh_marker_reads_as_in_progress(self) -> None:
+        self.app.db.init_schema()
+        started = utcnow_naive().isoformat()
+        self.app.db.start_sweep(started, "mcp")
+
+        state = self.app.sweep_state()
+
+        self.assertTrue(state["in_progress"])
+        self.assertFalse(state["stale"], "a running sweep is not a dead one")
+        self.assertEqual(state["started_by"], "mcp")
+        self.assertLess(state["seconds_ago"], 5)
+
+    def test_a_finished_marker_stops_reading_as_in_progress(self) -> None:
+        self.app.db.init_schema()
+        started = utcnow_naive().isoformat()
+        self.app.db.start_sweep(started, "cli")
+        self.app.db.finish_sweep(started)
+
+        state = self.app.sweep_state()
+
+        self.assertFalse(state["in_progress"])
+        self.assertFalse(state["stale"])
+        self.assertEqual(state["started_at"], started)
+        self.assertIsNotNone(state["finished_at"])
+
+    def test_a_marker_that_never_finished_reads_as_stale_not_running(self) -> None:
+        """A crashed sweep must not look like progress for the rest of the day.
+
+        Ten minutes is past any sweep, so a marker older than that is a run that
+        died — reporting it as still running would be a lie the next caller acts
+        on by waiting.
+        """
+        self.app.db.init_schema()
+        old = utcnow_naive() - timedelta(minutes=SWEEP_STALE_AFTER_MINUTES + 1)
+        self.app.db.start_sweep(old.isoformat(), "scheduler")
+
+        state = self.app.sweep_state()
+
+        self.assertFalse(state["in_progress"])
+        self.assertTrue(state["stale"])
+        self.assertGreater(state["seconds_ago"], SWEEP_STALE_AFTER_MINUTES * 60)
+
+    def test_a_marker_from_the_future_reports_as_just_now(self) -> None:
+        """A clock that moves can leave a marker dated ahead of now.
+
+        "started -3700 seconds ago" is worse than useless in a report, and the
+        answer to the question being asked — is it running? — is unaffected.
+        """
+        self.app.db.init_schema()
+        self.app.db.start_sweep(
+            (utcnow_naive() + timedelta(minutes=5)).isoformat(), "cli"
+        )
+
+        state = self.app.sweep_state()
+
+        self.assertEqual(state["seconds_ago"], 0)
+        self.assertTrue(state["in_progress"])
+
+    def test_a_sweep_marks_itself_and_clears_the_marker(self) -> None:
+        """The marker is written by the sweep itself, not by its callers.
+
+        Every entry point — MCP, CLI, scheduler — goes through ``quote_all``, so
+        the marker cannot be sidestepped by a path that forgets to set it.
+        """
+        self._init()
+        # No suppliers are quotable here, which is the point: the marker has to be
+        # cleared whether the sweep succeeds, fails per supplier, or raises.
+        self.app.quote_all(started_by="cli", max_workers=1)
+
+        state = self.app.sweep_state()
+
+        self.assertFalse(state["in_progress"])
+        self.assertEqual(state["started_by"], "cli")
+        self.assertIsNotNone(state["finished_at"], "the marker was left standing")
 
 
 class SupplierOutcomeTests(AppTestCase):

@@ -49,6 +49,15 @@ CREATE TABLE IF NOT EXISTS quotes (
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 
+-- One row per price sweep: written when it starts, finished_at filled in when it
+-- reports back. A row with no finished_at that is older than any sweep can take
+-- is a run that died, and saying so beats leaving a caller to guess.
+CREATE TABLE IF NOT EXISTS sweeps (
+    started_at TEXT PRIMARY KEY,
+    finished_at TEXT,
+    started_by TEXT
+);
+
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     supplier_id INTEGER NOT NULL,
@@ -330,6 +339,36 @@ class Database:
                 """
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def start_sweep(self, started_at: str, started_by: str) -> None:
+        """Mark a price sweep as started, so another caller can see it running."""
+        with closing(self.connect()) as conn, conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO sweeps (started_at, finished_at, started_by) "
+                "VALUES (?, NULL, ?)",
+                (started_at, started_by),
+            )
+
+    def finish_sweep(self, started_at: str) -> None:
+        """Mark the sweep that started at this instant as finished.
+
+        Keyed on the start it recorded rather than on "the newest", so a sweep
+        that overlapped another still clears its own row.
+        """
+        with closing(self.connect()) as conn, conn:
+            conn.execute(
+                "UPDATE sweeps SET finished_at = ? WHERE started_at = ?",
+                (utcnow_naive().isoformat(), started_at),
+            )
+
+    def latest_sweep(self) -> dict[str, Any] | None:
+        """The newest sweep row, or None when no sweep has ever been recorded."""
+        with closing(self.connect()) as conn:
+            row = conn.execute(
+                "SELECT started_at, finished_at, started_by FROM sweeps "
+                "ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+        return dict(row) if row else None
 
     def newest_observation(self) -> str | None:
         """The newest ``observed_at`` in the quotes table, or None when empty.

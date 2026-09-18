@@ -93,8 +93,10 @@ class DefaultPostcodeTests(unittest.TestCase):
         app = MagicMock()
         app.quote_all.return_value = []
         # No sweep on record, so the cooldown lets the scrape through: a bare
-        # MagicMock answers every question truthily, which would trip it.
+        # MagicMock answers every question truthily, which would trip it. The
+        # same is true of the sweep marker, which is checked first.
         app.refresh_recently_done.return_value = None
+        app.sweep_state.return_value = {"in_progress": False, "stale": False}
         return app
 
     def test_refresh_prices_defaults_to_the_configured_postcode(self) -> None:
@@ -145,11 +147,53 @@ class RefreshCooldownTests(unittest.TestCase):
     refuses and points at the prices already on record instead.
     """
 
-    def _app(self, recent: dict | None) -> MagicMock:
+    def _app(self, recent: dict | None, sweep: dict | None = None) -> MagicMock:
         app = MagicMock()
         app.quote_all.return_value = []
         app.refresh_recently_done.return_value = recent
+        # Explicit rather than left to the mock: an unset MagicMock here is
+        # truthy, so every test would take the in-progress branch.
+        app.sweep_state.return_value = sweep or {
+            "in_progress": False,
+            "stale": False,
+            "started_at": None,
+            "started_by": None,
+            "seconds_ago": None,
+            "finished_at": None,
+        }
         return app
+
+    def test_a_sweep_already_running_is_not_started_again(self) -> None:
+        """The case the cooldown cannot see.
+
+        A running sweep's quote rows appear only as each supplier finishes, so
+        thirty seconds in there is nothing on record for the cooldown to measure.
+        Without this, a client that timed out at 60 s would relaunch every browser.
+        """
+        app = self._app(
+            recent=None,  # nothing on record yet, as mid-sweep
+            sweep={
+                "in_progress": True,
+                "stale": False,
+                "started_at": "2026-09-18T09:00:00",
+                "started_by": "cli",
+                "seconds_ago": 42,
+                "finished_at": None,
+            },
+        )
+        with (
+            patch("oilwatch.mcp_server.load_contact", return_value=Contact(postcode="ZZ9 9ZZ")),
+            patch("oilwatch.mcp_server._get_app", return_value=app),
+        ):
+            result = mcp_server.refresh_prices()
+
+        app.quote_all.assert_not_called()
+        app.refresh_recently_done.assert_not_called()
+        self.assertTrue(result["in_progress"])
+        self.assertFalse(result["cached"])
+        self.assertEqual(result["started_by"], "cli")
+        self.assertEqual(result["seconds_ago"], 42)
+        self.assertIn("already running", result["note"])
 
     def test_a_recent_sweep_is_not_repeated(self) -> None:
         app = self._app({"refreshed_at": "2026-09-18T09:00:00", "minutes_ago": 2.5})

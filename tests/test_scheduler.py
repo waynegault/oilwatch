@@ -20,6 +20,7 @@ class _StubApp:
         self.calls: list[str] = []
         self.postcodes: list[str | None] = []
         self.browser_flags: list[bool] = []
+        self.started_by: list[str] = []
         self.init_called = False
         self.settings = SimpleNamespace(
             scheduler=SimpleNamespace(
@@ -37,10 +38,11 @@ class _StubApp:
         if name in self.fail:
             raise RuntimeError(f"{name} exploded")
 
-    def quote_all(self, postcode=None, prefer_browser=False):
+    def quote_all(self, postcode=None, prefer_browser=False, started_by="cli"):
         self._record("quote_all")
         self.postcodes.append(postcode)
         self.browser_flags.append(prefer_browser)
+        self.started_by.append(started_by)
         return []
 
     def update_brent(self):
@@ -114,6 +116,9 @@ class RefreshChainTests(unittest.TestCase):
         self.assertEqual(
             app.calls, ["quote_all", "update_brent", "chart", "time_series_chart"]
         )
+        # And the sweep says who started it, so the marker another caller reads
+        # distinguishes a scheduled run from the owner's own.
+        self.assertEqual(app.started_by, ["scheduler"])
 
     def test_postcode_is_passed_through_to_quote_collection(self) -> None:
         scheduler, app = self._scheduler(postcode="ZZ99 9ZZ")

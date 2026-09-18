@@ -36,7 +36,10 @@ deliberately: `quote-all` and `refresh_prices` drive real browsers,
   failure.
 - **Never loop `refresh_prices`.** It takes 1–3 minutes. If it times out, read
   `current_prices` and check `observed_at` instead of re-running, because a re-run
-  launches browsers again.
+  launches browsers again. Its `refresh` block says whether a sweep is **still
+  running** (`in_progress`, with `started_by` and `seconds_ago`), has finished, or
+  started and never reported back (`stale`) — so you never have to guess, and a
+  `refresh_prices` while one is running starts nothing.
 - **Always give the ordering link, the discount code, the `observed_at` date and
   the basis** (£/litre inc. 5% VAT, 1000 L) next to a price. Prefer a row's
   `order_page` when it carries one; `website` is often only a marketing page.

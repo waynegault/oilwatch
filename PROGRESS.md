@@ -25,7 +25,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 15 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 9 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 664, all passing offline |
+| Tests | 671, all passing offline |
 | Database | 17 active suppliers (28 including retired), 602 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -98,7 +98,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 664 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 671 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -179,6 +179,21 @@ suppliers whose only priced row came from the spreadsheet import won on
   winner carries the same three. This is the half of Hal's §2.3 ask that mattered
   most: "Fueltool is a benchmark, never the winner" and "give the ordering URL"
   were rules enforced by reading prose and remembering, and are now fields.
+- **A sweep says whether it is still running (2026-09-18).** The part of Hal's
+  §2.4 ask that the cooldown did not cover: after a client's own call times out,
+  it could not tell *still running* from *died*. A sweep now marks itself in a
+  `sweeps` table before the first browser opens and clears the mark however it
+  ends, and `current_prices` / `status` carry a `refresh` block —
+  `in_progress` with `started_by` and `seconds_ago`, or `stale` when a mark
+  outlived any sweep (10 minutes) and the run never reported back.
+  `refresh_prices` checks it *before* the cooldown and starts nothing when one is
+  running, which closes a real hole: a running sweep's own rows appear only as
+  each supplier finishes, so thirty seconds in the cooldown had nothing to
+  measure and a retry would have relaunched every browser. What is still not
+  built is the job model Hal asked for — no `background=true`, no
+  `refresh_status(job_id)`, because a stdio server spawned per session has no
+  process to hold a job; that needs a detached worker with its own stale-run
+  handling, and is recorded here as open rather than half-done.
 - **On demand, not on a timer (changed 2026-09-15).** Prices are refreshed when
   someone asks for them — `oilwatch quote-all --browser`, `refresh_prices` over
   MCP, or an agent turn — rather than on a schedule. The scheduler's per-user

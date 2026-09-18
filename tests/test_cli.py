@@ -132,7 +132,9 @@ class DispatchTests(unittest.TestCase):
 
     def test_quote_all_forwards_the_postcode_and_the_browser_flag(self) -> None:
         app, _ = self._run(["quote-all", "--postcode", "AB21 0YA", "--browser"])
-        app.quote_all.assert_called_once_with(postcode="AB21 0YA", prefer_browser=True)
+        app.quote_all.assert_called_once_with(
+            postcode="AB21 0YA", prefer_browser=True, started_by="cli"
+        )
 
     def test_record_purchase_forwards_the_price_and_the_code(self) -> None:
         app, _ = self._run(

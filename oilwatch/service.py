@@ -22,6 +22,12 @@ from oilwatch.quotes import QuoteService
 
 log = get_logger("service")
 
+#: How long a sweep marker stands before it is read as a run that died rather
+#: than one in progress. A sweep takes 1-3 minutes; ten is comfortably past any
+#: of them, and matches the tool's own cooldown, so a marker that outlives this
+#: is a crash rather than a slow supplier.
+SWEEP_STALE_AFTER_MINUTES = 10
+
 
 class OilWatchApp:
     def __init__(self, root: Path | None = None) -> None:
@@ -92,6 +98,28 @@ class OilWatchApp:
         postcode: str | None = None,
         prefer_browser: bool = False,
         max_workers: int | None = None,
+        started_by: str = "cli",
+    ) -> list[dict[str, Any]]:
+        """Quote every active supplier, with the sweep marked while it runs.
+
+        The marker is written before the first browser opens and cleared however
+        the sweep ends, including on a raise. A caller whose own request timed
+        out reads it to tell "still running" from "died", which nothing else on
+        record can answer: quote rows appear only as each supplier finishes, so
+        a sweep thirty seconds in has left no trace at all yet.
+        """
+        sweep_started_at = utcnow_naive().isoformat()
+        self.db.start_sweep(sweep_started_at, started_by)
+        try:
+            return self._quote_every_supplier(postcode, prefer_browser, max_workers)
+        finally:
+            self.db.finish_sweep(sweep_started_at)
+
+    def _quote_every_supplier(
+        self,
+        postcode: str | None,
+        prefer_browser: bool,
+        max_workers: int | None,
     ) -> list[dict[str, Any]]:
         self.db.init_schema()
         suppliers = self.db.list_suppliers(include_inactive=False)
@@ -384,6 +412,43 @@ class OilWatchApp:
                 no_quote.append(entry)
         return no_quote, failed
 
+    def sweep_state(self) -> dict[str, Any]:
+        """Whether a price sweep is running, and how the last one ended.
+
+        This answers the one question a caller cannot answer for itself after its
+        own request timed out: still running, or dead? A marker is written when a
+        sweep starts and cleared when it finishes, so a marker still standing
+        after longer than any sweep can take is not "in progress" — it is a run
+        that never reported back, and saying so is the honest answer rather than
+        reporting the last price as if it were being refreshed.
+        """
+        row = self.db.latest_sweep()
+        state: dict[str, Any] = {
+            "in_progress": False,
+            "stale": False,
+            "started_at": None,
+            "started_by": None,
+            "seconds_ago": None,
+            "finished_at": None,
+        }
+        if row is None:
+            return state
+
+        # Clamped at zero: a marker can appear to be in the future after the
+        # clock moves (a time correction, or the hour a DST change repeats), and
+        # "started -3700 seconds ago" is worse than saying "just now".
+        age = max(0.0, (utcnow_naive() - datetime.fromisoformat(row["started_at"])).total_seconds())
+        finished = row["finished_at"]
+        stale = finished is None and age > SWEEP_STALE_AFTER_MINUTES * 60
+        return {
+            "in_progress": finished is None and not stale,
+            "stale": stale,
+            "started_at": row["started_at"],
+            "started_by": row["started_by"],
+            "seconds_ago": int(age),
+            "finished_at": finished,
+        }
+
     def refresh_recently_done(self, minutes: int) -> dict[str, Any] | None:
         """Whether a sweep ran within ``minutes``, and when.
 
@@ -430,6 +495,10 @@ class OilWatchApp:
             "excluded_suppliers": self._excluded_suppliers(),
             "not_refreshed_suppliers": self._not_refreshed_suppliers(),
             "never_quoted": self._never_quoted(),
+            # Whether a sweep is running right now, so a caller whose own request
+            # timed out can tell "still going" from "died" without starting
+            # another one to find out.
+            "refresh": self.sweep_state(),
             # The two ways a supplier can be missing from `quotes` because the ask
             # itself came back empty. Kept apart from the lists above, which name
             # prices that a window or a failed attempt held back: these name what
@@ -460,6 +529,9 @@ class OilWatchApp:
             # between an expected gap and a fault worth looking at.
             "no_quote_suppliers": no_quote,
             "failed_suppliers": failed,
+            # The same marker as `current_prices` carries: `status` is the other
+            # call an agent makes when it wants to know what is going on.
+            "refresh": self.sweep_state(),
         }
 
     def monitor_email(self) -> dict[str, Any]:

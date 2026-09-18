@@ -111,6 +111,12 @@ def current_prices() -> dict[str, Any]:
     ``order_channel``, ``order_page`` and ``contact``, because those are the rows
     a reader has to *ask*, and a reason without a way to act on it is half an
     answer.
+
+    ``refresh`` says whether a sweep is running right now: ``in_progress`` with
+    ``started_by`` and ``seconds_ago``, or ``stale`` when one started and never
+    reported back. That is how a caller whose own ``refresh_prices`` timed out
+    learns whether to wait or to give up, without starting a second sweep to find
+    out.
     """
     return _get_app().current_prices()
 
@@ -192,10 +198,36 @@ def refresh_prices(postcode: str | None = None, force: bool = False) -> dict[str
     sweep ran within ``cooldown_minutes``, nothing is scraped and ``cached`` is
     true: ``results`` is then empty, and ``refreshed_at`` with ``minutes_ago``
     date the prices already on record — read ``current_prices`` instead of
-    retrying. ``force=True`` sweeps regardless.
+    retrying. A sweep that is *already running* is reported first, before the
+    cooldown is consulted: ``in_progress`` comes back true with ``started_at``,
+    ``started_by`` and ``seconds_ago``, because a running sweep's own rows appear
+    only as each supplier finishes, so thirty seconds in it has left nothing for
+    the cooldown to find. That is what stops a timed-out retry from opening every
+    browser a second time. ``force=True`` sweeps regardless.
     """
     app = _get_app()
     if not force:
+        # A sweep already running is the more specific answer, and checked first:
+        # its own rows land only as each supplier finishes, so the cooldown below
+        # cannot see it yet — this is what stops a timed-out client's retry
+        # launching every browser a second time.
+        running = app.sweep_state()
+        if running["in_progress"]:
+            return {
+                "cached": False,
+                "in_progress": True,
+                "started_at": running["started_at"],
+                "started_by": running["started_by"],
+                "seconds_ago": running["seconds_ago"],
+                "results": [],
+                "note": (
+                    f"A sweep is already running (started {running['seconds_ago']}s ago "
+                    f"by {running['started_by']}); nothing new was started. Read "
+                    "current_prices for what has landed so far, or pass force=true to "
+                    "sweep anyway."
+                ),
+            }
+
         recent = app.refresh_recently_done(REFRESH_COOLDOWN_MINUTES)
         if recent is not None:
             return {
@@ -211,7 +243,11 @@ def refresh_prices(postcode: str | None = None, force: bool = False) -> dict[str
                 ),
             }
 
-    results = app.quote_all(postcode=postcode or load_contact().postcode, prefer_browser=True)
+    results = app.quote_all(
+        postcode=postcode or load_contact().postcode,
+        prefer_browser=True,
+        started_by="mcp",
+    )
     observed = [row["observed_at"] for row in results if row.get("observed_at")]
     return {
         "cached": False,

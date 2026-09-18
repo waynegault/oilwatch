@@ -562,8 +562,15 @@ change, a shut depot. Partial results are normal and are not an error.
 - Call it when the quotes are stale — see below.
 - If the call does hit the 300 s timeout, do **not** assume the scrape failed:
   read `current_prices` and look at the `observed_at` dates to see what actually
-  landed. Optionally pass a `postcode`; otherwise the configured delivery address
-  is used.
+  landed. Its `refresh` block answers the question you were about to re-run the
+  tool to ask — `in_progress: true` with `started_by` and `seconds_ago` means it
+  is still going; `stale: true` means it started and never reported back, which is
+  a crash rather than progress. Optionally pass a `postcode`; otherwise the
+  configured delivery address is used.
+- **Calling again while one is running starts nothing.** The tool reports
+  `in_progress` and returns, which matters because a running sweep's own rows
+  appear only as each supplier finishes — so thirty seconds in, the cooldown below
+  has nothing to measure and would otherwise let a retry relaunch every browser.
 - **A repeat call within 10 minutes will not start a second sweep.** If one ran
   that recently, the call returns `{"cached": true, "results": []}` with
   `refreshed_at` and `minutes_ago` naming the sweep it reused — read

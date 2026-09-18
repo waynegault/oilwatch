@@ -44,7 +44,7 @@ def _cmd_quote(app: OilWatchApp, args: argparse.Namespace) -> None:
 
 
 def _cmd_quote_all(app: OilWatchApp, args: argparse.Namespace) -> None:
-    _print(app.quote_all(postcode=args.postcode, prefer_browser=args.browser))
+    _print(app.quote_all(postcode=args.postcode, prefer_browser=args.browser, started_by="cli"))
 
 
 def _cmd_cheapest(app: OilWatchApp, args: argparse.Namespace) -> None:
