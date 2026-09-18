@@ -84,18 +84,21 @@ def list_suppliers() -> list[dict[str, Any]]:
 
 
 @mcp.tool(title="Current prices", annotations=_READ_ONLY)
-def current_prices() -> list[dict[str, Any]]:
+def current_prices() -> dict[str, Any]:
     """Return the latest recorded price for each supplier (£/L inc. VAT).
 
-    Suppliers with no quote inside the configured ``max_quote_age_days`` window
-    are omitted, so historical spreadsheet rows cannot masquerade as today's
-    prices. ``cheapest`` and ``status`` name the suppliers it omits; because this
-    tool returns a bare list it cannot carry the window's value, and ``cheapest``
-    reports that as ``window_days``.
+    An envelope rather than a bare list, so an empty result explains itself:
+    ``quotes`` holds the suppliers with a current price, and its companions say
+    which reason applies when that is empty or thin — ``window_days`` (the recency
+    window applied), ``as_of`` (the freshest observation in ``quotes``, or None
+    when there is none), ``excluded_suppliers`` (quotes older than the window),
+    ``never_quoted`` (no price has ever been recorded from them), and
+    ``not_refreshed_suppliers`` (priced earlier, latest attempt failed).
 
-    Each row carries the supplier's ``order_page`` when its config records one -
-    where a person would order from. ``None`` means unrecorded rather than
-    "there is no page", so fall back to ``website`` only as a general link.
+    Each row carries ``valid_until`` and the supplier's ``order_page`` when its
+    config records one — where a person would order from. ``None`` means
+    unrecorded rather than "there is no page", so fall back to ``website`` only as
+    a general link.
     """
     return _get_app().current_prices()
 

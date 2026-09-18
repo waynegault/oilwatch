@@ -121,7 +121,7 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
             }
         )
 
-        row = self.app.current_prices()[0]
+        row = self.app.current_prices()["quotes"][0]
         self.assertEqual(row["price_per_liter"], 1.1144, "headline price is still shown")
         self.assertEqual(row["effective_price_per_liter"], 1.1024)
         self.assertEqual(row["effective_total_price"], 1102.40)
@@ -151,7 +151,7 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
     def test_without_any_code_the_effective_price_equals_the_headline(self) -> None:
         self._quote(self._supplier("Highland Fuels"), 1.1287)
 
-        row = self.app.current_prices()[0]
+        row = self.app.current_prices()["quotes"][0]
         self.assertEqual(row["effective_price_per_liter"], row["price_per_liter"])
         self.assertIsNone(row["discount"])
 
@@ -171,7 +171,7 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
             }
         )
 
-        row = self.app.current_prices()[0]
+        row = self.app.current_prices()["quotes"][0]
         self.assertIsNone(row["discount"])
         self.assertEqual(row["effective_price_per_liter"], 1.1144)
 

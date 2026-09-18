@@ -144,7 +144,28 @@ class ReportingTests(AppTestCase):
     def test_cheapest_and_current_prices_are_answerable_with_an_empty_database(self) -> None:
         snapshot = self.app.cheapest()
         self.assertIsInstance(snapshot, dict)
-        self.assertEqual(self.app.current_prices(), [])
+        # The price read is an envelope now, so "answerable" means its `quotes`
+        # list is empty rather than that the call returns a bare [].
+        self.assertEqual(self.app.current_prices()["quotes"], [])
+
+    def test_the_price_envelope_says_why_an_empty_market_is_empty(self) -> None:
+        """The first call an agent makes must not be a dead end.
+
+        With suppliers on record and nothing quoted yet, an empty ``quotes`` says
+        nothing on its own. ``never_quoted`` is what separates "nobody has ever
+        been asked" from "nothing is fresh enough" — the difference between
+        needing a refresh and needing a connector.
+        """
+        names = set(self._init())
+
+        prices = self.app.current_prices()
+
+        self.assertEqual(prices["quotes"], [])
+        self.assertIsNone(prices["as_of"])
+        self.assertEqual(prices["window_days"], self.app.settings.max_quote_age_days)
+        self.assertEqual(prices["excluded_suppliers"], [])
+        self.assertEqual(prices["not_refreshed_suppliers"], [])
+        self.assertEqual({row["supplier_name"] for row in prices["never_quoted"]}, names)
 
     def test_both_market_tools_report_the_configured_window(self) -> None:
         """The window travels from settings into the output, not just the query.
@@ -287,7 +308,7 @@ class OrderingPageTests(AppTestCase):
         )
         self._record(ids["Marketing Only"], {"quote_url": "https://marketing.example.com/api/quote"})
 
-        rows = {row["supplier_name"]: row for row in self.app.current_prices()}
+        rows = {row["supplier_name"]: row for row in self.app.current_prices()["quotes"]}
 
         self.assertEqual(rows["Formy Fuels"]["order_page"], "https://formy.example.com/order")
         # The scrape endpoint in the quote's payload is deliberately not used:

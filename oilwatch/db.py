@@ -366,6 +366,27 @@ class Database:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def unquoted_suppliers(self) -> list[dict[str, Any]]:
+        """Suppliers with no quote row at all, inactive ones excluded.
+
+        Distinct from :meth:`stale_quotes`, which names suppliers whose quotes
+        are all outside the window. This is "no price has ever been recorded from
+        them", which reads identically in an empty market but is a different
+        problem: one needs a refresh, the other may need a connector.
+        """
+        with closing(self.connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT s.id AS supplier_id, s.name AS supplier_name, s.website,
+                       s.connector_type
+                FROM suppliers s
+                LEFT JOIN quotes q ON q.supplier_id = s.id
+                WHERE s.status != 'inactive' AND q.id IS NULL
+                ORDER BY s.name ASC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def not_refreshed_quotes(self, max_age_days: int | None = None) -> list[dict[str, Any]]:
         """Newest successful quote for each supplier whose *latest* try failed.
 

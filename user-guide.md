@@ -511,9 +511,12 @@ There are two doors onto the same engine. Use them like this.
 
 ## Reads — the `oilwatch` MCP tools (all instant, no browser)
 
-- **`current_prices`** — the latest quote per supplier (£/L inc. VAT). Suppliers
-  with no quote inside the freshness window are *omitted*, and `cheapest` /
-  `status` name the ones that were held back.
+- **`current_prices`** — the latest quote per supplier (£/L inc. VAT), as an
+  envelope: `quotes`, plus `as_of` and `window_days` and the three ways a
+  supplier can be missing from it — `excluded_suppliers` (older than the
+  window), `never_quoted` (never priced at all), and `not_refreshed_suppliers`
+  (priced earlier, latest attempt failed). An empty `quotes` therefore says *why*
+  it is empty instead of being a dead end.
 - **`cheapest`** — the winner, plus the market average and variance.
 - **`status`** — the snapshot, the trend, and a buy/hold read.
 - **`list_suppliers`** — the supplier list.

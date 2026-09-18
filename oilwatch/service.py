@@ -266,9 +266,29 @@ class OilWatchApp:
             window_days=self.settings.max_quote_age_days,
         )
 
-    def current_prices(self) -> list[dict[str, Any]]:
+    def current_prices(self) -> dict[str, Any]:
+        """The latest quote per supplier, with the scope it was read against.
+
+        An envelope rather than a bare list, because an empty list cannot say
+        *why* it is empty: the market may not have been refreshed, the window may
+        be tight, the database may be new, or a supplier may never have been
+        quoted at all. Those are four different next actions, and naming them is
+        the difference between a first call that is a dead end and one that
+        explains itself.
+        """
         self.db.init_schema()
-        return self._with_effective_prices(self._current_quotes())
+        rows = self._with_effective_prices(self._current_quotes())
+        observed = [row["observed_at"] for row in rows if row.get("observed_at")]
+        return {
+            # The freshest observation in `quotes`, so the whole response can be
+            # aged at a glance; None when there is nothing to age.
+            "as_of": max(observed) if observed else None,
+            "window_days": self.settings.max_quote_age_days,
+            "quotes": rows,
+            "excluded_suppliers": self._excluded_suppliers(),
+            "not_refreshed_suppliers": self._not_refreshed_suppliers(),
+            "never_quoted": self.db.unquoted_suppliers(),
+        }
 
     def status(self) -> dict[str, Any]:
         self.db.init_schema()
