@@ -98,7 +98,12 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(load_supplier_registry(self.root), {"suppliers": [], "excluded_domains": []})
 
     def test_load_supplier_registry(self) -> None:
-        suppliers = [{"name": "A", "website": "https://a.example.com"}]
+        # The register holds arbitrary JSON, so object is the honest value type;
+        # a bare literal infers dict[str, str] and pyright rejects the call as an
+        # invariance error, which is why this annotation earns its place.
+        suppliers: list[dict[str, object]] = [
+            {"name": "A", "website": "https://a.example.com"}
+        ]
         self._write_register(suppliers=suppliers, excluded=["yell.com"])
         self.assertEqual(
             load_supplier_registry(self.root),
