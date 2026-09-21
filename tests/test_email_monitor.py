@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from oilwatch.db import Database
 from oilwatch.email_parsing import SUPPLIER_DOMAINS, extract_ppl, supplier_fragment_for
@@ -199,6 +199,10 @@ class _Response:
 class _Settings:
     quote_quantity_liters = 1000
     currency = "GBP"
+    #: Mirrors ``config.Settings``, which is where the real threshold lives. The
+    #: judgement tests place their probabilities either side of this value, so a
+    #: drift here would quietly test a threshold the sweep does not use.
+    fuel_mail_min_probability = 0.8
 
 
 class _App:
@@ -258,9 +262,21 @@ class GraphSweepRerunTests(unittest.TestCase):
             "body": {"contentType": "text", "content": "Price per litre 110.35 Total cost £1158.68"},
         }
 
-    def _sweep(self, inbox: list[dict], deleted_items: list[dict]) -> tuple[list[dict], list[str]]:
-        """One monitor pass, with these messages visible where indicated."""
+    def _sweep(
+        self, inbox: list[dict], deleted_items: list[dict], judgement: float | None = None
+    ) -> tuple[list[dict], list[str]]:
+        """One monitor pass, with these messages visible where indicated.
+
+        The fuel-mail judgement is patched in every pass: it is asked over the
+        network, and a sweep here must stay offline. The default of ``None`` is
+        what an install with no TypeSafe key gets, so the passes that are not
+        about the judgement keep the behaviour they had before it existed.
+        """
         deleted_urls: list[str] = []
+        # Stashed so a test can ask how often the judgement was asked for: the
+        # whole point of caching per sender is that it is asked once, not once
+        # per message per sweep.
+        self.judge_mock = MagicMock(return_value=judgement)
 
         def fake_get(url: str, **kwargs: object) -> _Response:
             if url.endswith("/me/mailFolders/inbox"):
@@ -275,7 +291,7 @@ class GraphSweepRerunTests(unittest.TestCase):
 
         with patch("oilwatch.graph_email.httpx.get", side_effect=fake_get), patch(
             "oilwatch.graph_email.httpx.delete", side_effect=fake_delete
-        ):
+        ), patch("oilwatch.graph_email.fuel_mail_probability", self.judge_mock):
             recorded = self.monitor.run(self.app)
         return recorded, deleted_urls
 
@@ -412,6 +428,101 @@ class GraphSweepRerunTests(unittest.TestCase):
         self.assertIn("fuel quote from unrecognised sender(s): unlisted-fuels.example", text)
         self.assertIn("add the domain to SUPPLIER_DOMAINS", text)
         self.assertNotIn("Your heating oil quotation", text, "the subject stays out of the log")
+
+    def test_a_quote_no_pattern_can_read_is_named_on_the_judgement(self) -> None:
+        """The miss the old test made: fuel mail whose price it cannot parse.
+
+        The naming test was `extract_ppl(...) is not None` — a price regex
+        standing in for a judgement about meaning — so a real oil company whose
+        quote uses a format no pattern covers read as "not fuel" and was never
+        named. That is the single case the alert exists for, and the judgement
+        closes it: no price is found here, and the domain is named anyway.
+        """
+        stranger = self._message("LLL", "inbox-id")
+        stranger["from"] = {"emailAddress": {"address": "quotes@unlisted-fuels.example"}}
+        stranger["subject"] = "Your heating oil quotation"
+        stranger["body"] = {
+            "contentType": "text",
+            "content": "Kerosene is available on request. See the attached schedule.",
+        }
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([stranger], [], judgement=0.93)
+
+        text = "\n".join(captured.output)
+        self.assertIn("fuel quote from unrecognised sender(s): unlisted-fuels.example", text)
+        self.assertIn("judged 0.93 likely to be fuel mail", text)
+
+    def test_a_stranger_the_judgement_is_not_sure_about_stays_out_of_the_log(self) -> None:
+        """The log is a file on disk, so unsure does not earn a name.
+
+        Eighteen months of the owner's correspondents — a financial ombudsman
+        case, NHS Scotland, his bank — went onto one line the first time unknown
+        senders were named, which is why the naming test is strict. A probability
+        below the threshold is not enough.
+        """
+        stranger = self._message("MMM", "inbox-id")
+        stranger["from"] = {"emailAddress": {"address": "caseworker@ombudsman.example"}}
+        stranger["body"] = {
+            "contentType": "text",
+            "content": "Please find attached our response to your complaint.",
+        }
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([stranger], [], judgement=0.4)
+
+        text = "\n".join(captured.output)
+        self.assertNotIn("ombudsman.example", text, "a stranger's domain stays out of the log")
+        self.assertIn("1 from unrecognised", text, "and is still counted")
+
+    def test_a_sender_is_judged_once_however_many_messages_it_sends(self) -> None:
+        """One request per sender, not one per message, and never twice.
+
+        Unrecognised mail is left in the mailbox rather than deleted, so the same
+        messages are re-read every sweep: a judgement per message would spend a
+        request on each of them, hourly, forever. Two messages from one sender in
+        one pass must produce one call, and the next pass must ask nothing at all
+        because the verdict is stored.
+        """
+        def body(text: str) -> dict:
+            return {"contentType": "text", "content": text}
+
+        first = self._message("NNN", "inbox-id")
+        first["from"] = {"emailAddress": {"address": "quotes@unlisted-fuels.example"}}
+        first["body"] = body("Kerosene is available on request.")
+        second = self._message("OOO", "deleted-items-id")
+        second["from"] = first["from"]
+        second["body"] = body("Our schedule of oils is enclosed.")
+
+        self._sweep([first], [second], judgement=0.9)
+        self.assertEqual(self.judge_mock.call_count, 1, "one judgement for the sender")
+        self.assertEqual(self.db.sender_judgement("unlisted-fuels.example"), 0.9)
+
+        later = self._message("PPP", "inbox-id")
+        later["from"] = first["from"]
+        later["body"] = body("A further note about kerosene.")
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([later], [])
+
+        self.judge_mock.assert_not_called()
+        self.assertIn("unlisted-fuels.example", "\n".join(captured.output))
+
+    def test_a_readable_price_never_asks_the_judgement(self) -> None:
+        """The free test runs first; the judgement is only for what it misses.
+
+        `extract_ppl` settles most fuel-shaped mail exactly and at no cost, so
+        asking a model about it as well would be a request spent to learn what
+        the regex already said.
+        """
+        stranger = self._message("QQQ", "inbox-id")
+        stranger["from"] = {"emailAddress": {"address": "quotes@unlisted-fuels.example"}}
+        stranger["body"] = {"contentType": "text", "content": "Kerosene 99.15p (Excl. VAT)"}
+
+        self._sweep([stranger], [])
+
+        self.judge_mock.assert_not_called()
+        self.assertIsNone(self.db.sender_judgement("unlisted-fuels.example"))
 
     def test_a_known_domain_with_no_supplier_row_is_named_rather_than_dropped(self) -> None:
         """The second silent path, found by arithmetic on a live sweep.

@@ -32,6 +32,7 @@ from oilwatch.credentials import ENVELOPE_FORMAT, ENVELOPE_KEY
 from oilwatch.email_parsing import extract_ppl, supplier_fragment_for
 from oilwatch.logging_setup import get_logger
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
+from oilwatch.quote_judge import fuel_mail_probability
 
 log = get_logger("graph_email")
 
@@ -258,7 +259,7 @@ class GraphEmailMonitor:
                 # because that is an oil company being missed rather than a
                 # stranger.
                 unrecognised += 1
-                if extract_ppl(self._body_text(message)) is not None:
+                if self._reads_like_fuel_mail(app, domain, self._body_text(message)):
                     candidates.add(domain)
                 continue
             supplier = self._find_supplier(app, supplier_fragment)
@@ -418,6 +419,49 @@ class GraphEmailMonitor:
                 ", ".join(sorted(candidates)),
             )
         return recorded
+
+    @staticmethod
+    def _reads_like_fuel_mail(app: Any, domain: str, body: str) -> bool:
+        """Whether an unrecognised sender's mail reads like a fuel quote.
+
+        The price parser is tried first because it is free and exact. It is also
+        literal: a genuine quote in a format no pattern covers finds no price,
+        which is the one miss this alert exists to catch — so the question is put
+        to a model rather than concluded from a regex's silence.
+
+        One judgement per sender, cached in the database. Unrecognised mail is
+        left where it is rather than deleted, so the same messages come round
+        every sweep, and asking per message would spend a request on all of them,
+        hourly, forever. The cached verdict is also what keeps the alert firing
+        on later sweeps without asking again.
+
+        A missing key, no network or an unreadable response all give ``None``,
+        and the old behaviour stands: the sweep is unattended and must not break —
+        nor start naming strangers — because a judgement was unavailable.
+        """
+        if extract_ppl(body) is not None:
+            return True
+        probability = app.db.sender_judgement(domain)
+        newly_judged = probability is None
+        if newly_judged:
+            probability = fuel_mail_probability(body)
+            if probability is None:
+                return False
+            app.db.record_sender_judgement(domain, probability)
+        if probability < app.settings.fuel_mail_min_probability:
+            # Judged, and not believed. The verdict is stored above so the question
+            # is asked once, but the domain is not named: this log is a file on
+            # disk, and naming every sender the judgement looked at would repeat
+            # the fault it replaced - a financial ombudsman case and the owner's
+            # bank were both in that first list.
+            return False
+        if newly_judged:
+            log.info(
+                "unrecognised sender %s judged %.2f likely to be fuel mail",
+                domain,
+                probability,
+            )
+        return True
 
     @staticmethod
     def _body_text(message: dict[str, Any]) -> str:

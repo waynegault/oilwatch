@@ -112,6 +112,17 @@ CREATE TABLE IF NOT EXISTS processed_messages (
     message_id TEXT PRIMARY KEY,
     processed_at TEXT NOT NULL
 );
+
+-- One fuel-mail judgement per unrecognised sender. Keyed by domain rather than
+-- by message id on purpose: unrecognised mail is left in the mailbox, so the same
+-- messages are re-read every sweep, and a verdict held per message would ask
+-- again for all of them, hourly, forever. It is also what keeps the alert firing
+-- on later sweeps without spending a request to reach the same answer.
+CREATE TABLE IF NOT EXISTS sender_judgements (
+    domain TEXT PRIMARY KEY,
+    fuel_probability REAL NOT NULL,
+    judged_at TEXT NOT NULL
+);
 """
 
 
@@ -683,6 +694,32 @@ class Database:
             conn.execute(
                 "INSERT OR IGNORE INTO processed_messages (message_id, processed_at) VALUES (?, ?)",
                 (message_id, utcnow_naive().isoformat()),
+            )
+
+    def sender_judgement(self, domain: str) -> float | None:
+        """The stored fuel-mail probability for a sender domain, if judged before.
+
+        ``None`` means this domain has not been judged, which is the caller's cue
+        to ask rather than a verdict of its own.
+        """
+        if not domain:
+            return None
+        with closing(self.connect()) as conn:
+            row = conn.execute(
+                "SELECT fuel_probability FROM sender_judgements WHERE domain = ?",
+                (domain,),
+            ).fetchone()
+        return None if row is None else float(row["fuel_probability"])
+
+    def record_sender_judgement(self, domain: str, fuel_probability: float) -> None:
+        """Store a sender's fuel-mail probability so it is asked only once."""
+        if not domain:
+            return
+        with closing(self.connect()) as conn, conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO sender_judgements "
+                "(domain, fuel_probability, judged_at) VALUES (?, ?, ?)",
+                (domain, float(fuel_probability), utcnow_naive().isoformat()),
             )
 
     def all_quotes(self) -> list[dict[str, Any]]:

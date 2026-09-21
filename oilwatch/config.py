@@ -68,6 +68,12 @@ class Settings:
     # appears in monitor_email.bat). Kept here so the CLI works without needing
     # that script purely to set one environment variable.
     microsoft_client_id: str = ""
+    #: How likely an unrecognised sender's mail must read as a fuel quote before
+    #: the sweep names that domain in its log. `extract_ppl` is tried first
+    #: because it is free; when it finds no price a model is asked, and this is
+    #: the threshold its probability is held to. Cached per sender, so it decides
+    #: the alert rather than costing a request per message.
+    fuel_mail_min_probability: float = 0.8
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
 
 
@@ -94,6 +100,7 @@ def load_settings(root: Path | None = None) -> Settings:
         excluded_domains=registry["excluded_domains"],
         login_urls=data.get("login_urls", {}),
         microsoft_client_id=data.get("microsoft_client_id", ""),
+        fuel_mail_min_probability=data.get("fuel_mail_min_probability", 0.8),
         scheduler=SchedulerConfig(**data.get("scheduler", {})),
     )
 

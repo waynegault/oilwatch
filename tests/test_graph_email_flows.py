@@ -30,7 +30,9 @@ def fake_unprotect(data: bytes) -> bytes:
     return data[5:][::-1]
 
 
-SETTINGS = types.SimpleNamespace(quote_quantity_liters=1000, currency="GBP")
+SETTINGS = types.SimpleNamespace(
+    quote_quantity_liters=1000, currency="GBP", fuel_mail_min_probability=0.8
+)
 SUPPLIER = {"id": 3, "name": "Oilfast", "website": "https://oilfast.co.uk"}
 PRICED_BODY = {"contentType": "text", "content": "Price today: 105.00p per litre (excl VAT)"}
 INBOX = "inbox-folder"
@@ -56,6 +58,13 @@ class FakeDb:
         self.quotes: list[dict] = []
         self.discounts: list[dict] = []
         self.marked: list[str] = []
+        self.judgements: dict[str, float] = {}
+
+    def sender_judgement(self, domain: str) -> float | None:
+        return self.judgements.get(domain)
+
+    def record_sender_judgement(self, domain: str, fuel_probability: float) -> None:
+        self.judgements[domain] = fuel_probability
 
     def init_schema(self) -> None:
         self.schema_inits += 1

@@ -21,11 +21,11 @@ It is a working system, not a prototype:
 
 | Area | State |
 |------|-------|
-| Modules under `oilwatch/` | 54 Python files |
+| Modules under `oilwatch/` | 55 Python files |
 | Supplier connectors | 15 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 688, all passing offline |
+| Tests | 692, all passing offline |
 | Database | 17 active suppliers (28 including retired), 602 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -57,6 +57,7 @@ It is a working system, not a prototype:
 | `form_submit.py` | Quote-request form submission |
 | `quotes.py` | Quote collection orchestration |
 | `graph_email.py` | Poll the inbox via Microsoft Graph, extract replies and discount codes, delete processed mail, and log what each sweep did — including senders it could not place, since that mail is skipped |
+| `quote_judge.py` | Ask TypeSafe's Jev whether mail from an unrecognised sender reads like a fuel quote; the verdict is cached per sender |
 | `email_parsing.py` | Supplier reply domains + the price parser the Graph monitor reuses |
 | `import_xls.py` | Import `Oil Prices.xls` history |
 | `brent.py` | Brent crude daily series from the EIA |
@@ -98,7 +99,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 688 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 692 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
