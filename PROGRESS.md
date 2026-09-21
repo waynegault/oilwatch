@@ -25,7 +25,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 15 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 685, all passing offline |
+| Tests | 688, all passing offline |
 | Database | 17 active suppliers (28 including retired), 602 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -98,7 +98,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 685 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 688 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -201,6 +201,18 @@ suppliers whose only priced row came from the spreadsheet import won on
   rather than after the slowest supplier, which is what makes mid-flight progress
   possible; the writes stay in the one thread, so the SQLite contention the
   original comment guards against is untouched.
+- **The email sweep's counts reconcile now (2026-09-21).** Three branches dropped
+  a message without a word, so `sweep: scanned 187, recorded 0, 186 from
+  unrecognised sender(s)` appeared hourly with one message unaccounted for. Found
+  by classifying the live mailbox rather than by reading the sweep's summary: the
+  message was a HomeFuels Direct newsletter already in Deleted Items, and the
+  "nothing to record" log line sat *inside* the branch that deletes, so it only
+  spoke when it had something to delete. Two smaller ones are now named too — a
+  sender domain that maps to a supplier fragment no row carries (a warning), and
+  a duplicate observation (an info line, expected when a reply's id changes on a
+  folder move). Nothing was being missed: the newsletter carried no price and no
+  code, so the fix is the log's integrity rather than a recovered quote — but a
+  sweep whose arithmetic does not add up is a sweep nobody can audit.
 - **Every result can now say why it is not `ok` (2026-09-18).** The last gap Hal
   had flagged: ten suppliers' latest attempts carried `reason: null`, because the
   sites producing them had never been given a value — the HTTP connectors whose

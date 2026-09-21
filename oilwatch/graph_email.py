@@ -263,6 +263,20 @@ class GraphEmailMonitor:
                 continue
             supplier = self._find_supplier(app, supplier_fragment)
             if supplier is None:
+                # The domain is one we know, but no supplier row carries it, so
+                # there is nowhere to file a price. Silent until 2026-09-21, and
+                # that silence was visible: a sweep's own arithmetic did not add
+                # up, because scanned minus unrecognised counts the messages that
+                # should each leave a line and one of them left none. Which of
+                # this branch and the already-recorded one had taken it was
+                # unknowable from the log - the same defect as the unrecognised
+                # senders above, one layer in.
+                log.warning(
+                    "mail from %s maps to supplier fragment %r, which no supplier row "
+                    "matches; skipped",
+                    domain,
+                    supplier_fragment,
+                )
                 continue
 
             text = self._body_text(message)
@@ -304,24 +318,37 @@ class GraphEmailMonitor:
                 # does not pile up, but deliberately do NOT mark it processed:
                 # it stays in Deleted Items, still visible to a later sweep and
                 # to any future parsing improvement.
+                #
+                # Said whether or not the message is in the inbox. These lines
+                # used to sit inside the branch that deletes, so supplier mail
+                # that was not in the inbox - a newsletter already in Deleted
+                # Items - was re-scanned every sweep without a word, and that is
+                # what made a sweep's own arithmetic fail to add up on
+                # 2026-09-21: scanned minus unrecognised counts the messages that
+                # should each leave a line, and one of them left none, every hour.
                 if inbox and message.get("parentFolderId") == inbox:
                     self.delete(token, message_id)
-                    if looks_like_an_offer(text):
-                        # It reads like an offer but no rule could read it, so it
-                        # may be a discount in a format we cannot parse yet. Say
-                        # so rather than lose it in silence; it stays in Deleted
-                        # Items until a rule for that format exists.
-                        log.warning(
-                            "possible offer no rule could read in %r from %s; cleared to Deleted Items",
-                            message.get("subject", ""),
-                            domain,
-                        )
-                    else:
-                        log.info(
-                            "nothing to record in %r from %s; cleared from the inbox",
-                            message.get("subject", ""),
-                            domain,
-                        )
+                    outcome = "cleared from the inbox"
+                else:
+                    outcome = "left where it is"
+                if looks_like_an_offer(text):
+                    # It reads like an offer but no rule could read it, so it may
+                    # be a discount in a format we cannot parse yet. Say so rather
+                    # than lose it in silence; it stays re-scannable until a rule
+                    # for that format exists.
+                    log.warning(
+                        "possible offer no rule could read in %r from %s; %s",
+                        message.get("subject", ""),
+                        domain,
+                        outcome,
+                    )
+                else:
+                    log.info(
+                        "nothing to record in %r from %s; %s",
+                        message.get("subject", ""),
+                        domain,
+                        outcome,
+                    )
                 continue
 
             if ex_vat is not None:
@@ -351,6 +378,15 @@ class GraphEmailMonitor:
                     log.info(
                         "recorded %.4f/L from %s (%s)",
                         price_per_liter,
+                        supplier["name"],
+                        domain,
+                    )
+                else:
+                    # Expected when a reply's id changes on a folder move, so
+                    # this is not a warning - but it is the other branch that
+                    # used to swallow a message without a word.
+                    log.info(
+                        "the same observation from %s (%s) is already recorded; cleared",
                         supplier["name"],
                         domain,
                     )

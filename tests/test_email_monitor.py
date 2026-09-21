@@ -311,6 +311,28 @@ class GraphSweepRerunTests(unittest.TestCase):
 
         self.assertEqual(len(self.db.active_discounts()), 1)
 
+    def test_supplier_mail_outside_the_inbox_still_says_what_it_did(self) -> None:
+        """The third silent path, found by classifying the live mailbox.
+
+        These log lines used to sit inside the branch that deletes, so a supplier
+        newsletter already in Deleted Items was re-scanned every sweep without a
+        word: the same `scanned 187 … 186 from unrecognised` appeared hourly with
+        one message unexplained. The message is named whether or not it is in the
+        inbox, and the wording says which happened to it.
+        """
+        message = self._message("KKK", "deleted-items-id")
+        message["subject"] = "Feedback Friday"
+        message["body"] = {"contentType": "text", "content": "Prices are volatile."}
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            recorded, deleted = self._sweep([], [message])
+
+        text = "\n".join(captured.output)
+        self.assertEqual(recorded, [])
+        self.assertEqual(deleted, [], "nothing outside the inbox is deleted")
+        self.assertIn("Feedback Friday", text)
+        self.assertIn("left where it is", text)
+
     def test_a_newsletter_is_cleared_but_not_marked_processed(self) -> None:
         """Supplier mail with nothing in it is swept out, not left to pile up.
 
@@ -390,6 +412,43 @@ class GraphSweepRerunTests(unittest.TestCase):
         self.assertIn("fuel quote from unrecognised sender(s): unlisted-fuels.example", text)
         self.assertIn("add the domain to SUPPLIER_DOMAINS", text)
         self.assertNotIn("Your heating oil quotation", text, "the subject stays out of the log")
+
+    def test_a_known_domain_with_no_supplier_row_is_named_rather_than_dropped(self) -> None:
+        """The second silent path, found by arithmetic on a live sweep.
+
+        A sweep logged `scanned 187 … 186 from unrecognised sender(s)` — so one
+        message was neither unrecognised nor accounted for by any line, because
+        two branches dropped mail without a word: a domain that maps to a
+        supplier fragment no row carries, and a duplicate observation. Which of
+        them had taken it was unknowable from the log, and that is the fault.
+        """
+        message = self._message("JJJ", "inbox-id")
+        # Maps to scottishfuels.co.uk in SUPPLIER_DOMAINS; this fixture has a row
+        # for Rix only, so there is nowhere to file it.
+        message["from"] = {"emailAddress": {"address": "no-reply@certasenergy.co.uk"}}
+
+        with self.assertLogs("oilwatch.graph_email", level="WARNING") as captured:
+            recorded, _ = self._sweep([message], [])
+
+        text = "\n".join(captured.output)
+        self.assertEqual(recorded, [])
+        self.assertIn("certasenergy.co.uk", text)
+        self.assertIn("scottishfuels.co.uk", text)
+
+    def test_a_duplicate_observation_says_so_rather_than_vanishing(self) -> None:
+        """The other silent branch: expected, but it has to be visible.
+
+        A reply whose id changed on a folder move is recorded once and reported
+        once — and the second sighting now says what it was, so a sweep's counts
+        add up instead of one message disappearing.
+        """
+        self._sweep([self._message("AAA", "inbox-id")], [])
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            again, _ = self._sweep([], [self._message("BBB", "deleted-items-id")])
+
+        text = "\n".join(captured.output)
+        self.assertEqual(again, [])
+        self.assertIn("already recorded", text)
 
 
 if __name__ == "__main__":
