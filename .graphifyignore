@@ -1,0 +1,17 @@
+# Files graphify should never scan.
+#
+# The graph is built with `--code-only`, which extracts nothing from JSON, yet
+# the incremental scan still stamps these tracked config files in the manifest.
+# A stamped file that yields no nodes is re-queued by graphify on *every*
+# refresh — "re-queuing N manifest-stamped code file(s) with no nodes" — and
+# that cannot clear itself, because the extraction succeeds rather than failing,
+# so the unstamping escape hatch never fires. Each refresh therefore re-parses
+# these files and reports a failed extraction that never happened.
+#
+# `.graphifyignore` is the only rule that works here: graphify exempts
+# git-tracked paths from `.gitignore` pruning, so `.gitignore` cannot drop them.
+# Nothing is lost from the graph — `--code-only` produced no nodes for any of
+# these to begin with.
+.vscode/
+config/*.json
+pyrightconfig.json
