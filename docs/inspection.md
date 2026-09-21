@@ -154,7 +154,7 @@ OilWatch must never buy anything, and must not damage the host or the database.
 | 6.2 | 🔍 The pool is bounded | `grep -n "ThreadPoolExecutor" oilwatch/service.py` | `max_workers=min(workers, len(suppliers))` |
 | 6.3 | 🔍 Charts release their figures | `grep -n "plt.close" oilwatch/analytics.py` | Every chart closes its figure |
 | 6.4 | 🔍 Request interception does not stall a site | `grep -n "_intercept_requests" oilwatch/connectors/browser_base.py` | A connector whose site stalls when proxied can opt out |
-| 6.5 | 🔍 Temp files are removed | `dir /b .qwen\tmp` | No leftovers *from this pass*; intermediates are deleted when done. `.qwen/` is the owner's scratch and is out of audit scope, so a file that predates the pass is reported rather than cleared — on 2026-09-18 `store_boilerjuice.py`, `email-task.backup.xml` and `msg16.txt` all predated it and were left alone (`store_boilerjuice.py` was scanned for `password = "..."`-shaped assignments and has none) |
+| 6.5 | 🔍 Temp files are removed | `dir /b .qwen\tmp` | No leftovers *from this pass*; intermediates are deleted when done. `.qwen/` is the owner's scratch and is out of audit scope, so a file that predates the pass is reported rather than cleared — on 2026-09-18 `store_boilerjuice.py`, `email-task.backup.xml` and `msg16.txt` all predated it and were left alone, the first scanned for `password = "..."`-shaped assignments before being called benign. The owner cleared all three on 2026-09-21, so this directory is empty now and any file in it is this pass's to remove |
 
 ## 7. Configuration & Path Resolution — High
 
