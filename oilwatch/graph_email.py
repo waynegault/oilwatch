@@ -35,6 +35,7 @@ from oilwatch import secretstore
 from oilwatch.credentials import ENVELOPE_FORMAT, ENVELOPE_KEY
 from oilwatch.email_parsing import extract_ppl, supplier_fragment_for
 from oilwatch.logging_setup import get_logger
+from oilwatch.models import utcnow_naive
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
 from oilwatch.quote_judge import fuel_mail_probability
 
@@ -43,6 +44,13 @@ log = get_logger("graph_email")
 SCOPES = ["Mail.ReadWrite", "Mail.Send"]
 AUTHORITY = "https://login.microsoftonline.com/consumers"
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
+
+#: What a quote request goes out under, and what its reply comes back carrying.
+#: The marker belongs in the *subject*: a reply returns as "Re: <subject>", while
+#: bodies are re-wrapped, quoted and signed under by the time anyone searches
+#: them - so one search finds every request this install has made, and every one
+#: still owed, without reading the mailbox first.
+REQUEST_SUBJECT_PREFIX = "oilwatch quote request"
 
 
 def load_client_id() -> str:
@@ -78,6 +86,45 @@ def cache_path() -> Path:
 def sender_domain_from_email(email_addr: str) -> str:
     match = re.search(r"@([\w.\-]+)", email_addr or "")
     return match.group(1).lower() if match else ""
+
+
+def request_subject(postcode: str, quantity_liters: int, on: datetime | None = None) -> str:
+    """The subject a quote request is sent under, and its reply comes back with.
+
+    Carries the postcode, the quantity and the day, so a reply read months later
+    says what it was answering, and so the marker alone is enough to find the
+    request it belongs to.
+    """
+    day = (on or utcnow_naive()).date().isoformat()
+    return f"{REQUEST_SUBJECT_PREFIX} - {postcode} - {quantity_liters}L - {day}"
+
+
+def request_body(
+    *,
+    name: str,
+    email: str,
+    phone: str,
+    address: str,
+    postcode: str,
+    quantity_liters: int,
+) -> str:
+    """What a supplier needs in order to quote, and how to answer.
+
+    Plain text, and short, because these are the suppliers who answer by hand:
+    the point is that a person can read it, price it and reply to it without
+    being sent anywhere.
+    """
+    return (
+        "Hello,\n\n"
+        f"Please could you quote for {quantity_liters} litres of heating oil "
+        f"(kerosene) delivered to {address}, {postcode}.\n\n"
+        f"Name: {name}\n"
+        f"Email: {email}\n"
+        f"Phone: {phone}\n\n"
+        "We are comparing suppliers for a domestic delivery, so a reply to this "
+        "email with your best price is all we need - there is no form to fill in.\n\n"
+        "Thank you."
+    )
 
 
 class GraphEmailMonitor:
@@ -229,6 +276,37 @@ class GraphEmailMonitor:
             headers=self._headers(token),
             timeout=30.0,
         ).raise_for_status()
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        """Send one message from the mailbox, raising rather than going quiet.
+
+        Unlike the judgements this module makes unattended, a send is a
+        deliberate act: a caller has to be able to say "asked" or "could not",
+        supplier by supplier, and a swallowed failure here would read as a
+        request that went out. Saved to Sent Items on purpose - a request with no
+        copy of its own cannot be checked against the reply it produces.
+        """
+        token = self.get_token()
+        if token is None:
+            raise RuntimeError("Not authenticated. Run `oilwatch login-email` first.")
+        response = httpx.post(
+            f"{GRAPH_ENDPOINT}/me/sendMail",
+            headers=self._headers(token),
+            json={
+                "message": {
+                    "subject": subject,
+                    "body": {"contentType": "Text", "content": body},
+                    "toRecipients": [{"emailAddress": {"address": to}}],
+                },
+                "saveToSentItems": True,
+            },
+            timeout=30.0,
+        )
+        if response.status_code != 202:
+            raise RuntimeError(
+                f"Graph did not accept the message ({response.status_code}): "
+                f"{response.text[:200]}"
+            )
 
     def run(self, app: Any) -> list[dict[str, Any]]:
         # Make sure the schema exists for direct callers too. The service path

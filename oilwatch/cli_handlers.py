@@ -241,7 +241,86 @@ def _record_submitted_requests(
         )
 
 
+def _email_quote_requests(app: OilWatchApp, args: argparse.Namespace) -> list[dict[str, Any]]:
+    """Ask the register's hand-answered suppliers by email.
+
+    The register drives this, as it drives the forms, because who gets asked is
+    policy and belongs in the version-controlled file rather than a list here.
+    Only an *active* supplier with an address and no form is asked: a form is a
+    page this same command drives without --by-email, and a supplier already
+    asked that way must not be asked twice, while a retired tombstone is not a
+    supplier at all. A supplier with no address comes back as a call rather than
+    being skipped, so "no way to reach them" cannot read as "not asked".
+    """
+    from oilwatch.config import load_supplier_registry
+    from oilwatch.graph_email import GraphEmailMonitor, request_body, request_subject
+
+    monitor = GraphEmailMonitor()
+    subject = request_subject(args.postcode, args.quantity_liters)
+    ids_by_name = {
+        row.get("name"): row.get("id")
+        for row in app.db.list_suppliers(include_inactive=True)
+        if row.get("status") == "active"
+    }
+    results: list[dict[str, Any]] = []
+    for record in load_supplier_registry(app.root)["suppliers"]:
+        if (record.get("status") or "active") != "active":
+            continue
+        request = record.get("quote_request") or {}
+        if request.get("form"):
+            continue  # the form path owns this supplier; do not ask it twice
+        if not request.get("phone"):
+            # No quote_request at all: a connector prices this one, so there is
+            # nobody to ask and nothing to report. Naming it here would read as
+            # "needs a call" for a supplier that is already quoted.
+            continue
+        name = record.get("name") or "supplier"
+        address = record.get("email")
+        if not address:
+            results.append(
+                {
+                    "supplier": name,
+                    "status": "no_address",
+                    "message": f"No email address on record; call {record.get('phone') or 'them'}.",
+                }
+            )
+            continue
+        try:
+            monitor.send(
+                address,
+                subject,
+                request_body(
+                    name=args.name,
+                    email=args.email,
+                    phone=args.phone,
+                    address=args.address or app.settings.home.label,
+                    postcode=args.postcode,
+                    quantity_liters=args.quantity_liters,
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - reported per supplier, like the forms
+            results.append({"supplier": name, "status": "error", "message": str(exc)})
+            continue
+        results.append(
+            {"supplier": name, "status": "sent", "message": f"Asked by email to {address}."}
+        )
+        supplier_id = ids_by_name.get(name)
+        if supplier_id is not None:
+            app.db.record_quote_request(
+                supplier_id,
+                "email",
+                quantity_liters=args.quantity_liters,
+                postcode=args.postcode,
+                note=f"Asked by email to {address}",
+            )
+    return results
+
+
 def _cmd_submit_requests(app: OilWatchApp, args: argparse.Namespace) -> None:
+    if args.by_email:
+        _print(_email_quote_requests(app, args))
+        return
+
     from oilwatch.browser_auth import BrowserAuth
     from oilwatch.config import load_supplier_registry
     from oilwatch.form_submit import requests_from, submit_all

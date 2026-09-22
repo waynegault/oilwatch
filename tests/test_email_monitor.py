@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import httpx
 
 from oilwatch.db import Database
 from oilwatch.email_parsing import SUPPLIER_DOMAINS, extract_ppl, supplier_fragment_for
 from oilwatch.form_submit import SUPPLIER_FORMS
-from oilwatch.graph_email import GraphEmailMonitor, sender_domain_from_email
+from oilwatch.graph_email import (
+    GRAPH_ENDPOINT,
+    REQUEST_SUBJECT_PREFIX,
+    GraphEmailMonitor,
+    request_subject,
+    sender_domain_from_email,
+)
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
 
 
@@ -571,6 +580,75 @@ class GraphSweepRerunTests(unittest.TestCase):
         text = "\n".join(captured.output)
         self.assertEqual(again, [])
         self.assertIn("already recorded", text)
+
+
+class QuoteRequestEmailTests(unittest.TestCase):
+    """Asking a supplier by email: the marked subject, the payload, and refusals."""
+
+    def _monitor(self) -> GraphEmailMonitor:
+        # A client id keeps the constructor off config/settings.json, which a test
+        # has no business reading.
+        return GraphEmailMonitor(client_id="test-client")
+
+    def test_the_subject_carries_the_marker_and_what_is_being_asked(self) -> None:
+        """The marker belongs in the subject, because that is what a reply keeps.
+
+        A body is re-wrapped, quoted and signed under before anyone searches it;
+        "Re: <subject>" survives all three, so one search finds every request this
+        install has made and every one still owed.
+        """
+        subject = request_subject("AB21 0YA", 1000, on=datetime(2026, 9, 22, 12, 0))
+
+        self.assertTrue(subject.startswith(REQUEST_SUBJECT_PREFIX))
+        self.assertIn("AB21 0YA", subject)
+        self.assertIn("1000L", subject)
+        self.assertIn("2026-09-22", subject)
+
+    def test_the_message_goes_to_the_supplier_and_is_kept_in_sent_items(self) -> None:
+        monitor = self._monitor()
+        with (
+            patch.object(GraphEmailMonitor, "get_token", return_value={"access_token": "t"}),
+            patch("httpx.post", return_value=httpx.Response(202)) as post,
+        ):
+            monitor.send("info@carnegiefuels.co.uk", "a subject", "a body")
+
+        self.assertEqual(post.call_args.args[0], f"{GRAPH_ENDPOINT}/me/sendMail")
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(
+            payload["message"]["toRecipients"],
+            [{"emailAddress": {"address": "info@carnegiefuels.co.uk"}}],
+        )
+        self.assertEqual(payload["message"]["subject"], "a subject")
+        # Kept, so a request can be checked against the reply it produced.
+        self.assertTrue(payload["saveToSentItems"])
+
+    def test_a_refused_send_says_what_graph_said(self) -> None:
+        """A send is deliberate, so it raises rather than reading as done.
+
+        The caller reports per supplier; a swallowed refusal would look like a
+        request that went out.
+        """
+        monitor = self._monitor()
+        refused = httpx.Response(403, text="Insufficient privileges to complete the operation.")
+        with (
+            patch.object(GraphEmailMonitor, "get_token", return_value={"access_token": "t"}),
+            patch("httpx.post", return_value=refused),
+            self.assertRaises(RuntimeError) as raised,
+        ):
+            monitor.send("info@carnegiefuels.co.uk", "a subject", "a body")
+
+        self.assertIn("403", str(raised.exception))
+        self.assertIn("Insufficient privileges", str(raised.exception))
+
+    def test_an_unsigned_in_mailbox_says_how_to_sign_in(self) -> None:
+        monitor = self._monitor()
+        with (
+            patch.object(GraphEmailMonitor, "get_token", return_value=None),
+            self.assertRaises(RuntimeError) as raised,
+        ):
+            monitor.send("info@carnegiefuels.co.uk", "a subject", "a body")
+
+        self.assertIn("login-email", str(raised.exception))
 
 
 if __name__ == "__main__":

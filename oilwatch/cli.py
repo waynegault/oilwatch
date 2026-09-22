@@ -117,6 +117,14 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="Comma-separated supplier keys (defaults to the register's quote_request entries)",
     )
+    submit.add_argument(
+        "--by-email",
+        action="store_true",
+        help=(
+            "Ask the register's hand-answered suppliers by email instead of driving "
+            "their enquiry forms"
+        ),
+    )
 
     # Monitor email for supplier replies (Microsoft Graph / OAuth2)
     subparsers.add_parser("monitor-email")

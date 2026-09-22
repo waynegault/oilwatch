@@ -320,6 +320,59 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(args[1], "form")
         self.assertEqual(kwargs["note"], "Form submitted; awaiting email reply.")
 
+    def test_a_quote_request_by_email_is_recorded_as_asked(self) -> None:
+        """Asked by email is still asked, so it belongs in the ledger too.
+
+        The form path records what it submits. Without the same here, an email
+        request would leave no trace and `awaiting_reply` would under-report by
+        exactly the suppliers it cannot see inside a browser - which is why a
+        supplier with a form is left to the form path, and one with only a phone
+        line and an address is asked this way.
+        """
+        app = MagicMock()
+        app.db.list_suppliers.return_value = [
+            {"id": 54, "name": "Carnegie Fuels", "status": "active"}
+        ]
+        registry = {
+            "excluded_domains": [],
+            "suppliers": [
+                {
+                    "name": "Carnegie Fuels",
+                    "website": "https://carnegiefuels.co.uk/",
+                    "status": "active",
+                    "phone": "01356 648 648",
+                    "email": "info@carnegiefuels.co.uk",
+                    "quote_request": {"phone": True},
+                },
+                {
+                    "name": "Gleaner Oils",
+                    "website": "https://www.gleaner.co.uk/",
+                    "status": "active",
+                    "quote_request": {"form": "gleaner_oils"},
+                },
+            ],
+        }
+        monitor = MagicMock()
+        with (
+            patch("oilwatch.cli.OilWatchApp", return_value=app),
+            patch("oilwatch.config.load_supplier_registry", return_value=registry),
+            patch("oilwatch.graph_email.GraphEmailMonitor", return_value=monitor),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests", "--by-email"]),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            main()
+
+        send = monitor.send
+        send.assert_called_once()
+        address, subject, body = send.call_args.args
+        self.assertEqual(address, "info@carnegiefuels.co.uk")
+        self.assertIn("oilwatch quote request", subject)
+        self.assertIn("1000", body)
+        app.db.record_quote_request.assert_called_once()
+        recorded = app.db.record_quote_request.call_args.args
+        self.assertEqual(recorded[0], 54)
+        self.assertEqual(recorded[1], "email")
+
     def test_register_passes_headless_as_the_inverse_of_visible(self) -> None:
         register = AsyncMock(return_value=[])
         for argv, expected in ((["register"], True), (["register", "--visible"], False)):
