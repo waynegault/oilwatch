@@ -88,18 +88,32 @@ class FakeAsyncPage:
         url: str = "",
         elements: list[tuple[str, FakeElement]] | None = None,
         selector_all: list[tuple[str, list[FakeElement]]] | None = None,
+        evaluate_result: str = "",
     ) -> None:
         self._content = content
         self.url = url
         self._elements = elements or []
         self._all = selector_all or []
+        self._evaluate_result = evaluate_result
         self.goto_urls: list[str] = []
         self.waits: list[int] = []
+        self.evaluated: list[str] = []
         self.context = FakeBrowserContext()
 
     async def goto(self, url: str, **kwargs: Any) -> None:
         self.goto_urls.append(url)
         self.url = url
+
+    async def evaluate(self, expression: str) -> str:
+        """The page-level script hook a connector may use, as PageLike declares.
+
+        It records what it was asked, so a test can assert a diagnostic ran
+        without the fake having to understand the script, and returns whatever
+        the test set - a connector reads its result as data, never as control
+        flow.
+        """
+        self.evaluated.append(expression)
+        return self._evaluate_result
 
     async def wait_for_timeout(self, timeout: float) -> None:
         self.waits.append(int(timeout))

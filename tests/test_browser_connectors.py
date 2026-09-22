@@ -53,19 +53,40 @@ class LoginPage(FakeAsyncPage):
         raise RuntimeError("networkidle never arrived")
 
 
+class JourneyPage(FakeAsyncPage):
+    """The quote journey's own form, which the connector is expected to drive.
+
+    The live page carries a postcode, a volume, the two *required* selects a quote
+    cannot be had without, and a Get Quote button. A fake built without them
+    models a page the connector can never submit, and says so in a warning every
+    run, so the quote tests are built on this rather than on a bare page.
+    """
+
+    def __init__(self, content: str = "", **kwargs) -> None:
+        self.postcode = FakeElement()
+        self.quantity = FakeElement(tag="INPUT")
+        self.oil_type = FakeElement(tag="SELECT")
+        self.tanker = FakeElement(tag="SELECT")
+        self.button = FakeElement(tag="BUTTON")
+        super().__init__(
+            content=content,
+            elements=[
+                ("postcode", self.postcode),
+                ("number", self.quantity),
+                ("oil_type", self.oil_type),
+                ("theTanker", self.tanker),
+                ('has-text("Quote")', self.button),
+            ],
+            **kwargs,
+        )
+
+
 class BoilerJuiceConnectorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.connector = BoilerJuiceBrowserConnector()
 
     def test_extracts_price_and_applies_vat(self) -> None:
-        page = FakeAsyncPage(
-            content="Heating oil today: £0.85 per litre",
-            elements=[
-                ("postcode", FakeElement()),
-                ("quantity", FakeElement(tag="INPUT")),
-                ('has-text("Quote")', FakeElement(tag="BUTTON")),
-            ],
-        )
+        page = JourneyPage(content="Heating oil today: £0.85 per litre")
         result = _quote(self.connector, page)
 
         self.assertEqual(result.status, "ok")
@@ -91,9 +112,7 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
     def test_the_price_comes_from_the_standard_total(self) -> None:
         """The inclusive total carries the service charge the ppl omits, so the
         quote is read from it rather than the headline ppl."""
-        page = FakeAsyncPage(
-            content='<p data-test="price_standard_value">£1,195.70</p>'
-        )
+        page = JourneyPage(content='<p data-test="price_standard_value">£1,195.70</p>')
         result = _quote(self.connector, page)
 
         self.assertEqual(result.status, "ok")
@@ -104,8 +123,25 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         assert total_price is not None
         self.assertAlmostEqual(total_price, 1195.70, places=2)
 
+    def test_the_required_selects_are_answered_or_the_form_never_submits(self) -> None:
+        """The journey quotes nothing until the oil type and the tanker are chosen.
+
+        Both are required and both open on a placeholder option, so the browser
+        refuses the submit, the page sits there unchanged, and the run reads as
+        ``no_price_found`` and nothing else - which is what it did on every
+        attempt until these two were answered (checked live 2026-09-22).
+        """
+        page = JourneyPage(content="Heating oil today: £0.85 per litre")
+
+        result = _quote(self.connector, page)
+
+        self.assertEqual(page.oil_type.selected, [BoilerJuiceBrowserConnector.OIL_TYPE_VALUE])
+        self.assertEqual(page.tanker.selected, [BoilerJuiceBrowserConnector.TANKER_VALUE])
+        self.assertEqual(result.status, "ok", "answering the selects is what lets the form submit")
+
     def test_no_price_is_manual_not_fabricated(self) -> None:
-        result = _quote(self.connector, FakeAsyncPage(content="<html>no price here</html>"))
+        page = JourneyPage(content="<html>no price here</html>")
+        result = _quote(self.connector, page)
         self.assertEqual(result.status, "manual_action_required")
         self.assertIsNone(result.price_per_liter)
 
@@ -113,7 +149,8 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         """The live buy-now form sits in a collapsed accordion, so its postcode
         is hidden. A field that refuses its value must not abort the run as a
         browser error — it degrades to the manual note."""
-        page = FakeAsyncPage(elements=[("postcode", FakeElement(fill_raises=True))])
+        page = JourneyPage()
+        page.postcode.fill_raises = True
         result = _quote(self.connector, page)
         self.assertEqual(result.status, "manual_action_required")
 

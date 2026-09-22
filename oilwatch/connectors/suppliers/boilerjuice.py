@@ -29,6 +29,29 @@ _POSTCODE_SELECTOR = (
 )
 
 
+#: Read back the journey's own controls: what each holds, the options the two
+#: selects offer, and whether the browser would actually submit them. Values are
+#: read as properties because a value a script set is not in the serialised HTML,
+#: so a page dump cannot say whether a fill took. ``checkValidity`` is the part
+#: that matters: this form submits *nothing at all* when a required control is
+#: unset, and its two selects open on placeholder options.
+_FORM_STATE_SCRIPT = (
+    "() => Array.from(document.querySelectorAll("
+    "\"select[name='oil_type'], select[name='theTanker'], "
+    "input[name='postcode'], input[name='volume'], input[name='email']\"))"
+    ".map(el => {"
+    "const tag = el.tagName.toLowerCase();"
+    "const flags = (el.required ? ' required' : '')"
+    "+ (el.willValidate && !el.checkValidity() ? ' INVALID' : '');"
+    "const detail = tag === 'select'"
+    "? 'options=[' + Array.from(el.options).map(o => o.value + '|' + o.text).join('; ')"
+    "+ '] value=' + JSON.stringify(el.value)"
+    ": 'value=' + JSON.stringify(el.value);"
+    "return tag + '[' + el.name + '] ' + detail + flags;"
+    "}).join('; ')"
+)
+
+
 class BoilerJuiceBrowserConnector(BrowserConnector):
     """
     BoilerJuice browser connector.
@@ -49,12 +72,33 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
     #: used, so a real sign-in looked like a failure.
     SIGNED_IN_SELECTORS = "a[href*='logout'], a[href*='sign_out'], a:has-text('Sign out')"
 
+    #: The domestic/commercial chooser the journey shows over its form. Until it
+    #: is answered the page is covered and a click on the form's own submit is
+    #: swallowed by the overlay, which is why the run reported no price: the quote
+    #: was never asked for, and the click failure that said so was logged at debug
+    #: level where nobody sees it.
+    USAGE_POPUP_SELECTORS = (
+        "#usage-modal-domestic",
+        "button:has-text('Continue as domestic')",
+    )
+
     #: Cookiebot's consent dialog covers the page; the sign-in form is not
     #: reachable until it is answered.
     CONSENT_SELECTORS = (
         "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
         "button:has-text('Allow all')",
     )
+
+    #: The journey's form will not submit until both of these are answered: they
+    #: open on placeholder options (an empty value labelled "Oil Type" and
+    #: "Tanker Type"), and the browser refuses a required control left unset - so
+    #: the page sat there, unchanged, and the run reported no price. The values are
+    #: the page's own: plain kerosene heating oil, and the standard tanker whose
+    #: delivery total this connector reads in preference to the faster options.
+    OIL_TYPE_SELECTOR = "select[name='oil_type']"
+    OIL_TYPE_VALUE = "Heating Oil (Kerosene28)"
+    TANKER_SELECTOR = "select[name='theTanker']"
+    TANKER_VALUE = "Standard Tanker"
 
     def __init__(self) -> None:
         super().__init__()
@@ -162,6 +206,48 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             except Exception as exc:  # noqa: BLE001
                 log.debug("cookie consent click failed for %r: %s", selector, exc)
 
+    async def _select_option(self, page: PageLike, selector: str, value: str, what: str) -> None:
+        """Choose an option, saying so when it cannot be chosen.
+
+        A select left on its placeholder is not a cosmetic miss here: the form
+        will not submit while one is unanswered, and a submit that does not happen
+        leaves a page indistinguishable from one that carries no quote.
+        """
+        try:
+            element = await page.query_selector(selector)
+        except Exception as exc:  # noqa: BLE001 - an unreadable page is reported, not raised
+            log.warning("BoilerJuice: could not look for the %s control: %s", what, exc)
+            return
+        if element is None:
+            log.warning("BoilerJuice: no %s control on the quote page (%s)", what, selector)
+            return
+        try:
+            await element.select_option(value)
+        except Exception as exc:  # noqa: BLE001 - reported rather than swallowed
+            log.warning("BoilerJuice: could not set the %s to %r: %s", what, value, exc)
+
+    async def _confirm_domestic_usage(self, page: PageLike) -> None:
+        """Answer the domestic/commercial chooser, best-effort.
+
+        This install is a home address buying domestic heating oil, which is what
+        the register and the contact details describe, so domestic is the answer.
+        Absence is fine: a returning visitor's choice is already recorded.
+        """
+        for selector in self.USAGE_POPUP_SELECTORS:
+            try:
+                button = await page.query_selector(selector)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("usage chooser lookup failed for %r: %s", selector, exc)
+                continue
+            if not button:
+                continue
+            try:
+                await button.click()
+                await page.wait_for_timeout(2000)
+                return
+            except Exception as exc:  # noqa: BLE001
+                log.debug("usage chooser click failed for %r: %s", selector, exc)
+
     async def get_quote_with_browser(
         self,
         supplier: dict[str, Any],
@@ -190,6 +276,9 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 lambda: self._quote_page_ready(page),
                 what="the BoilerJuice quote page",
             )
+            # Answer the chooser before touching the form: while it is showing it
+            # covers the page, and its overlay swallows the form's own submit.
+            await self._confirm_domestic_usage(page)
 
             # Find and fill quote form fields
             # Postcode field
@@ -236,20 +325,35 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                 except Exception as exc:  # noqa: BLE001
                     log.debug("could not set quantity: %s", exc)
 
-            # Submit form
+            # Answer the two required selects, without which the form submits
+            # nothing at all - see the constants for what they are and why. Only
+            # when there is a Get Quote control: a page without one has no form to
+            # complete, and the report below says exactly that rather than this
+            # complaining about a control such a page was never going to carry.
+            if quote_button:
+                await self._select_option(page, self.OIL_TYPE_SELECTOR, self.OIL_TYPE_VALUE, "oil type")
+                await self._select_option(page, self.TANKER_SELECTOR, self.TANKER_VALUE, "tanker type")
+
+            # Submit form. The attempt reports what it did, rather than only
+            # logging at debug: a click that never lands leaves a page that looks
+            # exactly like one with no quote on it, and telling those apart is the
+            # difference between a fix and another guess (see the report below).
+            submit_note = "no Get Quote control matched the page"
             if quote_button:
                 try:
                     await quote_button.click(timeout=5000)
 
                     # Wait for the price to render rather than sleeping a flat
                     # 5s; the extraction below re-reads it once it is there.
+                    submit_note = "clicked; no price appeared within the wait"
                     await self._wait_for(
                         page,
                         lambda: self._quote_ready(page, quantity_liters),
                         what="a BoilerJuice price",
                     )
+                    submit_note = "clicked"
                 except Exception as exc:  # noqa: BLE001
-                    log.debug("could not submit the quote form: %s", exc)
+                    submit_note = f"the click raised {type(exc).__name__}: {exc}"
             
             # Read the price from the inclusive "You Pay" total, which carries the
             # service charge the headline ppl omits (see the supplier note). The
@@ -281,11 +385,15 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                     # change without another live run - the fault the sign-in
                     # path above already corrected for itself.
                     log.warning(
-                        "BoilerJuice quote page carried no readable price at %s; page (%s, %d chars):\n%s",
+                        "BoilerJuice quote page carried no readable price at %s; "
+                        "submission: %s; page (%s, %d chars):\n%s\ncontrols: %s\nform: %s",
                         page.url,
+                        submit_note,
                         "captured" if content else "empty",
                         len(content),
                         self._price_context(content),
+                        await self._control_inventory(page),
+                        await self._form_state(page),
                     )
                     return QuoteResult(
                         supplier_id=int(supplier["id"]),
@@ -299,8 +407,11 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
                     )
                 price_per_liter, inclusive_total = inclusive_price_and_total(ex_vat, quantity_liters)
                 notes = (
-                    f"Price extracted via browser automation for {quantity_liters}L. "
-                    f"Ex VAT: £{ex_vat * quantity_liters:.2f}, Inc VAT: £{inclusive_total:.2f}"
+                    f"Price from BoilerJuice's per-litre figure for {quantity_liters}L "
+                    f"(Ex VAT: £{ex_vat * quantity_liters:.2f}, Inc VAT: £{inclusive_total:.2f}). "
+                    "BoilerJuice is a broker whose service charge shows up in its option "
+                    "totals rather than in this figure, so treat this as the cheaper "
+                    "number to compare on until the option totals are read again."
                 )
                 raw_payload = {
                     "quote_url": self.quote_url,
@@ -347,6 +458,41 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
         if not match:
             return None
         return float(match.group(1).replace(",", ""))
+
+    @staticmethod
+    async def _form_state(page: PageLike) -> str:
+        """What the journey's form holds, and whether it would submit at all."""
+        try:
+            return await page.evaluate(_FORM_STATE_SCRIPT)
+        except Exception as exc:  # noqa: BLE001 - an unreadable page is not a crash
+            return f"<form state unavailable: {exc}>"
+
+    @staticmethod
+    async def _control_inventory(page: PageLike, shown: int = 30) -> str:
+        """What the page offers to type into or click, for diagnosing a miss.
+
+        Every control this flow needs is looked for by selector: the postcode and
+        quantity fields, and the button that submits the journey. A selector that
+        no longer matches leaves the page sitting on its own unquoted form - which
+        reads as "no price found" and nothing else - so naming what is actually
+        there is what turns that into a fix rather than another guess.
+        """
+        try:
+            controls = await page.query_selector_all("input, select, button")
+        except Exception as exc:  # noqa: BLE001 - an unreadable page is not a crash
+            return f"<controls unavailable: {exc}>"
+        described = []
+        for control in controls[:shown]:
+            try:
+                tag = str(await control.evaluate("el => el.tagName")).lower()
+                name = await control.get_attribute("name")
+                ident = await control.get_attribute("id")
+                kind = await control.get_attribute("type")
+                label = (await control.text_content() or "").strip()[:40]
+            except Exception:  # noqa: BLE001 - a detached control says nothing
+                continue
+            described.append(f"{tag}[name={name} id={ident} type={kind}]{f' {label!r}' if label else ''}")
+        return f"{len(controls)} found, first {len(described)}: " + ", ".join(described)
 
     @staticmethod
     def _price_context(content: str, limit: int = 1200) -> str:
