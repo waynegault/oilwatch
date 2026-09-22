@@ -88,6 +88,22 @@ def sender_domain_from_email(email_addr: str) -> str:
     return match.group(1).lower() if match else ""
 
 
+def message_received(message: dict[str, Any]) -> datetime:
+    """When the mailbox says a message arrived, naive like the rest of the app.
+
+    Graph sends "...Z", which ``fromisoformat`` accepts on 3.11+; the value is
+    kept naive so expiry comparisons never mix aware and naive datetimes, and so
+    it compares as a plain string against the ``covers_through`` a judgement
+    stored. A message with no usable date falls back to now, which is what the
+    price-recording path always did.
+    """
+    raw = message.get("receivedDateTime") or ""
+    if raw:
+        with contextlib.suppress(ValueError):
+            return datetime.fromisoformat(raw).replace(tzinfo=None)
+    return utcnow_naive()
+
+
 def request_subject(postcode: str, quantity_liters: int, on: datetime | None = None) -> str:
     """The subject a quote request is sent under, and its reply comes back with.
 
@@ -341,7 +357,9 @@ class GraphEmailMonitor:
                 # because that is an oil company being missed rather than a
                 # stranger.
                 unrecognised += 1
-                if self._reads_like_fuel_mail(app, domain, self._body_text(message)):
+                if self._reads_like_fuel_mail(
+                    app, domain, self._body_text(message), message_received(message)
+                ):
                     candidates.add(domain)
                 continue
             supplier = self._find_supplier(app, supplier_fragment)
@@ -368,16 +386,8 @@ class GraphEmailMonitor:
             # removed once processed, so an uncaptured code is gone for good.
             # A discount-only email (no price in it) still earns its keep here.
             from oilwatch.discounts import looks_like_an_offer, parse_discounts
-            from oilwatch.models import utcnow_naive
 
-            stamp = utcnow_naive()
-            raw_stamp = message.get("receivedDateTime") or ""
-            if raw_stamp:
-                with contextlib.suppress(ValueError):
-                    # Graph sends "...Z", which fromisoformat accepts on 3.11+; the
-                    # value is kept naive like the rest of the app so expiry
-                    # comparisons never mix aware and naive datetimes.
-                    stamp = datetime.fromisoformat(raw_stamp).replace(tzinfo=None)
+            stamp = message_received(message)
 
             offers = parse_discounts(text, received_at=stamp)
             for offer in offers:
@@ -503,7 +513,9 @@ class GraphEmailMonitor:
         return recorded
 
     @staticmethod
-    def _reads_like_fuel_mail(app: Any, domain: str, body: str) -> bool:
+    def _reads_like_fuel_mail(
+        app: Any, domain: str, body: str, received: datetime
+    ) -> bool:
         """Whether an unrecognised sender's mail reads like a fuel quote.
 
         The price parser is tried first because it is free and exact. It is also
@@ -511,11 +523,20 @@ class GraphEmailMonitor:
         which is the one miss this alert exists to catch — so the question is put
         to a model rather than concluded from a regex's silence.
 
-        One judgement per sender, cached in the database. Unrecognised mail is
-        left where it is rather than deleted, so the same messages come round
-        every sweep, and asking per message would spend a request on all of them,
-        hourly, forever. The cached verdict is also what keeps the alert firing
-        on later sweeps without asking again.
+        One judgement per sender per batch of mail, cached in the database.
+        Unrecognised mail is left where it is rather than deleted, so the same
+        messages come round every sweep, and asking per message would spend a
+        request on all of them, hourly, forever.
+
+        The verdict is not permanent in both directions, though, because only one
+        of them is useful: a sender already being named keeps its name without
+        asking again, while one judged "not fuel" speaks only for the mail it was
+        asked about. Anything arriving later is judged afresh — a fuel reply in
+        prose no pattern reads used to be the case this alert was built for and
+        the one it stayed quiet about, since the sender's earlier newsletter had
+        already been judged. ``covers_through`` is what bounds that: it advances
+        with each verdict, so it costs one request per *new* message rather than
+        one per message per sweep.
 
         A missing key, no network or an unreadable response all give ``None``,
         and the old behaviour stands: the sweep is unattended and must not break —
@@ -523,26 +544,35 @@ class GraphEmailMonitor:
         """
         if extract_ppl(body) is not None:
             return True
-        probability = app.db.sender_judgement(domain)
-        newly_judged = probability is None
-        if newly_judged:
-            probability = fuel_mail_probability(body)
-            if probability is None:
+        threshold = app.settings.fuel_mail_min_probability
+        verdict = app.db.sender_judgement(domain)
+        if verdict is not None:
+            probability = float(verdict["fuel_probability"])
+            settled = probability >= threshold
+            # Rows written before `covers_through` existed settled the mail that
+            # was in the mailbox when they were reached, which is what `judged_at`
+            # dates - so it stands in for the coverage rather than re-judging the
+            # whole of an old mailbox at once.
+            covers_through = verdict["covers_through"] or verdict["judged_at"]
+            if settled:
+                return True
+            if covers_through and received.isoformat() <= covers_through:
+                # Judged, and not believed. The domain is not named: this log is a
+                # file on disk, and naming every sender the judgement looked at
+                # would repeat the fault it replaced - a financial ombudsman case
+                # and the owner's bank were both in that first list.
                 return False
-            app.db.record_sender_judgement(domain, probability)
-        if probability < app.settings.fuel_mail_min_probability:
-            # Judged, and not believed. The verdict is stored above so the question
-            # is asked once, but the domain is not named: this log is a file on
-            # disk, and naming every sender the judgement looked at would repeat
-            # the fault it replaced - a financial ombudsman case and the owner's
-            # bank were both in that first list.
+        probability = fuel_mail_probability(body)
+        if probability is None:
             return False
-        if newly_judged:
-            log.info(
-                "unrecognised sender %s judged %.2f likely to be fuel mail",
-                domain,
-                probability,
-            )
+        app.db.record_sender_judgement(domain, probability, received.isoformat())
+        if probability < threshold:
+            return False
+        log.info(
+            "unrecognised sender %s judged %.2f likely to be fuel mail",
+            domain,
+            probability,
+        )
         return True
 
     @staticmethod

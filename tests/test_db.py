@@ -461,5 +461,50 @@ class QuoteRequestTests(unittest.TestCase):
         self.assertEqual(owed[0]["channel"], "email")
 
 
+class SenderJudgementTests(unittest.TestCase):
+    """What a stored fuel-mail verdict says: the probability, and what it covers."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.temp_dir.name) / "test.sqlite")
+        self.db.init_schema()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_a_verdict_records_the_newest_mail_it_accounts_for(self) -> None:
+        self.db.record_sender_judgement("a.example", 0.02, "2026-09-22T09:00:00")
+
+        verdict = self.db.sender_judgement("a.example")
+
+        assert verdict is not None
+        self.assertEqual(verdict["fuel_probability"], 0.02)
+        self.assertEqual(verdict["covers_through"], "2026-09-22T09:00:00")
+
+    def test_the_coverage_only_advances(self) -> None:
+        """A verdict must not rewind what it covers, or the sweep re-asks forever.
+
+        Every unrecognised message is re-read on every sweep, so a stored verdict
+        whose coverage went backwards would hand the same mail back to the
+        judgement hourly - the cost the per-sender cache exists to prevent.
+        """
+        self.db.record_sender_judgement("a.example", 0.02, "2026-09-22T12:00:00")
+
+        self.db.record_sender_judgement("a.example", 0.03, "2026-09-22T09:00:00")
+
+        verdict = self.db.sender_judgement("a.example")
+        assert verdict is not None
+        self.assertEqual(verdict["fuel_probability"], 0.03, "the newer verdict stands")
+        self.assertEqual(
+            verdict["covers_through"],
+            "2026-09-22T12:00:00",
+            "and what it covered is not forgotten",
+        )
+
+    def test_an_unjudged_sender_has_no_verdict(self) -> None:
+        self.assertIsNone(self.db.sender_judgement("a.example"))
+        self.assertIsNone(self.db.sender_judgement(""))
+
+
 if __name__ == "__main__":
     unittest.main()

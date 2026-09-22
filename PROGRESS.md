@@ -26,7 +26,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 14 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 726, all passing offline |
+| Tests | 732, all passing offline |
 | Database | 17 active suppliers (27 including retired), 639 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -58,7 +58,7 @@ It is a working system, not a prototype:
 | `form_submit.py` | Quote-request form submission |
 | `quotes.py` | Quote collection orchestration |
 | `graph_email.py` | Poll the inbox via Microsoft Graph, extract replies and discount codes, delete processed mail, and log what each sweep did — including senders it could not place, since that mail is skipped |
-| `quote_judge.py` | Ask TypeSafe's Jev whether mail from an unrecognised sender reads like a fuel quote; the verdict is cached per sender |
+| `quote_judge.py` | Ask TypeSafe's Jev whether mail from an unrecognised sender reads like a fuel quote; the verdict is cached per sender, with the newest mail it accounts for |
 | `email_parsing.py` | Supplier reply domains + the price parser the Graph monitor reuses |
 | `import_xls.py` | Import `Oil Prices.xls` history |
 | `brent.py` | Brent crude daily series from the EIA |
@@ -100,7 +100,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 726 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 732 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -219,6 +219,24 @@ suppliers whose only priced row came from the spreadsheet import won on
   TypeSafe's Jev — `extract_ppl` still runs first, being free and exact — held to
   a probability (`fuel_mail_min_probability`, 0.8) and cached per sender domain,
   so the unresolved mail left in the mailbox costs one request, not one per sweep.
+- **A sender judged "not fuel" is judged again when new mail arrives (2026-09-22).**
+  The verdict was cached per sender and never revisited, which made it permanent
+  in both directions — and only one of them is useful. A sender already being
+  named keeps its name, because asking again would spend a request to reach the
+  answer already stored and already acted on; a below-threshold verdict, though,
+  now records the newest mail it accounts for (`sender_judgements.covers_through`)
+  and mail arriving later is judged afresh. That closes the case the judgement was
+  built for and stayed quiet about: a fuel reply in prose no pattern reads went
+  unjudged because its sender's earlier newsletter had already answered for it.
+  The watermark also keeps the cost where the per-sender cache put it — a verdict
+  speaks only for the mail it was asked about, so the sweep pays one request per
+  *new* message rather than one per message per sweep. Measured read-only against
+  the live mailbox before it ran: of 179 unrecognised messages, 160 were settled
+  by verdicts already stored (`covers_through` arrived after them, so their
+  `judged_at` stands in for the coverage rather than re-judging a whole mailbox at
+  once) and 19 were uncovered. The sweep that followed asked once per sender,
+  wrote 7 verdicts and recorded no new fuel mail. It left one message
+  outstanding — see "Next actions" 7.
 - **BoilerJuice's journey needs two selects answered (2026-09-22).** Its quote
   page would not price until the oil type and tanker size were chosen — both
   marked `required`, so the submission was rejected without saying why — and the
@@ -592,3 +610,17 @@ reach.
    phone number still gets his, through `--phone` — that is a form being filled
    in, not a call being made, and it is written down so it is not stripped later
    as leftover phone-route code.
+7. **OPEN 2026-09-22 — mail with no sender domain is judged every sweep and the
+   answer is thrown away.** A message whose `From` will not parse gives an empty
+   `domain`, so it is unrecognised like any other and the sweep asks the judgement
+   about it on every pass; `db.record_sender_judgement` refuses an empty domain
+   because there is no key to store the verdict under, so the answer is discarded
+   and the request repeated. Measured on the live mailbox after the coverage
+   change above: of 179 unrecognised messages, exactly one is in this state — its
+   body is "Sent from Outlook for Android". Nothing is mis-recorded, but the call
+   is spent hourly for an answer nothing can keep, and a domain-less sender that
+   *did* score at or above the threshold would put a blank name in the alert line.
+   The fix is small — skip the judgement when there is no domain to name or store
+   it under — and is left open here: it is a different defect from the coverage
+   one, and every message the judgement is *not* asked about is a message that
+   cannot be named, so it wants a decision rather than a patch.

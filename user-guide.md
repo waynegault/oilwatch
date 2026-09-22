@@ -160,8 +160,13 @@ and the domain is named only when that answer is at least
 every unknown sender once put eighty of the owner's correspondents on a single
 line of a file on disk — a financial ombudsman case, NHS Scotland, his bank —
 and that is the fault the threshold exists to prevent. Verdicts are cached per
-sender domain, so an unrecognised sender costs one request rather than one per
-message, and a verdict below the threshold is stored but never named.
+sender domain, each recording the newest mail it accounts for, so an unrecognised
+sender costs one request rather than one per message — and a below-threshold
+verdict is not permanent: it speaks only for the mail it was asked about, and mail
+arriving from that sender later is judged afresh. Without that, a sender's
+newsletter would answer for its quote, which is the case the judgement exists to
+catch. A domain that *is* named keeps its name without asking again, since the
+answer is already stored and already acted on.
 
 The email sweep is a *separate* mechanism from price refresh and **is**
 scheduled — a supplier answers when it chooses, so polling is the only way to

@@ -71,8 +71,9 @@ class Settings:
     #: How likely an unrecognised sender's mail must read as a fuel quote before
     #: the sweep names that domain in its log. `extract_ppl` is tried first
     #: because it is free; when it finds no price a model is asked, and this is
-    #: the threshold its probability is held to. Cached per sender, so it decides
-    #: the alert rather than costing a request per message.
+    #: the threshold its probability is held to. Cached per sender — and each
+    #: verdict records the newest mail it accounted for, so a below-threshold
+    #: sender is judged again for later mail rather than deciding its alert.
     fuel_mail_min_probability: float = 0.8
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
 

@@ -137,10 +137,21 @@ CREATE TABLE IF NOT EXISTS processed_messages (
 -- messages are re-read every sweep, and a verdict held per message would ask
 -- again for all of them, hourly, forever. It is also what keeps the alert firing
 -- on later sweeps without spending a request to reach the same answer.
+--
+-- `covers_through` is the newest mail the verdict accounts for, and it is what
+-- keeps a *negative* verdict from being permanent. A sender judged "not fuel" on
+-- one message used to stay silent forever, so a fuel reply in prose no pattern
+-- reads - the one case the judgement exists for - was never even asked about.
+-- A verdict that names a sender stays sticky (nothing to learn by asking again);
+-- one that does not speaks only for the mail that was in the mailbox when it was
+-- reached, and mail arriving later is judged afresh. Without the watermark a
+-- below-threshold sender would be re-asked for every message it has, every
+-- sweep; with it, once per new message.
 CREATE TABLE IF NOT EXISTS sender_judgements (
     domain TEXT PRIMARY KEY,
     fuel_probability REAL NOT NULL,
-    judged_at TEXT NOT NULL
+    judged_at TEXT NOT NULL,
+    covers_through TEXT
 );
 """
 
@@ -184,6 +195,15 @@ class Database:
             supplier_columns = {row["name"] for row in conn.execute("PRAGMA table_info(suppliers)")}
             if "kind" not in supplier_columns:
                 conn.execute("ALTER TABLE suppliers ADD COLUMN kind TEXT NOT NULL DEFAULT 'supplier'")
+            # `covers_through` arrived after the first release, and its absence is
+            # meaningful rather than a gap to backfill: a verdict stored before the
+            # column existed settled the mail that was in the mailbox then, so its
+            # coverage falls back to `judged_at` and nothing older is re-asked.
+            judgement_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(sender_judgements)")
+            }
+            if "covers_through" not in judgement_columns:
+                conn.execute("ALTER TABLE sender_judgements ADD COLUMN covers_through TEXT")
             # Give pre-existing rows a validity too, so an older database compares
             # on the same footing as a fresh one instead of reporting null. Idempotent:
             # only rows where it is still unset are touched.
@@ -788,30 +808,47 @@ class Database:
                 (message_id, utcnow_naive().isoformat()),
             )
 
-    def sender_judgement(self, domain: str) -> float | None:
-        """The stored fuel-mail probability for a sender domain, if judged before.
+    def sender_judgement(self, domain: str) -> dict[str, Any] | None:
+        """The stored verdict for a sender domain, or ``None`` if it has none.
 
         ``None`` means this domain has not been judged, which is the caller's cue
-        to ask rather than a verdict of its own.
+        to ask rather than a verdict of its own. ``fuel_probability`` is what came
+        back; ``covers_through`` is the newest mail the verdict accounts for, so a
+        caller can tell whether mail that arrived later has been judged at all.
+        Rows written before that column existed report it as ``None`` and are
+        covered by ``judged_at`` instead.
         """
         if not domain:
             return None
         with closing(self.connect()) as conn:
             row = conn.execute(
-                "SELECT fuel_probability FROM sender_judgements WHERE domain = ?",
+                "SELECT fuel_probability, judged_at, covers_through "
+                "FROM sender_judgements WHERE domain = ?",
                 (domain,),
             ).fetchone()
-        return None if row is None else float(row["fuel_probability"])
+        return None if row is None else dict(row)
 
-    def record_sender_judgement(self, domain: str, fuel_probability: float) -> None:
-        """Store a sender's fuel-mail probability so it is asked only once."""
+    def record_sender_judgement(
+        self, domain: str, fuel_probability: float, covers_through: str | None = None
+    ) -> None:
+        """Store a sender's fuel-mail probability so it is asked only once.
+
+        ``covers_through`` is the newest message the verdict accounts for. It only
+        ever advances: a verdict that rewound it would re-ask about mail it had
+        already settled, every sweep.
+        """
         if not domain:
             return
         with closing(self.connect()) as conn, conn:
+            row = conn.execute(
+                "SELECT covers_through FROM sender_judgements WHERE domain = ?", (domain,)
+            ).fetchone()
+            if row is not None and row["covers_through"]:
+                covers_through = max(row["covers_through"], covers_through or "")
             conn.execute(
                 "INSERT OR REPLACE INTO sender_judgements "
-                "(domain, fuel_probability, judged_at) VALUES (?, ?, ?)",
-                (domain, float(fuel_probability), utcnow_naive().isoformat()),
+                "(domain, fuel_probability, judged_at, covers_through) VALUES (?, ?, ?, ?)",
+                (domain, float(fuel_probability), utcnow_naive().isoformat(), covers_through),
             )
 
     def all_quotes(self) -> list[dict[str, Any]]:

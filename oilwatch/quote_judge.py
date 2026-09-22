@@ -19,10 +19,15 @@ malformed response returns ``None`` and the caller keeps the behaviour it had. A
 judgement that cannot be made must never break the sweep, and ``None`` means "not
 judged" rather than "not fuel" — the two must not be confused.
 
-**One judgement per sender, not per message.** Unrecognised mail is deliberately
+**One judgement per sender per batch of mail.** Unrecognised mail is deliberately
 left in the mailbox rather than deleted, so the same messages are re-read every
 hour; asking per message would spend a request on each of them, every sweep,
-forever. The caller caches the verdict per domain (see ``db.sender_judgement``).
+forever. The caller caches the verdict per domain (see ``db.sender_judgement``),
+and caches what that verdict *accounted for* alongside it: a sender already being
+named keeps its name, while one judged below the threshold is judged again when
+mail it has not seen arrives. A verdict that covered everything it was ever shown
+would make a sender's newsletter answer for its quote — which is the one case this
+module was written to catch.
 """
 
 from __future__ import annotations

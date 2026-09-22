@@ -604,7 +604,9 @@ class GraphSweepRerunTests(unittest.TestCase):
 
         self._sweep([first], [second], judgement=0.9)
         self.assertEqual(self.judge_mock.call_count, 1, "one judgement for the sender")
-        self.assertEqual(self.db.sender_judgement("unlisted-fuels.example"), 0.9)
+        stored = self.db.sender_judgement("unlisted-fuels.example")
+        assert stored is not None
+        self.assertEqual(stored["fuel_probability"], 0.9)
 
         later = self._message("PPP", "inbox-id")
         later["from"] = first["from"]
@@ -615,6 +617,106 @@ class GraphSweepRerunTests(unittest.TestCase):
 
         self.judge_mock.assert_not_called()
         self.assertIn("unlisted-fuels.example", "\n".join(captured.output))
+
+    def test_a_sender_judged_not_fuel_is_asked_again_for_later_mail(self) -> None:
+        """A negative verdict is not permanent, because only one of them is useful.
+
+        A sender judged "not fuel" on one message used to stay silent forever, so
+        a fuel reply in prose no pattern reads - the exact case this judgement
+        exists for - was never even asked about: its sender's earlier newsletter
+        had already answered for it. Mail arriving afterwards is judged afresh.
+        """
+        def body(text: str) -> dict:
+            return {"contentType": "text", "content": text}
+
+        newsletter = self._message("RRR", "inbox-id")
+        newsletter["from"] = {"emailAddress": {"address": "offers@a-newsletter.example"}}
+        newsletter["body"] = body("Our winter brochure is enclosed.")
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as first_pass:
+            self._sweep([newsletter], [], judgement=0.02)
+
+        self.assertEqual(self.judge_mock.call_count, 1, "asked about the mail it had")
+        self.assertNotIn(
+            "a-newsletter.example",
+            "\n".join(first_pass.output),
+            "a verdict below the threshold names nobody",
+        )
+
+        # The same sender, later: a quote written as prose, so the price parser
+        # finds nothing and only the judgement can name it.
+        reply = self._message("SSS", "inbox-id")
+        reply["receivedDateTime"] = "2026-09-10T11:30:00Z"
+        reply["from"] = newsletter["from"]
+        reply["body"] = body(
+            "Thanks for your enquiry. We can do a thousand litres at one hundred "
+            "and eight pence a litre plus VAT, delivery included."
+        )
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([reply], [], judgement=0.95)
+
+        self.assertEqual(self.judge_mock.call_count, 1, "the later mail is judged")
+        text = "\n".join(captured.output)
+        self.assertIn("fuel quote from unrecognised sender(s): a-newsletter.example", text)
+
+    def test_a_sender_already_being_named_is_never_asked_again(self) -> None:
+        """The other direction stays sticky: a name is not re-bought.
+
+        Asking about a settled sender would spend a request to reach the answer
+        already stored and already acted on, so later mail from it is named
+        without a call.
+        """
+        def body(text: str) -> dict:
+            return {"contentType": "text", "content": text}
+
+        first = self._message("TTT", "inbox-id")
+        first["from"] = {"emailAddress": {"address": "quotes@listed-fuels.example"}}
+        first["body"] = body("Kerosene is available on request.")
+
+        self._sweep([first], [], judgement=0.9)
+
+        later = self._message("UUU", "inbox-id")
+        later["receivedDateTime"] = "2026-09-11T09:00:00Z"
+        later["from"] = first["from"]
+        later["body"] = body("A further note about kerosene.")
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([later], [])
+
+        self.judge_mock.assert_not_called()
+        self.assertIn("listed-fuels.example", "\n".join(captured.output))
+
+    def test_mail_a_verdict_already_covers_is_not_asked_again(self) -> None:
+        """One request per new message, not one per message per sweep.
+
+        Unrecognised mail is left in the mailbox, so every message is re-read
+        every sweep. If a below-threshold verdict did not record which mail it
+        accounted for, the whole mailbox would be re-judged hourly - the cost the
+        per-sender cache exists to avoid. The same message, seen again, is
+        covered; the newer one beside it is not.
+        """
+        def body(text: str) -> dict:
+            return {"contentType": "text", "content": text}
+
+        first = self._message("VVV", "inbox-id")
+        first["receivedDateTime"] = "2026-09-10T09:00:00Z"
+        first["from"] = {"emailAddress": {"address": "hello@a-shop.example"}}
+        first["body"] = body("Your order has been dispatched.")
+
+        self._sweep([first], [], judgement=0.01)
+
+        later = self._message("WWW", "inbox-id")
+        later["receivedDateTime"] = "2026-09-10T12:00:00Z"
+        later["from"] = first["from"]
+        later["body"] = body("Another dispatch note, later the same day.")
+
+        # Both are visible now: the one already judged, and the newer one.
+        self._sweep([later, first], [], judgement=0.02)
+
+        self.assertEqual(
+            self.judge_mock.call_count, 1, "only the mail the verdict did not cover"
+        )
 
     def test_a_readable_price_never_asks_the_judgement(self) -> None:
         """The free test runs first; the judgement is only for what it misses.

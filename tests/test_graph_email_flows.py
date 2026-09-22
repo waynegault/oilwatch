@@ -58,13 +58,19 @@ class FakeDb:
         self.quotes: list[dict] = []
         self.discounts: list[dict] = []
         self.marked: list[str] = []
-        self.judgements: dict[str, float] = {}
+        self.judgements: dict[str, dict] = {}
 
-    def sender_judgement(self, domain: str) -> float | None:
+    def sender_judgement(self, domain: str) -> dict | None:
         return self.judgements.get(domain)
 
-    def record_sender_judgement(self, domain: str, fuel_probability: float) -> None:
-        self.judgements[domain] = fuel_probability
+    def record_sender_judgement(
+        self, domain: str, fuel_probability: float, covers_through: str | None = None
+    ) -> None:
+        self.judgements[domain] = {
+            "fuel_probability": fuel_probability,
+            "judged_at": "2026-09-01T10:00:00",
+            "covers_through": covers_through,
+        }
 
     def init_schema(self) -> None:
         self.schema_inits += 1
