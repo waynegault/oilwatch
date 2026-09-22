@@ -7,10 +7,14 @@ replies, extracts the price, records it, and deletes the message.
 
 Requires a Microsoft Entra app registration:
 
-* Client ID is read from the ``MICROSOFT_CLIENT_ID`` environment variable.
+* Client ID is read from the ``MICROSOFT_CLIENT_ID`` environment variable, or
+  from ``microsoft_client_id`` in ``config/settings.json`` when that is unset.
 * The app must be a public client (allow public client flows) with the
-  delegated ``Mail.ReadWrite`` permission.
-* One-time authentication: ``oilwatch login-email`` (device-code flow).
+  delegated ``Mail.ReadWrite`` and ``Mail.Send`` permissions - reading the
+  replies, and asking by email for the suppliers that answer only by hand.
+* One-time authentication: ``oilwatch login-email`` (device-code flow). Adding a
+  permission means signing in again, because the request has to ask for it and
+  the cached token does not carry what was never requested.
 """
 
 from __future__ import annotations
@@ -36,7 +40,7 @@ from oilwatch.quote_judge import fuel_mail_probability
 
 log = get_logger("graph_email")
 
-SCOPES = ["Mail.ReadWrite"]
+SCOPES = ["Mail.ReadWrite", "Mail.Send"]
 AUTHORITY = "https://login.microsoftonline.com/consumers"
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
 
