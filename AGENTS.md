@@ -108,6 +108,15 @@ often only a marketing page. Priced rows also carry **`kind`**
 Use `contact.url` — the ordering page when there is one — and treat a `kind` of
 `benchmark` as a figure (Fueltool), never a winner to report.
 
+**"Are we waiting on a reply?" is `awaiting_reply` in `status` — a different
+question from "is a price missing".** `no_quote_suppliers` names the last ask that
+came back empty; `awaiting_reply` names the asks still owed an answer, oldest
+first, each with the `channel` it was made by. A supplier replies by hand — a
+form, an email, a phone call — so an ask that was never written down is
+indistinguishable from one still being considered, in the database as much as in
+an empty mailbox. `submit-requests` records the asks it submits, and a price from
+that supplier closes them.
+
 ## Never
 
 - **Never record a purchase from a price.** Recording is the owner's deliberate CLI

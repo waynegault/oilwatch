@@ -274,6 +274,52 @@ class DispatchTests(unittest.TestCase):
 
         return load_contact().postcode
 
+    def test_a_submitted_form_is_recorded_as_a_request_owed_an_answer(self) -> None:
+        """A form is answered later, by a person, so the ask has to be written down.
+
+        The form key is what the submission reports, and the register is what
+        says which supplier that key belongs to, so the request is filed against
+        the row the price would later arrive for.
+        """
+        app = MagicMock()
+        app.db.list_suppliers.return_value = [
+            {"id": 23, "name": "Gleaner Oils", "website": "https://www.gleaner.co.uk/"}
+        ]
+        registry = {
+            "excluded_domains": [],
+            "suppliers": [
+                {
+                    "name": "Gleaner Oils",
+                    "website": "https://www.gleaner.co.uk/",
+                    "quote_request": {"form": "gleaner_oils"},
+                }
+            ],
+        }
+        submit = MagicMock(
+            return_value=[
+                {
+                    "supplier": "gleaner_oils",
+                    "status": "submitted",
+                    "message": "Form submitted; awaiting email reply.",
+                }
+            ]
+        )
+        with (
+            patch("oilwatch.cli.OilWatchApp", return_value=app),
+            patch("oilwatch.config.load_supplier_registry", return_value=registry),
+            patch("oilwatch.browser_auth.BrowserAuth"),
+            patch("oilwatch.form_submit.submit_all", new=submit),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            main()
+
+        app.db.record_quote_request.assert_called_once()
+        args, kwargs = app.db.record_quote_request.call_args
+        self.assertEqual(args[0], 23, "the request is filed against the supplier row")
+        self.assertEqual(args[1], "form")
+        self.assertEqual(kwargs["note"], "Form submitted; awaiting email reply.")
+
     def test_register_passes_headless_as_the_inverse_of_visible(self) -> None:
         register = AsyncMock(return_value=[])
         for argv, expected in ((["register"], True), (["register", "--visible"], False)):

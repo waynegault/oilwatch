@@ -665,6 +665,11 @@ class OilWatchApp:
             # between an expected gap and a fault worth looking at.
             "no_quote_suppliers": no_quote,
             "failed_suppliers": failed,
+            # And what is still owed an answer. A request made by form, email or
+            # phone comes back later, from a person; a supplier thinking looks
+            # exactly like a supplier nobody asked unless the ask is written
+            # down, which is the whole reason this list exists.
+            "awaiting_reply": self.db.outstanding_quote_requests(),
             # The same marker as `current_prices` carries: `status` is the other
             # call an agent makes when it wants to know what is going on.
             "refresh": self.sweep_state(),

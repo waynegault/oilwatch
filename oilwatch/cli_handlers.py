@@ -193,18 +193,66 @@ def _cmd_login(app: OilWatchApp, args: argparse.Namespace) -> None:
     auth.close()
 
 
+def _record_submitted_requests(
+    app: OilWatchApp,
+    results: list[dict[str, Any]],
+    args: argparse.Namespace,
+) -> None:
+    """Record each submitted form as a request that is owed an answer.
+
+    A form is answered by a person later, so without a row here the only way to
+    tell whether a reply is still coming is to read the mailbox - and there a
+    supplier thinking looks exactly like a supplier nobody ever asked. Resolved
+    to a supplier row by website, then by name: those are the two keys the
+    register and the database share, since `init` upserts one from the other, so
+    an entry that resolves by neither means those two have come apart.
+    """
+    submitted = [result for result in results if result.get("status") == "submitted"]
+    if not submitted:
+        # Nothing was asked, so the register is not read either: a run that only
+        # printed phone numbers should not depend on the file being there.
+        return
+    from oilwatch.config import load_supplier_registry
+
+    register = load_supplier_registry(app.root)["suppliers"]
+    form_of: dict[Any, dict[str, Any]] = {
+        (record.get("quote_request") or {}).get("form"): record
+        for record in register
+        if (record.get("quote_request") or {}).get("form")
+    }
+    id_by_website: dict[Any, int] = {}
+    id_by_name: dict[Any, int] = {}
+    for supplier in app.db.list_suppliers():
+        id_by_website[supplier.get("website")] = supplier["id"]
+        id_by_name[supplier.get("name")] = supplier["id"]
+    for result in submitted:
+        record = form_of.get(result.get("supplier")) or {}
+        supplier_id = id_by_website.get(record.get("website")) or id_by_name.get(
+            record.get("name")
+        )
+        if supplier_id is None:
+            continue
+        app.db.record_quote_request(
+            supplier_id,
+            "form",
+            quantity_liters=args.quantity_liters,
+            postcode=args.postcode,
+            note=result.get("message", ""),
+        )
+
+
 def _cmd_submit_requests(app: OilWatchApp, args: argparse.Namespace) -> None:
     from oilwatch.browser_auth import BrowserAuth
     from oilwatch.config import load_supplier_registry
     from oilwatch.form_submit import requests_from, submit_all
 
+    # Derived from the supplier register, which is version controlled, rather
+    # than from a list in the gitignored settings.json. The supplier that can
+    # only be telephoned is reported as a call, not as a failure.
     if args.suppliers:
         supplier_keys = [s.strip() for s in args.suppliers.split(",") if s.strip()]
         phone_only: list[dict[str, Any]] = []
     else:
-        # Derived from the supplier register, which is version controlled,
-        # rather than from a list in the gitignored settings.json. The supplier
-        # that can only be telephoned is reported as a call, not as a failure.
         registry = load_supplier_registry(app.root)
         supplier_keys, phone_only = requests_from(registry["suppliers"])
     if not supplier_keys and not phone_only:
@@ -230,6 +278,7 @@ def _cmd_submit_requests(app: OilWatchApp, args: argparse.Namespace) -> None:
             )
         finally:
             auth.close()
+    _record_submitted_requests(app, results, args)
     _print(results + phone_only)
 
 

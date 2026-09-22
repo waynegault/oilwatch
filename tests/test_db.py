@@ -385,5 +385,81 @@ class DuplicateObservationTests(unittest.TestCase):
         self.assertEqual(len(self.db.active_discounts()), 2)
 
 
+class QuoteRequestTests(unittest.TestCase):
+    """A request stays owed until a price answers it, and only a price does."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.temp_dir.name) / "test.sqlite")
+        self.db.init_schema()
+        self.supplier_id = self.db.upsert_supplier(
+            {
+                "name": "Gleaner Oils",
+                "website": "https://www.gleaner.co.uk/",
+                "status": "active",
+                "connector_type": "manual",
+                "connector_config": {},
+            }
+        )
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _quote(self, status: str) -> None:
+        self.db.record_quote(
+            {
+                "supplier_id": self.supplier_id,
+                "observed_at": utcnow_naive().isoformat(),
+                "quantity_liters": 1000,
+                "status": status,
+                "currency": "GBP",
+                "source": "test",
+                "reason": None if status == "ok" else "quote_by_request",
+            }
+        )
+
+    def _could_be_expected(self) -> list[str]:
+        return [row["supplier_name"] for row in self.db.outstanding_quote_requests()]
+
+    def test_a_request_is_owed_until_a_price_from_that_supplier_arrives(self) -> None:
+        self.db.record_quote_request(self.supplier_id, "form", postcode="AB21 0YA")
+        self.assertEqual(self._could_be_expected(), ["Gleaner Oils"])
+
+        self._quote("ok")
+
+        self.assertEqual(self._could_be_expected(), [])
+
+    def test_an_attempt_that_came_back_with_nothing_leaves_the_request_owed(self) -> None:
+        """Only a price answers a request.
+
+        An empty ask is itself recorded in `quotes`, so closing on the appearance
+        of a row rather than on a price would retire a request the supplier never
+        answered - which is the whole thing this table exists to keep straight.
+        """
+        self.db.record_quote_request(self.supplier_id, "form")
+        self._quote("manual_action_required")
+        self.assertEqual(self._could_be_expected(), ["Gleaner Oils"])
+
+    def test_the_longest_owed_request_is_listed_first_with_its_supplier(self) -> None:
+        """The oldest first, because that is the one to chase, and named because
+        an id alone is not something a reader can act on."""
+        other = self.db.upsert_supplier(
+            {
+                "name": "Oilfast Insch",
+                "website": "https://oilfast.co.uk/depot/insch/",
+                "status": "active",
+                "connector_type": "manual",
+                "connector_config": {},
+            }
+        )
+        self.db.record_quote_request(self.supplier_id, "form", requested_at="2026-09-22T09:00:00")
+        self.db.record_quote_request(other, "phone", requested_at="2026-09-21T09:00:00")
+
+        owed = self.db.outstanding_quote_requests()
+
+        self.assertEqual([row["supplier_name"] for row in owed], ["Oilfast Insch", "Gleaner Oils"])
+        self.assertEqual(owed[0]["channel"], "phone")
+
+
 if __name__ == "__main__":
     unittest.main()

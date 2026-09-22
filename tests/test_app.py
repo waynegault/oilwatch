@@ -154,6 +154,45 @@ class OilWatchAppTests(unittest.TestCase):
         self.assertIn("fell 2.0p/L", status["recommendation"])
         self.assertIn("1 supplier", status["recommendation"])
 
+    def test_status_reports_what_is_still_owed_an_answer(self) -> None:
+        """The question a form or a phone call leaves open.
+
+        Nothing else here can answer it: `quotes` holds what came back, so a
+        supplier thinking and a supplier nobody asked look identical - in the
+        database and in an empty mailbox - until the ask is written down and read
+        back here.
+        """
+        supplier_id = self.app.db.upsert_supplier(
+            {
+                "name": "Asked",
+                "website": "https://asked.example.com",
+                "status": "active",
+                "connector_type": "manual",
+                "connector_config": {},
+            }
+        )
+        self.app.db.record_quote_request(supplier_id, "form", postcode="AB21 0YA")
+
+        owed = self.app.status()["awaiting_reply"]
+        self.assertEqual([row["supplier_name"] for row in owed], ["Asked"])
+
+        self.app.db.record_quote(
+            {
+                "supplier_id": supplier_id,
+                "observed_at": "2026-09-22T09:00:00",
+                "quantity_liters": 1000,
+                "status": "ok",
+                "price_per_liter": 0.70,
+                "total_price": 700.0,
+                "currency": "GBP",
+                "source": "test",
+                "notes": "",
+                "raw_payload": {},
+            }
+        )
+
+        self.assertEqual(self.app.status()["awaiting_reply"], [])
+
     def test_cheapest_ignores_history_outside_the_age_window(self) -> None:
         stale_id = self.app.db.upsert_supplier(
             {

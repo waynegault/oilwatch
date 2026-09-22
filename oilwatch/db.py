@@ -58,6 +58,24 @@ CREATE TABLE IF NOT EXISTS sweeps (
     started_by TEXT
 );
 
+-- One row per price actually asked for: written when the request goes out, and
+-- closed when a quote for that supplier is recorded. It exists because the
+-- channels that answer by hand - a form, an email, a phone call - reply later,
+-- and nothing else here can say whether that answer is still owed. `quotes`
+-- holds what came back; a request that was never made and one still being
+-- thought about look identical in an empty mailbox, and differ only here.
+CREATE TABLE IF NOT EXISTS quote_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id INTEGER NOT NULL,
+    requested_at TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    quantity_liters INTEGER,
+    postcode TEXT,
+    note TEXT,
+    answered_at TEXT,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+);
+
 -- A detached sweep, run as its own process so it outlives the MCP session that
 -- asked for it. `state` is running / finished / failed; progress counts and the
 -- results land here as the worker goes, because the caller's next question is
@@ -256,6 +274,16 @@ class Database:
                     json.dumps(record.get("raw_payload", {})),
                 ),
             )
+            # A price answers whatever was asked of that supplier, so the request
+            # stops counting as outstanding here rather than waiting for someone
+            # to read the mailbox again. Only a price does it: an attempt that
+            # raised, or one that came back with nothing, leaves the request owed.
+            if record.get("status") == "ok":
+                conn.execute(
+                    "UPDATE quote_requests SET answered_at = ? "
+                    "WHERE supplier_id = ? AND answered_at IS NULL",
+                    (record["observed_at"], record["supplier_id"]),
+                )
             return self._inserted_id(cursor)
 
     def quote_already_recorded(self, record: dict[str, Any]) -> bool:
@@ -396,6 +424,55 @@ class Database:
                 "ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
         return dict(row) if row else None
+
+    def record_quote_request(
+        self,
+        supplier_id: int,
+        channel: str,
+        *,
+        requested_at: str | None = None,
+        quantity_liters: int | None = None,
+        postcode: str | None = None,
+        note: str = "",
+    ) -> int:
+        """Record that a supplier has been asked for a price.
+
+        ``channel`` is how it was asked - form, email or phone - because that is
+        what says where the answer will come from. The row stays open until a
+        quote for the supplier is recorded (see :meth:`record_quote`), which is
+        what makes "is a reply still owed?" answerable without reading the
+        mailbox at all.
+        """
+        if requested_at is None:
+            requested_at = utcnow_naive().isoformat()
+        with closing(self.connect()) as conn, conn:
+            cursor = conn.execute(
+                "INSERT INTO quote_requests "
+                "(supplier_id, requested_at, channel, quantity_liters, postcode, note) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (supplier_id, requested_at, channel, quantity_liters, postcode, note),
+            )
+            return self._inserted_id(cursor)
+
+    def outstanding_quote_requests(self) -> list[dict[str, Any]]:
+        """Requests that no recorded quote has answered, oldest first.
+
+        The oldest first because a request that has been owed longest is the one
+        worth chasing; the supplier's name is joined in rather than left to the
+        caller, since the id alone answers nothing a reader can act on.
+        """
+        with closing(self.connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT r.id, r.supplier_id, s.name AS supplier_name, r.requested_at,
+                       r.channel, r.quantity_liters, r.postcode, r.note
+                FROM quote_requests r
+                JOIN suppliers s ON s.id = r.supplier_id
+                WHERE r.answered_at IS NULL
+                ORDER BY r.requested_at
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def create_refresh_job(
         self, job_id: str, started_at: str, started_by: str, total: int
