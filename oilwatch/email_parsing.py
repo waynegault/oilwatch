@@ -57,6 +57,11 @@ SUPPLIER_DOMAINS = {
     # sales@compassfuel.co.uk, which matched nothing, so the mail sat in the
     # inbox with its price unread. Same shape as regencyoils.co.uk above.
     "compassfuel.co.uk": "compassfuels.co.uk",
+    # Turriff's contact page carries rory@turriff-fuels.co.uk while the supplier's
+    # website is turrifffuels.com: the mail domain kept its hyphen when the site
+    # dropped it, so an answer sent from there would map nowhere and sit in the
+    # inbox with its price unread - the same shape as the entry above.
+    "turriff-fuels.co.uk": "turrifffuels.com",
 }
 
 

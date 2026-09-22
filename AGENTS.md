@@ -22,7 +22,8 @@ network: `update_brent`.
 
 A few of these have consequences beyond this machine, so call them
 deliberately: `quote-all` and `refresh_prices` drive real browsers,
-`submit-requests` puts the owner's details in a supplier's form,
+`submit-requests` puts the owner's details in a supplier's form — or, with
+`--by-email`, in a message sent from the owner's own mailbox —
 `monitor-email` reads the mailbox and deletes what it processes, and
 `record-purchase` is the owner's own act.
 
@@ -96,9 +97,10 @@ The supplier register is **`config/suppliers.json`**, which is version controlle
 personal values and operational settings (address, postcode, credentials, the
 freshness window, the order quantity) but no supplier policy. The register holds
 the suppliers, the domains never to treat as one, and each supplier's
-`quote_request` saying whether it is asked by form or by phone. So it, and not the
-code, is the list of suppliers this install chases: read it before saying who is
-or is not being asked.
+`quote_request` saying whether it is asked by form; where there is no form, an
+address on the record is what the app writes to. So it, and not the code, is the
+list of suppliers this install chases: read it before saying who is or is not
+being asked.
 
 A row's **`order_page`** is where a quote is actually requested; its `website` is
 often only a marketing page. Priced rows also carry **`kind`**
@@ -111,11 +113,17 @@ Use `contact.url` — the ordering page when there is one — and treat a `kind`
 **"Are we waiting on a reply?" is `awaiting_reply` in `status` — a different
 question from "is a price missing".** `no_quote_suppliers` names the last ask that
 came back empty; `awaiting_reply` names the asks still owed an answer, oldest
-first, each with the `channel` it was made by. A supplier replies by hand — a
-form, an email, a phone call — so an ask that was never written down is
-indistinguishable from one still being considered, in the database as much as in
-an empty mailbox. `submit-requests` records the asks it submits, and a price from
-that supplier closes them.
+first, each with the `channel` it was made by. A supplier replies by hand, so an
+ask that was never written down is indistinguishable from one still being
+considered, in the database as much as in an empty mailbox.
+
+**Two ways to ask, and only two.** `submit-requests` submits the register's quote
+forms and records each one (`channel: "form"`); `submit-requests --by-email`
+writes to the suppliers that have no form but do carry an address
+(`channel: "email"`). Either way a price from that supplier closes the ask.
+**Nothing records a phone call:** a supplier with no form and no address is
+reported as a number to ring and stays out of `awaiting_reply`, because the app
+never asked it.
 
 ## Never
 

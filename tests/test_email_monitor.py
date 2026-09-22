@@ -115,6 +115,16 @@ class SupplierMappingsTests(unittest.TestCase):
         self.assertEqual(supplier_fragment_for("sales.compassfuel.co.uk"), "compassfuels.co.uk")
         self.assertEqual(supplier_fragment_for("compassfuels.co.uk"), "compassfuels.co.uk")
 
+    def test_a_reply_from_turriffs_hyphenated_mail_domain_maps_to_the_supplier(self) -> None:
+        """Turriff's mail domain keeps a hyphen its website dropped.
+
+        The contact page carries rory@turriff-fuels.co.uk while the supplier's
+        website is turrifffuels.com, so a reply would map nowhere and sit in the
+        inbox with its price unread - the same shape as the two entries above.
+        """
+        self.assertEqual(supplier_fragment_for("turriff-fuels.co.uk"), "turrifffuels.com")
+        self.assertEqual(supplier_fragment_for("mail.turriff-fuels.co.uk"), "turrifffuels.com")
+
     def test_a_domain_that_merely_ends_with_a_known_one_is_not_matched(self) -> None:
         self.assertIsNone(supplier_fragment_for("notvalueoils.com"))
         self.assertIsNone(supplier_fragment_for("example.com"))

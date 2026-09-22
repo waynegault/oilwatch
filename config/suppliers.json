@@ -83,11 +83,12 @@
       "website": "https://www.turrifffuels.com/",
       "status": "active",
       "phone": "01888 562706",
+      "email": "rory@turriff-fuels.co.uk",
       "connector_type": "manual",
       "quote_request": {
         "phone": true
       },
-      "notes": "Website recorded 2026-09-18 (the old turriff-fuels.co.uk entry was wrong). Three pages - contact-us, faq, our-products - with no quote form and no published price, so it stays a phone quote; 01888 562706 is the number on the site."
+      "notes": "Website checked 2026-09-22: no quote form and no published price, so there is nothing to scrape. The contact page carries rory@turriff-fuels.co.uk, so this supplier is asked by email rather than by hand; 01888 562706 is the number on the site. That mail domain keeps a hyphen the website dropped, hence the matching entry in SUPPLIER_DOMAINS."
     },
     {
       "name": "Compass Fuels",
