@@ -542,6 +542,14 @@ class GraphEmailMonitor:
         and the old behaviour stands: the sweep is unattended and must not break —
         nor start naming strangers — because a judgement was unavailable.
         """
+        if not domain:
+            # Nothing to name and nowhere to keep the answer: the alert line names
+            # domains, so an empty one could only print a blank, and
+            # `record_sender_judgement` refuses an empty domain — which means the
+            # verdict would be thrown away and the same request spent on every
+            # sweep, forever. Mail whose `From` will not parse is still counted as
+            # unrecognised by the caller; it is simply not asked about.
+            return False
         if extract_ppl(body) is not None:
             return True
         threshold = app.settings.fuel_mail_min_probability

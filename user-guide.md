@@ -166,7 +166,9 @@ verdict is not permanent: it speaks only for the mail it was asked about, and ma
 arriving from that sender later is judged afresh. Without that, a sender's
 newsletter would answer for its quote, which is the case the judgement exists to
 catch. A domain that *is* named keeps its name without asking again, since the
-answer is already stored and already acted on.
+answer is already stored and already acted on. Mail whose `From` will not parse
+has no domain to name and nowhere to keep a verdict, so it is not judged at all —
+it is still counted, but there is nothing the alert could ask you to add.
 
 The email sweep is a *separate* mechanism from price refresh and **is**
 scheduled — a supplier answers when it chooses, so polling is the only way to

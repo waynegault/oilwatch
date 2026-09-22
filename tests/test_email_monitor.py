@@ -718,6 +718,47 @@ class GraphSweepRerunTests(unittest.TestCase):
             self.judge_mock.call_count, 1, "only the mail the verdict did not cover"
         )
 
+    def test_mail_with_no_sender_domain_is_never_judged(self) -> None:
+        """No domain means nothing to name and nowhere to keep the answer.
+
+        The alert line names domains, so an empty one could only print a blank,
+        and `record_sender_judgement` refuses an empty domain - so the verdict was
+        thrown away and the same request spent again on every sweep, forever.
+        Measured on the live mailbox on 2026-09-22: one such message, body "Sent
+        from Outlook for Android", was asked about hourly for as long as it stayed.
+        It is still counted as unrecognised, so the sweep's own arithmetic holds.
+        """
+        stranger = self._message("XXX", "inbox-id")
+        stranger["from"] = {"emailAddress": {"address": ""}}
+        stranger["body"] = {"contentType": "text", "content": "Kerosene is available on request."}
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([stranger], [])
+
+        self.judge_mock.assert_not_called()
+        text = "\n".join(captured.output)
+        self.assertIn("1 from unrecognised", text, "still counted, so nothing is dropped")
+        self.assertNotIn("fuel quote from unrecognised sender(s)", text)
+
+    def test_a_domainless_price_does_not_put_a_blank_name_in_the_alert(self) -> None:
+        """The other half of it: a name to add is what the alert is asking for.
+
+        With no domain there is no name to put on the line, so a price the parser
+        *can* read still earns no alert - otherwise the log carries
+        "unrecognised sender(s):  - add the domain to SUPPLIER_DOMAINS", asking for
+        something that cannot be supplied.
+        """
+        stranger = self._message("YYY", "inbox-id")
+        stranger["from"] = {"emailAddress": {"address": "not-an-address"}}
+        stranger["body"] = {"contentType": "text", "content": "Kerosene 99.15p (Excl. VAT)"}
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            self._sweep([stranger], [])
+
+        text = "\n".join(captured.output)
+        self.assertNotIn("fuel quote from unrecognised sender(s)", text)
+        self.assertIn("1 from unrecognised", text)
+
     def test_a_readable_price_never_asks_the_judgement(self) -> None:
         """The free test runs first; the judgement is only for what it misses.
 

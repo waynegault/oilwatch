@@ -26,7 +26,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 14 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 732, all passing offline |
+| Tests | 734, all passing offline |
 | Database | 17 active suppliers (27 including retired), 639 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -100,7 +100,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 732 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 734 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -235,8 +235,9 @@ suppliers whose only priced row came from the spreadsheet import won on
   by verdicts already stored (`covers_through` arrived after them, so their
   `judged_at` stands in for the coverage rather than re-judging a whole mailbox at
   once) and 19 were uncovered. The sweep that followed asked once per sender,
-  wrote 7 verdicts and recorded no new fuel mail. It left one message
-  outstanding — see "Next actions" 7.
+  wrote 7 verdicts and recorded no new fuel mail. It left one message uncovered —
+  a sender with no parseable domain, now skipped rather than asked hourly
+  ("Next actions" 7).
 - **BoilerJuice's journey needs two selects answered (2026-09-22).** Its quote
   page would not price until the oil type and tanker size were chosen — both
   marked `required`, so the submission was rejected without saying why — and the
@@ -610,17 +611,16 @@ reach.
    phone number still gets his, through `--phone` — that is a form being filled
    in, not a call being made, and it is written down so it is not stripped later
    as leftover phone-route code.
-7. **OPEN 2026-09-22 — mail with no sender domain is judged every sweep and the
-   answer is thrown away.** A message whose `From` will not parse gives an empty
-   `domain`, so it is unrecognised like any other and the sweep asks the judgement
-   about it on every pass; `db.record_sender_judgement` refuses an empty domain
-   because there is no key to store the verdict under, so the answer is discarded
-   and the request repeated. Measured on the live mailbox after the coverage
-   change above: of 179 unrecognised messages, exactly one is in this state — its
-   body is "Sent from Outlook for Android". Nothing is mis-recorded, but the call
-   is spent hourly for an answer nothing can keep, and a domain-less sender that
-   *did* score at or above the threshold would put a blank name in the alert line.
-   The fix is small — skip the judgement when there is no domain to name or store
-   it under — and is left open here: it is a different defect from the coverage
-   one, and every message the judgement is *not* asked about is a message that
-   cannot be named, so it wants a decision rather than a patch.
+7. **DONE 2026-09-22 — mail with no sender domain is not judged at all.** A
+   message whose `From` will not parse gives an empty `domain`, so it was
+   unrecognised like any other and the sweep asked the judgement about it on every
+   pass; `db.record_sender_judgement` refuses an empty domain because there is no
+   key to store the verdict under, so the answer was discarded and the request
+   repeated — one call an hour, forever, for a verdict nothing could keep. Measured
+   on the live mailbox after the coverage change above: of 179 unrecognised
+   messages, exactly one was in this state (body "Sent from Outlook for Android").
+   The sweep now leaves an empty domain unasked, which also closes the second half
+   of the defect: a domain-less sender whose price the parser *could* read used to
+   put a blank name in the alert line ("unrecognised sender(s):  - add the domain
+   to SUPPLIER_DOMAINS"), asking for something that cannot be supplied. Such a
+   message is still counted as unrecognised, so a sweep's arithmetic still holds.
