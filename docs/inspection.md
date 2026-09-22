@@ -116,6 +116,7 @@ OilWatch must never buy anything, and must not damage the host or the database.
 | 3.7 | 🔍 DB writes happen in one thread | Read `service.quote_all` | Quotes are recorded after the pool, in the calling thread, so concurrent workers cannot contend for the file |
 | 3.8 | 🔍 Backups are gitignored | Confirm any `*.sqlite.bak*` was renamed to `*.sqlite` | The ignore rule is `*.sqlite`, so a `.bak` suffix is NOT ignored and could be committed |
 | 3.9 | 🔍 Nothing is scheduled at logon | `dir /b "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"` (write the literal path if the shell rejects `%`) | No live OilWatch entry: prices refresh on request, by design |
+| 3.10 | 🔧 A supplier's phone is data, never a route | `grep -rnE "order_channel\|phone_email\|by phone" oilwatch/`, then read the manual notes and `oilwatch status` | Nothing **offers** phoning a supplier to get a quote: no `phone`/`phone_email` `order_channel` (a number alone reports `none`), no connector note or `order_notes` string carrying a supplier's number, and no `note` in live `status` carrying one. The number itself **stays** in `config/suppliers.json`, the DB `phone` column, `contact.phone` and `raw_payload` — deliberately, because the owner wants to know a supplier's number and the app must never act on it. A literal "no digits anywhere" bar is the wrong one and contradicts AGENTS.md's "the app never rings anyone" |
 
 ## 4. Correctness — High
 
