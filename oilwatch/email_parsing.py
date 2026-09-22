@@ -52,6 +52,11 @@ SUPPLIER_DOMAINS = {
     "crownoil.co.uk": "crownoil.co.uk",
     "nationwidefuels.co.uk": "nationwidefuels.co.uk",
     "compassfuels.co.uk": "compassfuels.co.uk",
+    # The group's own domain (Compass Fuel Oils, Leyland) is what an answer
+    # actually arrives from: a quote requested on 2026-09-22 was answered by
+    # sales@compassfuel.co.uk, which matched nothing, so the mail sat in the
+    # inbox with its price unread. Same shape as regencyoils.co.uk above.
+    "compassfuel.co.uk": "compassfuels.co.uk",
 }
 
 

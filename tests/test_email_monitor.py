@@ -95,6 +95,17 @@ class SupplierMappingsTests(unittest.TestCase):
         self.assertEqual(supplier_fragment_for("E.BOILERJUICE.COM"), "boilerjuice.com")
         self.assertEqual(supplier_fragment_for("boilerjuice.com"), "boilerjuice.com")
 
+    def test_a_reply_from_the_groups_own_domain_maps_to_the_supplier(self) -> None:
+        """Compass answers from a domain one letter shorter than its website.
+
+        A quote requested on 2026-09-22 came back from sales@compassfuel.co.uk,
+        which matched nothing, so the reply sat in the inbox with its price
+        unread - the same shape as regencyoils.co.uk, mapped for the same reason.
+        """
+        self.assertEqual(supplier_fragment_for("compassfuel.co.uk"), "compassfuels.co.uk")
+        self.assertEqual(supplier_fragment_for("sales.compassfuel.co.uk"), "compassfuels.co.uk")
+        self.assertEqual(supplier_fragment_for("compassfuels.co.uk"), "compassfuels.co.uk")
+
     def test_a_domain_that_merely_ends_with_a_known_one_is_not_matched(self) -> None:
         self.assertIsNone(supplier_fragment_for("notvalueoils.com"))
         self.assertIsNone(supplier_fragment_for("example.com"))
