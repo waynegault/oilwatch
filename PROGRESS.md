@@ -22,12 +22,12 @@ It is a working system, not a prototype:
 
 | Area | State |
 |------|-------|
-| Modules under `oilwatch/` | 54 Python files |
+| Modules under `oilwatch/` | 55 Python files |
 | Supplier connectors | 14 supplier-specific, plus 4 generic |
-| CLI commands | 20 |
+| CLI commands | 21 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 709, all passing offline |
-| Database | 17 active suppliers (28 including retired), 602 quote rows, 1 order (2026-09-18) |
+| Tests | 723, all passing offline |
+| Database | 17 active suppliers (27 including retired), 639 quote rows, 1 order (2026-09-18) |
 
 ---
 
@@ -37,7 +37,7 @@ It is a working system, not a prototype:
 
 | File | Purpose |
 |------|---------|
-| `cli.py` | CLI entry point (20 commands) |
+| `cli.py` | CLI entry point (21 commands) |
 | `cli_handlers.py` | One handler per CLI command; the browser/Graph ones live here |
 | `service.py` | `OilWatchApp` — orchestration used by both CLI and MCP |
 | `mcp_server.py` | FastMCP server, 10 tools; streamable HTTP on `/mcp`, or `--stdio` |
@@ -81,7 +81,7 @@ by email; there is no phone connector, because the app never rings a supplier.
 
 ### CLI commands
 
-`init`, `discover`, `suppliers`, `quote`, `quote-all`, `cheapest`, `status`,
+`init`, `discover`, `suppliers`, `duplicates`, `quote`, `quote-all`, `cheapest`, `status`,
 `chart`, `time-series`, `import-spreadsheet`, `update-brent`,
 `record-purchase`, `purchases`, `schedule`, `api-discover`,
 `register`, `login`, `submit-requests`, `monitor-email`, `login-email`.
@@ -100,7 +100,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 709 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 723 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,

@@ -19,6 +19,7 @@ COMMANDS = [
     ["init"],
     ["discover"],
     ["suppliers"],
+    ["duplicates"],
     ["cheapest"],
     ["status"],
     ["chart"],

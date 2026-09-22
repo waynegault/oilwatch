@@ -28,6 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
     suppliers = subparsers.add_parser("suppliers")
     suppliers.add_argument("--include-inactive", action="store_true")
 
+    duplicates = subparsers.add_parser(
+        "duplicates", help="Report suppliers held as more than one row"
+    )
+    duplicates.add_argument("--include-inactive", action="store_true")
+
     quote_one = subparsers.add_parser("quote")
     quote_one.add_argument("supplier_id", type=int)
     quote_one.add_argument("--postcode")

@@ -132,7 +132,17 @@ python -m oilwatch.cli suppliers --include-inactive
 
 # Discover NEW suppliers via web search
 python -m oilwatch.cli discover
+
+# Check no supplier is recorded twice (same name or email on two rows)
+python -m oilwatch.cli duplicates
 ```
+
+The `duplicates` check reports a supplier the register holds as more than one
+row. `upsert_supplier` keys on `website`, so a supplier whose site moves is
+inserted again rather than updated, and the two rows split its quote history
+between them — that is how a Turriff Fuels twin appeared on 2026-09-22. The
+check names the suspects and stops there: choosing the survivor is a judgement
+about identity, so it never merges or deletes.
 
 ### Enquiry and Email Commands
 

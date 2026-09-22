@@ -78,6 +78,17 @@ class OilWatchApp:
         self.db.init_schema()
         return self.db.list_suppliers(include_inactive=include_inactive)
 
+    def duplicates(self, include_inactive: bool = False) -> dict[str, Any]:
+        """Report suppliers the register holds as more than one row.
+
+        A check, not a repair: the rows are named so an operator can pick the
+        survivor, which is a judgement about identity that no comparison can
+        make on its own.
+        """
+        self.db.init_schema()
+        groups = self.db.find_duplicate_suppliers(include_inactive=include_inactive)
+        return {"count": len(groups), "duplicates": groups}
+
     def quote_supplier(
         self,
         supplier_id: int,

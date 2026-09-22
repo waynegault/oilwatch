@@ -13,8 +13,9 @@ reference — every flag and return shape — is in `README.md`, and status in
 `chart`, `time_series_chart`. Costs minutes: `refresh_prices`. Reaches the
 network: `update_brent`.
 
-**Through the CLI — twenty commands**, as `oilwatch <command>` or
-`python -m oilwatch.cli <command>`: `init`, `discover`, `suppliers`, `quote`,
+**Through the CLI — twenty-one commands**, as `oilwatch <command>` or
+`python -m oilwatch.cli <command>`: `init`, `discover`, `suppliers`, `duplicates`,
+`quote`,
 `quote-all`, `cheapest`, `status`, `chart`, `time-series`, `update-brent`,
 `import-spreadsheet`, `record-purchase`, `purchases`, `schedule`, `api-discover`,
 `register`, `login`, `submit-requests`, `monitor-email`, `login-email`.

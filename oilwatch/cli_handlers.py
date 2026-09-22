@@ -35,6 +35,10 @@ def _cmd_suppliers(app: OilWatchApp, args: argparse.Namespace) -> None:
     _print(app.suppliers(include_inactive=args.include_inactive))
 
 
+def _cmd_duplicates(app: OilWatchApp, args: argparse.Namespace) -> None:
+    _print(app.duplicates(include_inactive=args.include_inactive))
+
+
 def _cmd_quote(app: OilWatchApp, args: argparse.Namespace) -> None:
     _print(
         app.quote_supplier(args.supplier_id, postcode=args.postcode, prefer_browser=args.browser)
@@ -370,6 +374,7 @@ HANDLERS: dict[str, Callable[[OilWatchApp, argparse.Namespace], None]] = {
     "init": _cmd_init,
     "discover": _cmd_discover,
     "suppliers": _cmd_suppliers,
+    "duplicates": _cmd_duplicates,
     "quote": _cmd_quote,
     "quote-all": _cmd_quote_all,
     "cheapest": _cmd_cheapest,

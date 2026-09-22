@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from oilwatch.models import utcnow_naive
+from oilwatch.supplier_integrity import duplicate_supplier_groups
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -361,6 +362,20 @@ class Database:
         with closing(self.connect()) as conn:
             rows = conn.execute(query).fetchall()
         return [self._supplier_row_to_dict(row) for row in rows]
+
+    def find_duplicate_suppliers(
+        self, include_inactive: bool = False
+    ) -> list[dict[str, Any]]:
+        """Suppliers that name or mail the same supplier as another row.
+
+        Active rows by default, because two live rows are the fault worth
+        fixing; pass ``include_inactive`` to also surface a row that was
+        deactivated by hand rather than removed. Reporting only — nothing here
+        merges or deletes, see :mod:`oilwatch.supplier_integrity`.
+        """
+        return duplicate_supplier_groups(
+            self.list_suppliers(include_inactive=include_inactive)
+        )
 
     def get_supplier(self, supplier_id: int) -> dict[str, Any] | None:
         with closing(self.connect()) as conn:
