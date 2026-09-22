@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
+from oilwatch.config import load_supplier_registry
 from oilwatch.db import Database
 from oilwatch.email_parsing import SUPPLIER_DOMAINS, extract_ppl, supplier_fragment_for
 from oilwatch.form_submit import SUPPLIER_FORMS
@@ -130,6 +131,32 @@ class SupplierMappingsTests(unittest.TestCase):
         self.assertIsNone(supplier_fragment_for("example.com"))
         self.assertIsNone(supplier_fragment_for(""))
 
+    def test_every_address_in_the_register_can_be_answered(self) -> None:
+        """An address on a register record is a reply domain the sweep must know.
+
+        `submit-requests --by-email` writes to the address on the record, and the
+        supplier answers from whatever domain its mail leaves - which no register
+        field shows. Regency, Compass, Turriff and Carnegie each replied from a
+        domain the map lacked, and each miss was found only after the price had
+        sat in the inbox unread, so this reads the register itself rather than
+        waiting for the next supplier to answer: the map cannot be derived from
+        the register, but a record it could not answer is a defect whether or not
+        that supplier has replied yet.
+        """
+        missing = [
+            f"{record.get('name')} <{record['email']}>"
+            for record in load_supplier_registry()["suppliers"]
+            if record.get("email")
+            and supplier_fragment_for(sender_domain_from_email(record["email"])) is None
+        ]
+        self.assertEqual(
+            missing,
+            [],
+            "these register records carry an address the sweep cannot read a reply "
+            "from; add each of those sender domains to SUPPLIER_DOMAINS in "
+            "oilwatch/email_parsing.py",
+        )
+
     def test_body_text_strips_html(self) -> None:
         msg = {
             "body": {
@@ -211,6 +238,57 @@ class BoilerJuiceQuoteTests(unittest.TestCase):
 
     def test_the_sender_domain_is_recognised(self) -> None:
         self.assertEqual(SUPPLIER_DOMAINS["boilerjuice.com"], "boilerjuice.com")
+
+
+class CarnegieFuelsReplyTests(unittest.TestCase):
+    """A real reply stating the price as '+ VAT' pence, with the original quoted.
+
+    Carnegie is asked by email because its own site has no form and no published
+    price, so this reply is the only price it will ever produce — and on
+    2026-09-22 it landed from sales@carnegiefuels.co.uk, a domain the reply map
+    did not know, which left it counted as an unrecognised sender with its price
+    unread. The quoted request is part of the body here because that is what
+    Graph hands the sweep: the subject line and the signature carry numbers of
+    their own, and the parse has to survive them.
+    """
+
+    BODY = (
+        "Hello Wayne,\n\n"
+        "Hope you are well.\n\n"
+        "The current price for 1000 litres is 114.95ppl + VAT and delivery would "
+        "be by Thursday, if that was suitable for you.\n\n"
+        "Kind Regards,\n\n"
+        "Stevie-Leigh Shannon\nOffice Sales Supervisor\n\n"
+        "Carnegie Fuels Limited\n7 West Road\nBrechin Business Park\nBrechin\n"
+        "DD9 6RJ\n\n01356 648648\nsales@carnegiefuels.co.uk\n\n"
+        "-----Original Message-----\n"
+        "From: Wayne Gault <waynegault@msn.com>\n"
+        "Sent: 22 September 2026 14:19\n"
+        "To: Info <info@carnegiefuels.co.uk>\n"
+        "Subject: oilwatch quote request - AB21 0YA - 1000L - 2026-09-22\n\n"
+        "Please could you quote for 1000 litres of heating oil (kerosene) "
+        "delivered to Hatton of Fintray, Aberdeenshire, Scotland, AB21 0YA.\n\n"
+        "Name: Wayne Gault\nEmail: waynegault@msn.com\nPhone: 07720061019\n"
+    )
+
+    def test_extracts_the_stated_price_and_uplifts_the_vat(self) -> None:
+        """'+ VAT' is ex-VAT: reading it as inclusive would undercut the quote.
+
+        114.95p ex-VAT is 120.70p once the domestic rate is applied, so a parse
+        that stored the figure as it stands would report £1149.50 for the order
+        the supplier prices at £1206.98.
+        """
+        self.assertEqual(extract_ppl(self.BODY), 1.1495)
+        inc_vat = apply_vat(1.1495, DOMESTIC_VAT_RATE)
+        self.assertAlmostEqual(inclusive_total(inc_vat, 1000), 1206.98, delta=0.06)
+
+    def test_the_reply_domain_maps_to_the_supplier(self) -> None:
+        self.assertEqual(
+            supplier_fragment_for("carnegiefuels.co.uk"), "carnegiefuels.co.uk"
+        )
+        self.assertEqual(
+            supplier_fragment_for("sales.carnegiefuels.co.uk"), "carnegiefuels.co.uk"
+        )
 
 
 class _Response:

@@ -62,6 +62,12 @@ SUPPLIER_DOMAINS = {
     # dropped it, so an answer sent from there would map nowhere and sit in the
     # inbox with its price unread - the same shape as the entry above.
     "turriff-fuels.co.uk": "turrifffuels.com",
+    # Carnegie is asked by email at info@carnegiefuels.co.uk, but its answer came
+    # from sales@carnegiefuels.co.uk - and the map held no entry for the domain at
+    # all, so the reply was counted as an unrecognised sender and left in the
+    # inbox with its price unread. Same shape again: the site has no form to
+    # drive, so email is the only route this supplier can be quoted by.
+    "carnegiefuels.co.uk": "carnegiefuels.co.uk",
 }
 
 
