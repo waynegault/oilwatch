@@ -219,8 +219,8 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | # | Check | Command / Action | Expected |
 |---|-------|------------------|----------|
 | 11.1 | 🔍 Tool count | `.venv\Scripts\python.exe -m unittest tests.test_docs.CountTests.test_the_mcp_tool_count_matches_the_server` | Ten |
-| 11.2 | 🔍 A real handshake lists them | Spawn `python -m oilwatch.mcp_server --stdio` with an MCP client and call `list_tools` | Ten tools; `chart, cheapest, current_prices, list_suppliers, purchases, refresh_prices, refresh_status, status, time_series_chart, update_brent` |
-| 11.3 | 🔍 A read call succeeds | Call `cheapest` over that session | `isError` is false |
+| 11.2 | 🔍 The count is real, not just declared | Read the served object in-process — `from oilwatch.mcp_server import mcp` then `asyncio.run(mcp.list_tools())` — not by spawning the stdio child, which is the path that can kill the gateway (PROGRESS.md's known defect) | Ten tools; `chart, cheapest, current_prices, list_suppliers, purchases, refresh_prices, refresh_status, status, time_series_chart, update_brent` |
+| 11.3 | 🔍 A read call succeeds | Call `cheapest`, in-process or over a session if one is open | `isError` is false |
 | 11.4 | 🔍 No write/order tool exists | Review the tool list | `purchases` reads only; nothing places an order |
 | 11.5 | 🔍 Slow tools say so | Read `refresh_prices`'s docstring | States minutes, per-supplier failure, and "do not call it in a loop" |
 | 11.6 | 🔧 Client-side traps documented | `grep -n "space-free wrapper" user-guide.md` | The space-in-path and `/mnt/c` traps are in the brief |
@@ -257,7 +257,7 @@ nothing. These are the checks that catch it.
 |---|-------|------------------|----------|
 | 14.1 | 🔍 The suite is green at the floor | `.venv\Scripts\python.exe -m coverage run -m unittest discover -s tests -t . && .venv\Scripts\python.exe -m coverage report -m` | All tests pass; total ≥ 94 |
 | 14.2 | 🔍 The CLI runs against the live database | `.venv\Scripts\python.exe -m oilwatch.cli status` | A market snapshot with a cheapest supplier, a trend and a recommendation |
-| 14.3 | 🔍 The MCP server handshakes | Spawn `--stdio` and list tools | Ten tools, and a read call returns without error |
+| 14.3 | 🔍 The MCP server handshakes | Spawn `--stdio` and list tools — the one check that must take that path, and the one carrying PROGRESS.md's gateway risk; use the in-process read (§11.2) for the count itself | Ten tools, and a read call returns without error |
 | 14.4 | 🔍 One supplier quoted end to end | `.venv\Scripts\python.exe -m oilwatch.cli quote <id> --browser` | A price with `observed_at` and a note naming the quantity and basis |
 | 14.5 | 🔍 No leftovers | `dir /b .qwen\tmp`; `git status --short` | No probe scripts or capture logs from this pass, and only intended changes in git. Pre-existing scratch is the owner's: name it, do not clear it (§6.5) |
 | 14.6 | 🔍 Findings recorded | Review the audit notes | Each finding has a severity, a location and a remediation |
