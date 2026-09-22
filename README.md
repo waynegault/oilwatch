@@ -20,14 +20,13 @@ OilWatch solves the problem of finding the best price for domestic heating oil (
 | **Historical Tracking** | Stores quote history for trend analysis | ✅ Complete |
 | **Market Charts** | Generates price movement charts over time | ✅ Complete |
 | **MCP Server** | Exposes all functions as AI agent tools | ✅ Complete |
-| **Phone Scripts** | Generates call scripts for manual supplier quotes | ✅ Complete |
 
 ### Current Automation Status
 
 Each supplier below was collected live on **2026-09-15**. Prices move daily, so
 this records *how* each supplier is reached rather than what it charges — run
-`oilwatch cheapest` for today's figures. The full list, including the
-phone/email-only suppliers and the connector each domain resolves to, is in
+`oilwatch cheapest` for today's figures. The full list, including the suppliers
+with no machine-readable price and the connector each domain resolves to, is in
 `user-guide.md` §6 and §9.
 
 | Supplier | Reached by | Notes |
@@ -42,7 +41,7 @@ phone/email-only suppliers and the connector each domain resolves to, is in
 | **Johnson Oils** | Browser (`fuelsoft`) | Fuelsoft WebOrdering |
 | **Scottish Fuels** | Browser (`scottish_fuels_browser`) + email replies | Session lasts ~15 min; re-signs in automatically |
 | **BoilerJuice** | Browser (`boilerjuice_browser`) + email replies | Broker/aggregator; quotes by email too |
-| **Oilfast Insch, Turriff, Carnegie, Compass, Nationwide, Crown, Gleaner** | Phone / email / quote form | No machine-readable price; see `oilwatch phone-script`, and the quote pages in the supplier register |
+| **Oilfast Insch, Turriff, Carnegie, Compass, Nationwide, Crown, Gleaner** | Quote form / email | No machine-readable price; see each supplier's quote page in the register, or `oilwatch submit-requests --by-email` |
 
 Brogan Fuels is part of Scottish Fuels, so the Scottish Fuels figure covers it
 and Brogan is no longer a supplier of its own. Where a supplier replies to an
@@ -135,31 +134,25 @@ python -m oilwatch.cli suppliers --include-inactive
 python -m oilwatch.cli discover
 ```
 
-### Manual Quote Commands
-
-```powershell
-# Generate PHONE CALL SCRIPTS for manual suppliers
-python -m oilwatch.cli phone-script --postcode "AB21 0YA" --name "Your Name"
-
-# Export call sheets to JSON for tracking
-python -m oilwatch.cli phone-script --postcode "AB21 0YA" --name "Your Name" --output data\call-sheets.json
-```
-
 ### Enquiry and Email Commands
 
 For the suppliers that quote only after you ask. `submit-requests` drives their
-enquiry forms; `monitor-email` then reads the reply, records the price and
-deletes the message, so a processed reply cannot be counted twice. The sweep is
-the one thing here that *is* scheduled — it runs hourly on weekdays, because a
-supplier answers when it chooses.
+enquiry forms — and, with `--by-email`, writes to the ones with no form at all:
+the app asks by form or by email and never telephones a supplier, so a record
+with neither is simply not asked. `monitor-email` then reads the reply, records
+the price and deletes the message, so a processed reply cannot be counted twice.
+The sweep is the one thing here that *is* scheduled — it runs hourly on
+weekdays, because a supplier answers when it chooses.
 
 ```powershell
-# Fill every enquiry form the register asks for (see config/suppliers.json).
-# A supplier with no form on its site is reported as a number to ring.
+# Fill every enquiry form the register asks for (see config/suppliers.json)
 python -m oilwatch.cli submit-requests
 
 # One supplier only
 python -m oilwatch.cli submit-requests --suppliers gleaner_oils
+
+# Ask the suppliers that have no form, at the address the register carries
+python -m oilwatch.cli submit-requests --by-email
 
 # Read replies and record their prices (needs the one-time login below)
 python -m oilwatch.cli monitor-email
@@ -240,7 +233,7 @@ Recording a purchase is a deliberate CLI act by the owner
 | `current_prices` | Latest price per supplier (£/L inc. VAT), as an envelope that explains an empty market: `quotes` plus `as_of`, `window_days`, `excluded_suppliers`, `never_quoted`, `not_refreshed_suppliers`, `no_quote_suppliers` (last ask gave no price) and `failed_suppliers` (last ask raised), and `refresh` (whether a sweep is running now). Every row — including the ones *not* in `quotes`, which are the ones a reader has to ask — carries `kind`, `order_channel`, a `contact` of `{phone, email, url}`, and `order_page`/`valid_until` when recorded | None |
 | `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`), the winner's `kind` / `order_channel` / `contact` / `order_page`, the `window_days` compared, and any `excluded_suppliers` the age window dropped | None |
 | `purchases` | Purchases already recorded, newest first, with totals and discount codes | None |
-| `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase, the same `no_quote_suppliers` / `failed_suppliers` split, `awaiting_reply` (requests still owed a price, oldest first — a form, an email or a phone call is answered later by a person, so writing the ask down is the only way to tell a supplier thinking from one never asked), and `refresh` (whether a sweep is running now) | None |
+| `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase, the same `no_quote_suppliers` / `failed_suppliers` split, `awaiting_reply` (requests still owed a price, oldest first — a form or an email is answered later by a person, so writing the ask down is the only way to tell a supplier thinking from one never asked), and `refresh` (whether a sweep is running now) | None |
 | `chart` | Market summary chart; returns a file path | None |
 | `time_series_chart` | Per-supplier prices with Brent crude on a second axis; returns a path | None |
 | `refresh_prices` | Scrape fresh quotes from all suppliers — **slow** (minutes, browser automation). Returns `{cached, cooldown_minutes, refreshed_at, results}`; within the 10-minute cooldown it returns `cached: true` and starts nothing, and if a sweep is **already running** it returns `in_progress: true` with `started_at`/`started_by`/`seconds_ago` and starts nothing either. `background: true` instead starts the sweep as its own **detached process** and returns `{job_id, state, started_at, total}` at once | `postcode: str`, `force: bool`, `background: bool` |
@@ -267,14 +260,14 @@ meaning "no reason applies".
 Three separate vocabularies share the word `status` in this codebase, and only
 the first is a quote row's: quote rows (`ok` / `manual_action_required` /
 `error`), supplier rows (`active` / `inactive` / `manual_review`), and the result
-of a form submission or registration (`submitted`, `phone_only`, `pending`, …).
+of a form submission or registration (`submitted`, `sent`, `no_address`, …).
 
 Wherever a supplier row is not `ok`, it carries a machine-readable `reason`
 beside the prose in `notes`, so a gap can be explained without parsing English:
 
 | `reason` | Means |
 |----------|-------|
-| `no_quote_page` | no web quote exists at all — ask by phone or email |
+| `no_quote_page` | no web quote exists at all — ask by email |
 | `quote_by_request` | a quote page exists, but it answers a *person*: it takes your details and replies, so there is no price to read |
 | `browser_required` | this path cannot price the supplier and browser automation can — a quote form that has to be driven, sometimes behind a sign-in |
 | `no_price_found` | the page answered and carried no price: a parse that found nothing, as against `site_error`, where the attempt raised. Which of the two tells you whether to retry or to look at the connector |
@@ -291,7 +284,7 @@ must not get wrong is a field rather than prose it has to remember:
 | Field | Values | Means |
 |-------|--------|-------|
 | `kind` | `supplier`, `benchmark` | A `benchmark` is a figure, not a company you can buy from — Fueltool. |
-| `order_channel` | `web`, `phone_email`, `phone`, `email`, `benchmark`, `none` | `web` means a human-orderable `order_page` is recorded. `none` means nothing is recorded but a website — unrecorded, not "cannot be ordered from". |
+| `order_channel` | `web`, `email`, `benchmark`, `none` | `web` means a human-orderable `order_page` is recorded. `email` means no page, and an address to ask. `none` means neither is recorded — a phone number alone lands here, because the app never rings a supplier, and it means *unrecorded*, not "cannot be ordered from". |
 | `contact` | `{phone, email, url}` | `url` is the one link to act on: the ordering page when there is one, otherwise the site, which may only be a marketing page. |
 
 ### AI Agent Workflow
@@ -422,7 +415,7 @@ HomeFuels Direct was compared at 20% VAT, producing a misleading ranking.
 | **HTTP scraping** | One request; price parsed from the response (HTML or XML) | ValueOils, HomeFuels Direct, Fueltool, Highland Fuels |
 | **Browser automation** | Playwright drives the supplier's own quote form, sometimes behind a login session | Rix, Regency Oils, Connon Bros, Johnson Oils, Scottish Fuels, BoilerJuice |
 | **Enquiry form + email** | Form submitted once; the reply price is read from the inbox and the message deleted | Gleaner Oils, Oilfast, Compass, Nationwide, Crown Oil |
-| **Manual / phone** | Contact details plus a generated call sheet | Turriff Fuels, Carnegie Fuels |
+| **Manual / emailed enquiry** | Contact details; asked by email at the address on record | Turriff Fuels, Carnegie Fuels |
 
 ---
 
@@ -433,7 +426,7 @@ run `oilwatch cheapest` for current figures. Hardcoded prices used to live here
 and rotted within weeks.
 
 The supplier-by-supplier detail — the connector each domain resolves to, its
-endpoint, and the contact details the phone and enquiry flows use — is in
+endpoint, and the contact details the enquiry flows use — is in
 **`user-guide.md` §6 and §9**. In short:
 
 - **HTTP scrape:** ValueOils, HomeFuels Direct, Fueltool, Highland Fuels.
@@ -443,9 +436,9 @@ endpoint, and the contact details the phone and enquiry flows use — is in
   (Gravity Forms), Compass Fuels (the `compass_sector_lead` lead form),
   Nationwide Fuels and Crown Oil (both posting to an `eforms.` host behind
   Cloudflare Turnstile).
-- **No quote page — phone or email only:** Turriff Fuels (01888 562706,
-  turrifffuels.com) and Carnegie Fuels (01356 648 648, info@carnegiefuels.co.uk,
-  whose online ordering is suspended by its own notice).
+- **No quote page — asked by email:** Turriff Fuels (rory@turriff-fuels.co.uk;
+  01888 562706, turrifffuels.com) and Carnegie Fuels (info@carnegiefuels.co.uk;
+  01356 648 648, whose online ordering is suspended by its own notice).
 
 Brogan Fuels was retired on 2026-09-18: it is part of Scottish Fuels, so it is no
 longer listed, quoted or reported on separately. Its connector is gone; the
@@ -514,7 +507,7 @@ envelope looks like this (`blob` is base64-encoded binary ciphertext):
 | **Session expiry** | A browser connector stops working once a supplier session lapses (Scottish Fuels 302s to its account page) | Re-run `oilwatch login <supplier>`; the connector now reports this instead of crashing |
 | **Selector drift** | A supplier redesign silently breaks a scraper | Connectors fall back to `manual_action_required` and report what they saw; update the connector |
 | **CAPTCHA on registration** | Accounts can't be fully auto-created | One-off manual sign-in |
-| **Phone-only suppliers** | Turriff Fuels and Carnegie Fuels have no quote form at all | `oilwatch phone-script`, or the number in their register record |
+| **Suppliers with no web quote** | Turriff Fuels and Carnegie Fuels have no quote form and no published price | Asked by email — `oilwatch submit-requests --by-email`. A supplier with no address either is left unasked; the app never telephones one |
 | **Quote-by-request suppliers** | Compass Fuels, Crown Oil, Gleaner Oils, Nationwide Fuels and Oilfast Insch have a form, not a price — it takes your details and replies | `oilwatch submit-requests`, then `monitor-email` reads the reply |
 | **Price freshness** | Stored prices age | Refresh on demand — `oilwatch quote-all`, `refresh_prices` over MCP, or an agent turn; nothing is scheduled to do it; `cheapest` ignores quotes older than `max_quote_age_days` (code default 30; this install sets 1, because a quote stands at most a day) and lists them as `excluded_suppliers` |
 
@@ -678,8 +671,8 @@ python -m oilwatch.cli quote-all --postcode "AB21 0YA"
 python -m oilwatch.cli chart
 start data\oilwatch-market.png
 
-# 3. Call 2-3 manual suppliers with phone scripts
-python -m oilwatch.cli phone-script --postcode "AB21 0YA"
+# 3. Ask the register's form-less suppliers by email
+python -m oilwatch.cli submit-requests --by-email
 ```
 
 ---
@@ -728,5 +721,5 @@ MIT License
 
 > Current state detail is in `PROGRESS.md`; near-term plans in `ROADMAP.md`.
 > This is a personal tool for one home in Aberdeenshire, not a general-purpose
-> product — the home location, the supplier set and the phone-only fallbacks are
-> all deliberately specific to that use.
+> product — the home location and the supplier set are all deliberately specific
+> to that use.

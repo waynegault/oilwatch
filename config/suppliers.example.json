@@ -43,7 +43,7 @@
       "quote_request": {
         "form": "example_enquiry"
       },
-      "notes": "quote_request.form names an entry in SUPPLIER_FORMS (oilwatch/form_submit.py), which is what `oilwatch submit-requests` drives. Use {\"phone\": true} instead when the supplier has no form: the run then reports a number to ring rather than a failure, reading the number from this record's own `phone`."
+      "notes": "quote_request.form names an entry in SUPPLIER_FORMS (oilwatch/form_submit.py), which is what `oilwatch submit-requests` drives. Use {\"no_form\": true} instead when the supplier has no form: `oilwatch submit-requests --by-email` then writes to this record's own `email`. A supplier with neither a form nor an address is not asked at all - the app never rings a supplier, so its `phone` stays contact data rather than becoming a route."
     },
     {
       "name": "Example Benchmark",

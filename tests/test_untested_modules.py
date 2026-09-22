@@ -1,16 +1,16 @@
 """The handler paths the rest of the suite leaves unexercised.
 
-Covers: `phone-script`'s call-sheet loop and its `--output` export, `api-discover`
-resolving a URL from `--supplier-id` (including a bad id), `register`'s summary
-and its `--output` save, and `login-email`'s success/failure reporting.
+Covers: `api-discover` resolving a URL from `--supplier-id` (including a bad id),
+`register`'s summary and its `--output` save, and `login-email`'s
+success/failure reporting.
 
-These are the six regions `cli_handlers.py` was still missing coverage on, and
-each is a contract rather than a restatement of a one-line handler: a call sheet
-that exported nothing, a supplier id that discovered against the wrong site, a
-registration summary that dropped a supplier, or an authentication failure
-reported as "token cached" are all failures the owner would only meet at the
-terminal. The one-line delegations that remain uncovered are deliberately so —
-see the note at the top of test_mcp_server.py.
+These are the regions `cli_handlers.py` was still missing coverage on, and each
+is a contract rather than a restatement of a one-line handler: a supplier id
+that discovered against the wrong site, a registration summary that dropped a
+supplier, or an authentication failure reported as "token cached" are all
+failures the owner would only meet at the terminal. The one-line delegations
+that remain uncovered are deliberately so — see the note at the top of
+test_mcp_server.py.
 
 The suite is plain ``unittest``, offline: every heavy call (the registrar, the
 API discovery, the Graph client) is patched, and anything that writes goes to a
@@ -49,72 +49,6 @@ def run_cli(argv: list[str], app: MagicMock | None = None) -> tuple[MagicMock, s
     ):
         main()
     return app, out.getvalue()
-
-
-def app_with_suppliers(names: list[str]) -> MagicMock:
-    app = MagicMock()
-    app.suppliers.return_value = [
-        {"id": index, "name": name} for index, name in enumerate(names, start=1)
-    ]
-    return app
-
-
-# ── phone-script ───────────────────────────────────────────────────────
-
-
-class PhoneScriptOutputTests(unittest.TestCase):
-    """The call sheet is what the owner reads from while on the phone."""
-
-    def _script(self) -> MagicMock:
-        script = MagicMock()
-        script.generate_script.side_effect = lambda supplier: f"SCRIPT FOR {supplier['name']}"
-        return script
-
-    def test_every_supplier_gets_a_script(self) -> None:
-        """A sheet that stopped at the first supplier would read as complete."""
-        app = app_with_suppliers(["Rix", "Turriff Fuels"])
-        script = self._script()
-        with patch("oilwatch.cli_handlers.get_telephone_script", return_value=script):
-            _, out = run_cli(["phone-script"], app)
-
-        self.assertEqual(
-            [call.args[0]["name"] for call in script.generate_script.call_args_list],
-            ["Rix", "Turriff Fuels"],
-        )
-        self.assertIn("SCRIPT FOR Rix", out)
-        self.assertIn("SCRIPT FOR Turriff Fuels", out)
-
-    def test_output_writes_the_call_sheet_to_the_path_given(self) -> None:
-        app = app_with_suppliers(["Rix"])
-        script = self._script()
-        handed: dict[str, object] = {}
-
-        def export(suppliers, path: Path) -> Path:
-            handed["suppliers"] = suppliers
-            path.write_text("the call sheet", encoding="utf-8")
-            return path
-
-        script.export_to_json.side_effect = export
-
-        with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / "callsheet.json"
-            with patch("oilwatch.cli_handlers.get_telephone_script", return_value=script):
-                _, out = run_cli(["phone-script", "--output", str(target)], app)
-
-            self.assertTrue(target.exists(), "--output did not write the call sheet")
-            self.assertEqual(target.read_text(encoding="utf-8"), "the call sheet")
-            self.assertEqual(handed["suppliers"], app.suppliers.return_value)
-
-        self.assertIn("Call sheet exported to", out)
-
-    def test_without_output_nothing_is_written(self) -> None:
-        app = app_with_suppliers(["Rix"])
-        script = self._script()
-        with patch("oilwatch.cli_handlers.get_telephone_script", return_value=script):
-            _, out = run_cli(["phone-script"], app)
-
-        script.export_to_json.assert_not_called()
-        self.assertNotIn("exported to", out)
 
 
 # ── api-discover ───────────────────────────────────────────────────────

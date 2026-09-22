@@ -30,7 +30,6 @@ COMMANDS = [
     ["monitor-email"],
     ["login-email"],
     ["schedule", "--postcode", "AB21 0YA"],
-    ["phone-script", "--quantity-liters", "900"],
     ["api-discover", "--url", "https://example.co.uk"],
     ["register"],
     ["login", "scottish_fuels"],
@@ -101,7 +100,6 @@ class DispatchTests(unittest.TestCase):
             ["update-brent"],
             ["monitor-email"],
             ["import-spreadsheet", "--path", "P:/Oil Prices.xls"],
-            ["phone-script"],
         ):
             with self.subTest(argv=argv):
                 app, _ = self._run(argv)
@@ -221,33 +219,43 @@ class DispatchTests(unittest.TestCase):
 
         self.assertEqual(submit.call_args.args[1], ["gleaner_oils", "oilfast"])
 
-    def test_a_phone_only_supplier_is_reported_without_opening_a_browser(self) -> None:
-        """A supplier with no form is a phone call, not a failed submission.
+    def test_a_supplier_with_no_form_and_no_address_is_reported_as_not_asked(self) -> None:
+        """The gap is reported as *not asked*, never as a number to ring.
 
-        Its mail would otherwise read as "No form configured", which says
-        nothing about what to do next and looks like a fault.
+        The app asks by form or by email and never telephones, so a supplier it
+        cannot reach must not come back reading as one it has approached - and
+        the phone number on the record is contact data, not a route to print.
         """
         auth = MagicMock()
+        monitor = MagicMock()
         app = MagicMock()
         registry = {
             "excluded_domains": [],
             "suppliers": [
-                {"name": "Turriff Fuels", "phone": "01888 562706", "quote_request": {"phone": True}},
+                {
+                    "name": "Nowhere Fuels",
+                    "phone": "01224 000000",
+                    "quote_request": {"no_form": True},
+                },
             ],
         }
         out = io.StringIO()
         with (
             patch("oilwatch.cli.OilWatchApp", return_value=app),
             patch("oilwatch.config.load_supplier_registry", return_value=registry),
+            patch("oilwatch.graph_email.GraphEmailMonitor", return_value=monitor),
             patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
-            patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests", "--by-email"]),
             contextlib.redirect_stdout(out),
         ):
             main()
 
+        monitor.send.assert_not_called()
         auth.launch.assert_not_called()
-        self.assertIn("Turriff Fuels", out.getvalue())
-        self.assertIn("01888 562706", out.getvalue())
+        printed = out.getvalue()
+        self.assertIn("Nowhere Fuels", printed)
+        self.assertIn("Not asked", printed)
+        self.assertNotIn("01224 000000", printed)
 
     def test_submit_requests_reports_when_there_is_nothing_to_submit(self) -> None:
         auth = MagicMock()
@@ -326,8 +334,8 @@ class DispatchTests(unittest.TestCase):
         The form path records what it submits. Without the same here, an email
         request would leave no trace and `awaiting_reply` would under-report by
         exactly the suppliers it cannot see inside a browser - which is why a
-        supplier with a form is left to the form path, and one with only a phone
-        line and an address is asked this way.
+        supplier with a form is left to the form path, and one with no form and
+        an address on record is asked this way.
         """
         app = MagicMock()
         app.db.list_suppliers.return_value = [
@@ -342,7 +350,7 @@ class DispatchTests(unittest.TestCase):
                     "status": "active",
                     "phone": "01356 648 648",
                     "email": "info@carnegiefuels.co.uk",
-                    "quote_request": {"phone": True},
+                    "quote_request": {"no_form": True},
                 },
                 {
                     "name": "Gleaner Oils",

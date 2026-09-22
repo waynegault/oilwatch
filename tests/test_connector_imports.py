@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 
 from oilwatch.connectors import get_connector_for_supplier
-from oilwatch.connectors.suppliers import get_telephone_script
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -32,10 +31,6 @@ class ConnectorRoutingTests(unittest.TestCase):
             {"name": "Phone Only", "website": "https://unknown.example", "connector_type": "manual"}
         )
         self.assertEqual(type(connector).__name__, "ManualConnector")
-
-    def test_telephone_script_resolves_through_the_registry(self) -> None:
-        script = get_telephone_script()
-        self.assertEqual(type(script).__name__, "TelephoneQuoteScript")
 
 
 class ConnectorImportCostTests(unittest.TestCase):

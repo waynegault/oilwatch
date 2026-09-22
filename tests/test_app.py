@@ -155,7 +155,7 @@ class OilWatchAppTests(unittest.TestCase):
         self.assertIn("1 supplier", status["recommendation"])
 
     def test_status_reports_what_is_still_owed_an_answer(self) -> None:
-        """The question a form or a phone call leaves open.
+        """The question a form or an email leaves open.
 
         Nothing else here can answer it: `quotes` holds what came back, so a
         supplier thinking and a supplier nobody asked look identical - in the

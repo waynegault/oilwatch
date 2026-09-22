@@ -13,12 +13,12 @@ reference — every flag and return shape — is in `README.md`, and status in
 `chart`, `time_series_chart`. Costs minutes: `refresh_prices`. Reaches the
 network: `update_brent`.
 
-**Through the CLI — twenty-one commands**, as `oilwatch <command>` or
+**Through the CLI — twenty commands**, as `oilwatch <command>` or
 `python -m oilwatch.cli <command>`: `init`, `discover`, `suppliers`, `quote`,
 `quote-all`, `cheapest`, `status`, `chart`, `time-series`, `update-brent`,
-`import-spreadsheet`, `record-purchase`, `purchases`, `schedule`, `phone-script`,
-`api-discover`, `register`, `login`, `submit-requests`, `monitor-email`,
-`login-email`. `oilwatch --help` gives the flags; `README.md` is the reference.
+`import-spreadsheet`, `record-purchase`, `purchases`, `schedule`, `api-discover`,
+`register`, `login`, `submit-requests`, `monitor-email`, `login-email`.
+`oilwatch --help` gives the flags; `README.md` is the reference.
 
 A few of these have consequences beyond this machine, so call them
 deliberately: `quote-all` and `refresh_prices` drive real browsers,
@@ -67,14 +67,14 @@ read — the supplier is contactable instead) and **`error`** (the attempt itsel
 raised). `price_per_liter` and `total_price` are `null` for everything except
 `ok`. Do not confuse it with a supplier row's `status`
 (`active`/`inactive`/`manual_review`) or with the result of a form submission,
-which uses `submitted`, `phone_only` and so on.
+which uses `submitted`, `pending` and so on.
 
 ## When a price is missing, read its `reason`
 
 Every row that is not `ok` carries a machine-readable `reason` beside the prose in
 `notes`, so a gap can be explained without parsing English:
 
-- `no_quote_page` — no web quote exists at all: ask by phone or email.
+- `no_quote_page` — no web quote exists at all: ask by email.
 - `quote_by_request` — a quote page exists, but it answers a **person**: it takes
   the details and replies, so there is no price to read. Say this, and not "no
   quote page" — the two send a reader to different places.
@@ -104,8 +104,8 @@ being asked.
 
 A row's **`order_page`** is where a quote is actually requested; its `website` is
 often only a marketing page. Priced rows also carry **`kind`**
-(`supplier`/`benchmark`), **`order_channel`** (`web`, `phone_email`, `phone`,
-`email`, `benchmark`, `none`) and a **`contact`** of `{phone, email, url}`, so
+(`supplier`/`benchmark`), **`order_channel`** (`web`, `email`, `benchmark`,
+`none`) and a **`contact`** of `{phone, email, url}`, so
 "who can I buy from, and how?" is answered by fields rather than by reading notes.
 Use `contact.url` — the ordering page when there is one — and treat a `kind` of
 `benchmark` as a figure (Fueltool), never a winner to report.
@@ -121,9 +121,14 @@ considered, in the database as much as in an empty mailbox.
 forms and records each one (`channel: "form"`); `submit-requests --by-email`
 writes to the suppliers that have no form but do carry an address
 (`channel: "email"`). Either way a price from that supplier closes the ask.
-**Nothing records a phone call:** a supplier with no form and no address is
-reported as a number to ring and stays out of `awaiting_reply`, because the app
-never asked it.
+**The app never rings anyone:** a supplier with no form and no address is left
+unasked — reported as such, with no number offered, and kept out of
+`awaiting_reply`, because the app did not ask it.
+
+**A supplier's form may ask for the owner's phone number; give it.** `--phone`
+exists to fill that field, because the form will not submit without it. That is a
+form being filled in, not a supplier being telephoned — do not strip it as
+leftover phone-route code.
 
 ## Never
 

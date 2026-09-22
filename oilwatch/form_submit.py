@@ -102,38 +102,22 @@ SUPPLIER_FORMS: dict[str, dict[str, Any]] = {
 }
 
 
-def requests_from(records: list[dict[str, Any]]) -> tuple[list[str], list[dict[str, Any]]]:
-    """Split the register's ``quote_request`` entries into work and phone calls.
+def requests_from(records: list[dict[str, Any]]) -> list[str]:
+    """The register's ``quote_request`` form entries, as keys this module drives.
 
     The register says *which* suppliers to ask and how —
-    ``"quote_request": {"form": "<key>"}`` or ``{"phone": true}`` — while this
-    module says what each form looks like. Only the form entries can be driven,
-    so the phone ones come back as finished results: "call this number" is the
-    whole of their answer, and pointing a browser at a supplier with no form on
-    its site would only produce a failure to report.
-
-    The phone number is read from the record's own ``phone`` rather than
-    repeated here, so there is one place to correct it.
+    ``"quote_request": {"form": "<key>"}`` — while this module says what each
+    form looks like. A record carrying ``{"no_form": true}`` has nothing on its
+    site to drive: it is asked by email instead, so it is not work for this
+    path, and a supplier with neither a form nor an address is not asked at all
+    rather than reported as a number to ring.
     """
     keys: list[str] = []
-    phone_only: list[dict[str, Any]] = []
     for record in records:
-        request = record.get("quote_request") or {}
-        key = request.get("form")
+        key = (record.get("quote_request") or {}).get("form")
         if key:
             keys.append(key)
-            continue
-        if request.get("phone"):
-            name = record.get("name") or request.get("form") or "supplier"
-            number = record.get("phone") or "the number on their website"
-            phone_only.append(
-                {
-                    "supplier": name,
-                    "status": "phone_only",
-                    "message": f"No enquiry form; call {number}.",
-                }
-            )
-    return keys, phone_only
+    return keys
 
 
 def _resolve_field(driver, name: str):

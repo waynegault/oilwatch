@@ -98,13 +98,15 @@ def current_prices() -> dict[str, Any]:
     is no web quote to read), and ``failed_suppliers`` (the last ask raised).
 
     Each row carries ``valid_until``, its ``kind`` (``supplier`` or
-    ``benchmark``), its ``order_channel`` — ``web``, ``phone_email``, ``phone``,
-    ``email``, ``benchmark``, or ``none`` when nothing is recorded — a
+    ``benchmark``), its ``order_channel`` — ``web``, ``email``, ``benchmark``,
+    or ``none`` when no page and no address are recorded — a
     ``contact`` of ``{phone, email, url}``, and the supplier's ``order_page``
     when its config records one. ``contact.url`` is the single link to act on:
     the ordering page when there is one, otherwise the site, which may only be a
     marketing page. ``order_page`` being ``None`` means unrecorded rather than
-    "there is no page".
+    "there is no page". A phone number alone is not an ``order_channel``: the
+    app never rings a supplier, so ``contact.phone`` is data to pass on, not a
+    route it takes.
 
     The suppliers that are *not* in ``quotes`` — ``no_quote_suppliers``,
     ``failed_suppliers`` and ``never_quoted`` — carry the same ``kind``,

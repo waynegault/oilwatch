@@ -25,7 +25,7 @@ def utcnow_naive() -> datetime:
 #: Not to be confused with two other status fields in this codebase: a supplier
 #: row's ``status`` (``active``/``inactive``/``manual_review``) and the result of
 #: a form submission or registration, which have their own vocabularies
-#: (``submitted``, ``phone_only``, ``pending``, …). Quote rows are the only ones
+#: (``submitted``, ``sent``, ``no_address``, …). Quote rows are the only ones
 #: these three describe.
 QUOTE_STATUSES = ("ok", "manual_action_required", "error")
 
@@ -39,7 +39,7 @@ QUOTE_STATUSES = ("ok", "manual_action_required", "error")
 #: attribute one, which is a gap in this repository rather than a statement about
 #: the supplier.
 QUOTE_REASONS = (
-    "no_quote_page",  # no web quote exists at all: ask by phone or email
+    "no_quote_page",  # no web quote exists at all: ask by email
     "quote_by_request",  # a quote page exists but answers a person, not a scraper
     "browser_required",  # this path cannot price it; browser automation can
     "no_price_found",  # the page answered, and carried no price to read
@@ -89,7 +89,8 @@ class QuoteResult:
     #: degrades gracefully where an unrecognised status does not. Connectors
     #: should draw from ``QUOTE_REASONS`` rather than inventing variants:
     #:
-    #: - ``no_quote_page`` — no web quote exists (phone/email only)
+    #: - ``no_quote_page`` — no web quote exists, so the supplier has to be
+    #:   asked by email (or, with no address on record, not asked at all)
     #: - ``quote_by_request`` — a quote page exists but only answers a person:
     #:   it takes your details and replies, so there is no price to read. Not
     #:   the same thing as ``no_quote_page``, and the two were once conflated:

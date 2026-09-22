@@ -116,10 +116,13 @@ def load_supplier_registry(root: Path | None = None) -> dict[str, Any]:
 
     A supplier record may also say how it is asked for a price —
     ``"quote_request": {"form": "<SUPPLIER_FORMS key>"}`` or
-    ``{"phone": true}`` — which is what ``submit-requests`` reads to decide
-    what to do. That is in the register rather than in code, so the list of
-    suppliers to chase is reviewable and shared rather than sitting in an
-    ignored settings file.
+    ``{"no_form": true}`` — which is what ``submit-requests`` reads to decide
+    what to do. A record with a form is driven; ``no_form`` says there is
+    nothing on its site to drive, so ``submit-requests --by-email`` writes to
+    the address on the record instead, and a record with neither a form nor an
+    address is simply not asked. That is in the register rather than in code, so
+    the list of suppliers to chase is reviewable and shared rather than sitting
+    in an ignored settings file.
 
     A file that is not an object is refused rather than read as an empty
     register: a stale bare list would silently leave every supplier unimported,

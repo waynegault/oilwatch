@@ -87,9 +87,10 @@ ignore = [
   # An unused suppression is section 8.4's business, not a lint rule's.
   "RUF100",
 ]
-# Deliberately absent: W (its W293 fires 105 times, most of them inside the
-# call-sheet string literals in telephone.py, where --fix would silently rewrite
-# the document those strings emit); E501; the PLR* complexity thresholds; and
-# S101/PLC0415 (assert is idiomatic in tests, and Playwright/Selenium must stay
-# lazily imported — see connectors/suppliers/__init__.py).
+# Deliberately absent: W (unselected rather than silenced: W293 fires 78 times
+# as blank-line whitespace across the browser and HTTP connectors, and --fix
+# would rewrite text some of those modules emit); E501; the PLR* complexity
+# thresholds; and S101/PLC0415 (assert is idiomatic in tests, and
+# Playwright/Selenium must stay lazily imported — see
+# connectors/suppliers/__init__.py).
 

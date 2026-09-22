@@ -1,7 +1,8 @@
 # OilWatch User Guide
 
 How to use OilWatch: getting today's prices, ordering, recording what you bought,
-the phone fallback, accounts and sign-in, and the supplier-by-supplier reference.
+the email enquiry route, accounts and sign-in, and the supplier-by-supplier
+reference.
 
 For what the project is, how to install it and the full CLI/MCP surface, see
 `README.md`. For current implementation status and plans, see `PROGRESS.md` and
@@ -86,22 +87,30 @@ Prices are GBP per litre inclusive of VAT, like every other price stored.
 
 ---
 
-## 4. Phone quotes
+## 4. Asking a supplier with no quote form
 
-`phone-script` builds a call sheet for the suppliers that only quote by phone or
-email:
+Some suppliers have no enquiry form to fill in. **OilWatch never rings a
+supplier** — there is no call sheet and no phone route — so those suppliers are
+asked by email, at the address their register record carries:
 
 ```powershell
-python -m oilwatch.cli phone-script `
-  --quantity-liters 1000 `
-  --postcode "AB21 0YA" `
-  --name "Your Name" `
-  --address "Your Address" `
-  --output data/quote-calls.json
+python -m oilwatch.cli submit-requests --by-email
 ```
 
-It prints a quick-reference card with the phone numbers, a per-supplier script
-and a recording checklist; `--output` writes the run to JSON.
+With no `--suppliers`, the register decides who is asked: an active record with
+no form and an `email` is written to, under the marked subject so a reply is
+findable, and the ask is recorded so `status` reports it as `awaiting_reply`
+until a price closes it.
+
+A supplier with **neither a form nor an address is not asked at all**. It stays
+out of `awaiting_reply`, and it reads as a supplier with no current price rather
+than as one that has been approached. Its phone number remains on the record as
+contact data — the app never dials it, which is why a number alone is not an
+`order_channel`.
+
+That is the app's restraint, not a rule about your own number: when a supplier's
+form asks for a phone number, `--phone` supplies yours, because filling that
+field is part of submitting the form.
 
 ---
 
@@ -127,10 +136,11 @@ fails with "Not authenticated" until it is run again.
 With no `--suppliers`, the run is read from the **supplier register**
 (`config/suppliers.json`), where a record can say how it is asked:
 `"quote_request": {"form": "gleaner_oils"}` names a form in `SUPPLIER_FORMS`
-(`oilwatch/form_submit.py`), and `{"phone": true}` means there is no form, so the
-run prints the number to ring from that record's own `phone` instead of failing.
-The register is version controlled; `config/settings.json` is not, so the list of
-suppliers this install chases lives where it can be reviewed and shared.
+(`oilwatch/form_submit.py`), and `{"no_form": true}` says there is nothing on
+its site to drive, so `submit-requests --by-email` writes to that record's own
+`email` instead. The register is version controlled; `config/settings.json` is
+not, so the list of suppliers this install chases lives where it can be reviewed
+and shared.
 
 Supplier replies are one-off quotes: check the inbox after requesting, and once
 the price is recorded let the monitor delete it. A reply from a supplier not yet
@@ -173,7 +183,7 @@ notice the reply without watching the inbox.
 | **Johnson Oils** | Browser (`fuelsoft`) | Fuelsoft WebOrdering |
 | **Scottish Fuels** | Browser (`scottish_fuels_browser`) plus emailed replies | Session lasts ~15 min; re-signs in automatically |
 | **BoilerJuice** | Browser (`boilerjuice_browser`) | Broker; also quotes by email |
-| **Oilfast, Turriff, Carnegie, Compass, Nationwide, Crown, Gleaner** | Enquiry form and/or phone | No machine-readable price — see `phone-script` and each supplier's `order_page` |
+| **Oilfast, Turriff, Carnegie, Compass, Nationwide, Crown, Gleaner** | Enquiry form, or email | No machine-readable price — see each supplier's `order_page`, or ask the form-less ones with `submit-requests --by-email` |
 
 Brogan Fuels is part of Scottish Fuels, so the Scottish Fuels figure covers it;
 Brogan was retired as a supplier of its own on 2026-09-18. Last verified live
@@ -374,7 +384,7 @@ downgrade to a manual quote.
 
 ### Contact details
 
-Used by the manual connectors, the enquiry-form path and `phone-script`.
+Used by the manual connectors and the enquiry-form path.
 
 | Supplier | Contact |
 |----------|---------|
@@ -423,8 +433,7 @@ oilwatch/connectors/
     ├── regency_oils.py
     ├── scottish_fuels.py / scottish_fuels_browser.py
     ├── boilerjuice.py
-    ├── fuelsoft.py
-    └── telephone.py          # TelephoneQuoteScript
+    └── fuelsoft.py
 ```
 
 ---
@@ -614,10 +623,11 @@ without saying so is the one way to get this wrong.
   `contact.url` (the `order_page` when recorded, the `website` otherwise, because
   a website is often only a marketing page). Name the discount code when one
   applies. A price with no way to act on it is half an answer.
-- **`order_channel` says how to act**: `web` (a page is recorded), `phone_email`,
-  `phone`, `email`, `benchmark` (not orderable at all — Fueltool), or `none`
-  (nothing recorded but a website). The winner carries the same fields, so "and
-  how do I buy it?" is answered by the payload rather than by memory.
+- **`order_channel` says how to act**: `web` (a page is recorded), `email` (no
+  page, and an address to ask), `benchmark` (not orderable at all — Fueltool), or
+  `none` (nothing recorded but a website — a phone number alone lands here,
+  because the app never rings a supplier). The winner carries the same fields, so
+  "and how do I buy it?" is answered by the payload rather than by memory.
 - Give the **`observed_at` date** with the price, so a day-old quote is never
   read as today's.
 - Prices are £ per litre **inclusive of 5% VAT**, for the configured quantity
@@ -633,8 +643,9 @@ without saying so is the one way to get this wrong.
   `manual_action_required` with contact details and a `reason` saying which kind
   of gap it is: `quote_by_request` means there *is* a quote page and it answers a
   person (Compass Fuels, Crown Oil, Gleaner Oils, Nationwide Fuels, Oilfast
-  Insch), while `no_quote_page` means there is none and the phone is the only
-  route (Turriff Fuels, Carnegie Fuels). Both are expected, not failures.
+  Insch), while `no_quote_page` means there is none, so the supplier is asked by
+  email instead and a record with no address either is simply not asked (Turriff
+  Fuels, Carnegie Fuels). Both are expected, not failures.
 - **Scottish Fuels often undercuts the field, but its automatic sign-in is
   intermittent** — expect `manual_action_required` for it sometimes. That is not
   an OilWatch fault and not an MCP fault: do not try to "fix" it, and do not

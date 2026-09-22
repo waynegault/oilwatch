@@ -20,7 +20,6 @@ _CONNECTORS = {
     "RixConnector": "rix",
     "RegencyOilsConnector": "regency_oils",
     "ScottishFuelsConnector": "scottish_fuels",
-    "TelephoneQuoteScript": "telephone",
     "BoilerJuiceBrowserConnector": "boilerjuice",
     "FueltoolConnector": "fueltool",
     "FuelsoftConnector": "fuelsoft",
@@ -104,14 +103,8 @@ def get_supplier_connector(website: str, prefer_browser: bool = False):
     return _build(chosen) if chosen else None
 
 
-def get_telephone_script():
-    """Get the telephone quote script tool."""
-    return _build("TelephoneQuoteScript")
-
-
 __all__ = [  # noqa: PLE0604 - the starred entry yields _CONNECTORS' keys, which are strings
     "get_supplier_connector",
-    "get_telephone_script",
     # The connector classes, by their public names.
     *_CONNECTORS,
 ]

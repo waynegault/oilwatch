@@ -178,46 +178,50 @@ class RequestsFromTests(unittest.TestCase):
 
     The list used to live in gitignored settings.json, so the set of suppliers
     the app chases was neither reviewable in the repository nor shared with it.
+    Only a form entry is work here: the app asks by form or by email and never
+    rings, so a record with no form is left to the email path rather than
+    reported as a number to call.
     """
 
     def test_a_form_entry_becomes_a_key_to_submit(self) -> None:
-        keys, phone_only = requests_from(
+        keys = requests_from(
             [{"name": "Gleaner Oils", "quote_request": {"form": "gleaner_oils"}}]
         )
         self.assertEqual(keys, ["gleaner_oils"])
-        self.assertEqual(phone_only, [])
 
-    def test_a_phone_entry_becomes_a_call_to_report_not_a_form_to_drive(self) -> None:
-        keys, phone_only = requests_from(
+    def test_a_supplier_with_no_form_is_not_work_for_this_path(self) -> None:
+        """``no_form`` means it is asked by email, so there is nothing to drive.
+
+        The phone beside it is contact data, not a route: reporting a number to
+        ring would name a call the app never makes.
+        """
+        keys = requests_from(
             [
                 {
                     "name": "Turriff Fuels",
                     "phone": "01888 562706",
-                    "quote_request": {"phone": True},
+                    "email": "rory@turriff-fuels.co.uk",
+                    "quote_request": {"no_form": True},
                 }
             ]
         )
         self.assertEqual(keys, [], "there is no form to drive")
-        self.assertEqual(len(phone_only), 1)
-        self.assertEqual(phone_only[0]["status"], "phone_only")
-        self.assertEqual(phone_only[0]["supplier"], "Turriff Fuels")
-        self.assertIn("01888 562706", phone_only[0]["message"])
-
-    def test_the_number_is_read_from_the_record(self) -> None:
-        """One place to correct a phone number, not two that can disagree."""
-        _, phone_only = requests_from(
-            [{"name": "Turriff Fuels", "phone": "01888 000000", "quote_request": {"phone": True}}]
-        )
-        self.assertIn("01888 000000", phone_only[0]["message"])
 
     def test_a_supplier_with_no_request_entry_is_left_alone(self) -> None:
         """Registration in the register is not a request to be chased."""
-        keys, phone_only = requests_from([{"name": "Rix", "phone": "01224 455477"}])
-        self.assertEqual((keys, phone_only), ([], []))
+        keys = requests_from([{"name": "Rix", "phone": "01224 455477"}])
+        self.assertEqual(keys, [])
 
-    def test_a_phone_entry_with_no_number_says_so_rather_than_printing_nothing(self) -> None:
-        _, phone_only = requests_from([{"name": "Nowhere Fuels", "quote_request": {"phone": True}}])
-        self.assertIn("their website", phone_only[0]["message"])
+    def test_a_no_form_entry_with_no_address_is_not_asked_at_all(self) -> None:
+        """Neither a form nor an address leaves nothing to ask with.
+
+        The run must not turn that gap into a phone call to report: there is no
+        phone route any more. The supplier stays out of the ask and the ledger.
+        """
+        keys = requests_from(
+            [{"name": "Nowhere Fuels", "phone": "01224 000000", "quote_request": {"no_form": True}}]
+        )
+        self.assertEqual(keys, [])
 
 
 if __name__ == "__main__":

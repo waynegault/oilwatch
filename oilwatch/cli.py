@@ -75,14 +75,6 @@ def build_parser() -> argparse.ArgumentParser:
     schedule = subparsers.add_parser("schedule")
     schedule.add_argument("--postcode")
 
-    # Telephone quote script command
-    phone_script = subparsers.add_parser("phone-script")
-    phone_script.add_argument("--quantity-liters", type=int, default=1000)
-    phone_script.add_argument("--postcode", default="")
-    phone_script.add_argument("--address", default="")
-    phone_script.add_argument("--name", default="")
-    phone_script.add_argument("--output", default="")
-
     # API discovery command
     api_discover = subparsers.add_parser("api-discover")
     api_discover.add_argument("--url", default="", help="URL to discover APIs on")

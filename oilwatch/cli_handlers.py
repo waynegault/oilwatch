@@ -11,12 +11,10 @@ import argparse
 import asyncio
 import json
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from oilwatch.api_discovery import discover_supplier_api
 from oilwatch.auto_register import register_all
-from oilwatch.connectors.suppliers import get_telephone_script
 from oilwatch.scheduler import OilWatchScheduler
 from oilwatch.service import OilWatchApp
 
@@ -98,27 +96,6 @@ def _cmd_purchases(app: OilWatchApp, args: argparse.Namespace) -> None:
 
 def _cmd_schedule(app: OilWatchApp, args: argparse.Namespace) -> None:
     OilWatchScheduler(app, postcode=args.postcode).run_forever()
-
-
-def _cmd_phone_script(app: OilWatchApp, args: argparse.Namespace) -> None:
-    script = get_telephone_script()
-    script.configure(
-        quantity_liters=args.quantity_liters,
-        postcode=args.postcode,
-        address=args.address,
-        contact_name=args.name,
-    )
-    suppliers = app.suppliers(include_inactive=False)
-
-    print(script.get_quick_reference(suppliers))
-    print()
-    for supplier in suppliers:
-        print(script.generate_script(supplier))
-
-    if args.output:
-        output_path = Path(args.output)
-        script.export_to_json(suppliers, output_path)
-        print(f"\nCall sheet exported to: {output_path}")
 
 
 def _cmd_api_discover(app: OilWatchApp, args: argparse.Namespace) -> None:
@@ -246,11 +223,12 @@ def _email_quote_requests(app: OilWatchApp, args: argparse.Namespace) -> list[di
 
     The register drives this, as it drives the forms, because who gets asked is
     policy and belongs in the version-controlled file rather than a list here.
-    Only an *active* supplier with an address and no form is asked: a form is a
-    page this same command drives without --by-email, and a supplier already
-    asked that way must not be asked twice, while a retired tombstone is not a
-    supplier at all. A supplier with no address comes back as a call rather than
-    being skipped, so "no way to reach them" cannot read as "not asked".
+    Only an *active* supplier with no form is asked: a form is a page this same
+    command drives without --by-email, and a supplier already asked that way must
+    not be asked twice, while a retired tombstone is not a supplier at all. The
+    app never rings a supplier, so one with no address comes back as *not asked*
+    rather than as a number to call: a supplier that cannot be reached must not
+    read as one that has been.
     """
     from oilwatch.config import load_supplier_registry
     from oilwatch.graph_email import GraphEmailMonitor, request_body, request_subject
@@ -269,10 +247,10 @@ def _email_quote_requests(app: OilWatchApp, args: argparse.Namespace) -> list[di
         request = record.get("quote_request") or {}
         if request.get("form"):
             continue  # the form path owns this supplier; do not ask it twice
-        if not request.get("phone"):
+        if not request.get("no_form"):
             # No quote_request at all: a connector prices this one, so there is
             # nobody to ask and nothing to report. Naming it here would read as
-            # "needs a call" for a supplier that is already quoted.
+            # "needs asking" for a supplier that is already quoted.
             continue
         name = record.get("name") or "supplier"
         address = record.get("email")
@@ -281,7 +259,10 @@ def _email_quote_requests(app: OilWatchApp, args: argparse.Namespace) -> list[di
                 {
                     "supplier": name,
                     "status": "no_address",
-                    "message": f"No email address on record; call {record.get('phone') or 'them'}.",
+                    "message": (
+                        "Not asked: the register carries no form and no email "
+                        "address for this supplier."
+                    ),
                 }
             )
             continue
@@ -326,39 +307,41 @@ def _cmd_submit_requests(app: OilWatchApp, args: argparse.Namespace) -> None:
     from oilwatch.form_submit import requests_from, submit_all
 
     # Derived from the supplier register, which is version controlled, rather
-    # than from a list in the gitignored settings.json. The supplier that can
-    # only be telephoned is reported as a call, not as a failure.
+    # than from a list in the gitignored settings.json. Only a record with a
+    # form is work here: a supplier with no form is asked by email instead
+    # (--by-email), and one with neither a form nor an address is not asked at
+    # all, so it is neither driven nor reported as unreachable.
     if args.suppliers:
         supplier_keys = [s.strip() for s in args.suppliers.split(",") if s.strip()]
-        phone_only: list[dict[str, Any]] = []
     else:
         registry = load_supplier_registry(app.root)
-        supplier_keys, phone_only = requests_from(registry["suppliers"])
-    if not supplier_keys and not phone_only:
-        print("Error: no suppliers given and none configured. Pass --suppliers.")
+        supplier_keys = requests_from(registry["suppliers"])
+    if not supplier_keys:
+        print(
+            "Error: no suppliers given and none configured with a quote form. "
+            "Pass --suppliers, or ask the address-only ones with --by-email."
+        )
         return
 
-    results: list[dict[str, Any]] = []
-    if supplier_keys:
-        # Launched only when there is a form to drive: a register of phone-only
-        # suppliers should not open a browser to print two phone numbers.
-        auth = BrowserAuth("form_submit")
-        driver = auth.launch(headless=True)
-        try:
-            results = submit_all(
-                driver,
-                supplier_keys,
-                name=args.name,
-                email=args.email,
-                phone=args.phone,
-                postcode=args.postcode,
-                address=args.address or app.settings.home.label,
-                quantity_liters=args.quantity_liters,
-            )
-        finally:
-            auth.close()
+    # Launched only when there is a form to drive: a register with none should
+    # not open a browser to do nothing.
+    auth = BrowserAuth("form_submit")
+    driver = auth.launch(headless=True)
+    try:
+        results = submit_all(
+            driver,
+            supplier_keys,
+            name=args.name,
+            email=args.email,
+            phone=args.phone,
+            postcode=args.postcode,
+            address=args.address or app.settings.home.label,
+            quantity_liters=args.quantity_liters,
+        )
+    finally:
+        auth.close()
     _record_submitted_requests(app, results, args)
-    _print(results + phone_only)
+    _print(results)
 
 
 def _cmd_monitor_email(app: OilWatchApp, args: argparse.Namespace) -> None:
@@ -398,7 +381,6 @@ HANDLERS: dict[str, Callable[[OilWatchApp, argparse.Namespace], None]] = {
     "record-purchase": _cmd_record_purchase,
     "purchases": _cmd_purchases,
     "schedule": _cmd_schedule,
-    "phone-script": _cmd_phone_script,
     "api-discover": _cmd_api_discover,
     "register": _cmd_register,
     "login": _cmd_login,

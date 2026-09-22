@@ -60,10 +60,10 @@ CREATE TABLE IF NOT EXISTS sweeps (
 
 -- One row per price actually asked for: written when the request goes out, and
 -- closed when a quote for that supplier is recorded. It exists because the
--- channels that answer by hand - a form, an email, a phone call - reply later,
--- and nothing else here can say whether that answer is still owed. `quotes`
--- holds what came back; a request that was never made and one still being
--- thought about look identical in an empty mailbox, and differ only here.
+-- channels that answer by hand - a form, an email - reply later, and nothing
+-- else here can say whether that answer is still owed. `quotes` holds what came
+-- back; a request that was never made and one still being thought about look
+-- identical in an empty mailbox, and differ only here.
 CREATE TABLE IF NOT EXISTS quote_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     supplier_id INTEGER NOT NULL,
@@ -437,7 +437,7 @@ class Database:
     ) -> int:
         """Record that a supplier has been asked for a price.
 
-        ``channel`` is how it was asked - form, email or phone - because that is
+        ``channel`` is how it was asked - form or email - because that is
         what says where the answer will come from. The row stays open until a
         quote for the supplier is recorded (see :meth:`record_quote`), which is
         what makes "is a reply still owed?" answerable without reading the

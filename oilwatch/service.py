@@ -335,7 +335,7 @@ class OilWatchApp:
         return {
             "kind": kind,
             "order_page": order_page,
-            "order_channel": OilWatchApp.order_channel(kind, order_page, phone, email),
+            "order_channel": OilWatchApp.order_channel(kind, order_page, email),
             "contact": {
                 "phone": phone,
                 "email": email,
@@ -349,7 +349,6 @@ class OilWatchApp:
     def order_channel(
         kind: str,
         order_page: str | None,
-        phone: str | None,
         email: str | None,
     ) -> str:
         """How this supplier is actually ordered from, as one value.
@@ -363,19 +362,16 @@ class OilWatchApp:
           supplier's ``website`` is deliberately not enough to earn this: for
           ValueOils it is a marketing page and for Highland Fuels an API
           endpoint.
-        - ``phone_email`` / ``phone`` / ``email`` — no page, and these contacts.
-        - ``none`` — nothing recorded but a website. That means *unrecorded*, not
-          "cannot be ordered from": the honest gap, the same way an absent
-          ``order_page`` reads.
+        - ``email`` — no page, and an address on record to ask.
+        - ``none`` — nothing usable recorded: no page and no address. A phone
+          number alone lands here, because the app never rings a supplier, and
+          that means *unrecorded*, not "cannot be ordered from": the honest gap,
+          the same way an absent ``order_page`` reads.
         """
         if kind == "benchmark":
             return "benchmark"
         if order_page:
             return "web"
-        if phone and email:
-            return "phone_email"
-        if phone:
-            return "phone"
         if email:
             return "email"
         return "none"

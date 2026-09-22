@@ -60,7 +60,7 @@
       "quote_request": {
         "form": "gleaner_oils"
       },
-      "notes": "The quote page is the wpforms form (id 1933), whose first field is a Receive a Quote / Place an Order choice; the winter-heating-oil page embeds the same form, so both take the same field numbers. Checked 2026-09-18: the page holds no price, so quote_by_request. Also phone 01224 877575."
+      "notes": "The quote page is the wpforms form (id 1933), whose first field is a Receive a Quote / Place an Order choice; the winter-heating-oil page embeds the same form, so both take the same field numbers. Checked 2026-09-18: the page holds no price, so quote_by_request."
     },
     {
       "name": "Highland Fuels",
@@ -68,7 +68,7 @@
       "status": "active",
       "phone": "0800 224 224",
       "connector_type": "manual",
-      "notes": "Quote via form / phone."
+      "notes": "Quote via form."
     },
     {
       "name": "Fueltool",
@@ -86,9 +86,9 @@
       "email": "rory@turriff-fuels.co.uk",
       "connector_type": "manual",
       "quote_request": {
-        "phone": true
+        "no_form": true
       },
-      "notes": "Website checked 2026-09-22: no quote form and no published price, so there is nothing to scrape. The contact page carries rory@turriff-fuels.co.uk, so this supplier is asked by email rather than by hand; 01888 562706 is the number on the site. That mail domain keeps a hyphen the website dropped, hence the matching entry in SUPPLIER_DOMAINS."
+      "notes": "Website checked 2026-09-22: no quote form and no published price, so there is nothing to scrape and nothing to drive, hence `no_form`. The contact page carries rory@turriff-fuels.co.uk, so this supplier is asked by email; 01888 562706 is the number on the site, kept as contact data because the app never rings a supplier. That mail domain keeps a hyphen the website dropped, hence the matching entry in SUPPLIER_DOMAINS."
     },
     {
       "name": "Compass Fuels",
@@ -102,7 +102,7 @@
       "quote_request": {
         "form": "compass_fuels"
       },
-      "notes": "Aberdeen depot (covers AB21). The homepage carries the 'Get Fuel Price' form (WordPress action compass_sector_lead), the same one on /aberdeen-fuel/; checked 2026-09-18. It asks for name, phone, email, postcode and litres and replies, so there is no price to read - hence quote_by_request rather than no_quote_page. Also phone 0330 128 9838."
+      "notes": "Aberdeen depot (covers AB21). The homepage carries the 'Get Fuel Price' form (WordPress action compass_sector_lead), the same one on /aberdeen-fuel/; checked 2026-09-18. It asks for name, phone, email, postcode and litres and replies, so there is no price to read - hence quote_by_request rather than no_quote_page."
     },
     {
       "name": "Carnegie Fuels",
@@ -112,9 +112,9 @@
       "email": "info@carnegiefuels.co.uk",
       "connector_type": "manual",
       "quote_request": {
-        "phone": true
+        "no_form": true
       },
-      "notes": "East Scotland (Dunfermline to Fraserburgh). Online ordering is suspended by their own notice (carnegiefuels.co.uk/online-ordering-temporarily-unavailable/), which points customers to phone/email. Checked 2026-09-18: that page carries no form and no price, so there is no order_page to record and no_quote_page is the honest reason - phone 01356 648 648 or info@carnegiefuels.co.uk."
+      "notes": "East Scotland (Dunfermline to Fraserburgh). Online ordering is suspended by their own notice (carnegiefuels.co.uk/online-ordering-temporarily-unavailable/). Checked 2026-09-18: that page carries no form and no price, so there is no order_page to record, nothing to drive and no_quote_page is the honest reason - so it is asked by email at info@carnegiefuels.co.uk. 01356 648 648 is its listed number, kept as contact data."
     },
     {
       "name": "Nationwide Fuels",
@@ -128,7 +128,7 @@
       "quote_request": {
         "form": "nationwide_fuels"
       },
-      "notes": "UK-wide. The quote form (quote[fullname]/quote[email]/quote[telephone]/quote[postcode]/quote[litres], the same fields on /fuel-products/kerosene/) posts to eforms.nationwidefuels.co.uk behind Cloudflare Turnstile and replies by email; checked 2026-09-18. No price to read, so quote_by_request. Also phone 0330 678 0880."
+      "notes": "UK-wide. The quote form (quote[fullname]/quote[email]/quote[telephone]/quote[postcode]/quote[litres], the same fields on /fuel-products/kerosene/) posts to eforms.nationwidefuels.co.uk behind Cloudflare Turnstile and replies by email; checked 2026-09-18. No price to read, so quote_by_request."
     },
     {
       "name": "Crown Oil",
@@ -142,7 +142,7 @@
       "quote_request": {
         "form": "crown_oil"
       },
-      "notes": "UK-wide. The homepage quote form (quote[fullname] etc., the same fields on /products/kerosene/) posts to eforms.crownoil.co.uk behind Cloudflare Turnstile and replies by email; checked 2026-09-18. No price to read, so quote_by_request. Also phone 0330 123 1444."
+      "notes": "UK-wide. The homepage quote form (quote[fullname] etc., the same fields on /products/kerosene/) posts to eforms.crownoil.co.uk behind Cloudflare Turnstile and replies by email; checked 2026-09-18. No price to read, so quote_by_request."
     },
     {
       "name": "Oilfast Insch",

@@ -330,7 +330,9 @@ class OrderingPageTests(AppTestCase):
 #: One supplier per way of ordering, so every branch of the derivation has a case
 #: that fails if it changes. The benchmark deliberately *also* has a page and a
 #: phone number: ``benchmark`` has to win over both, because a figure you cannot
-#: buy from must never come back looking orderable.
+#: buy from must never come back looking orderable. A phone number on its own is
+#: deliberately *not* a branch: the app never rings a supplier, so that row falls
+#: through to ``none``.
 ORDER_CHANNEL_OVERRIDES = [
     {
         "name": "Page Only",
@@ -421,13 +423,26 @@ class OrderChannelTests(AppTestCase):
             },
             {
                 "Page Only": "web",
-                "Both Contacts": "phone_email",
-                "Phone Only": "phone",
+                "Both Contacts": "email",
+                "Phone Only": "none",
                 "Email Only": "email",
                 "Nothing Recorded": "none",
                 "A Benchmark": "benchmark",
             },
         )
+
+    def test_a_phone_number_alone_never_reads_as_a_route(self) -> None:
+        """The removal this pins: there is no phone ask, so no phone channel.
+
+        A row whose only recorded contact is a number reports ``none`` rather
+        than ``phone``: the app asks by form or by email, and naming a channel
+        an agent could act on would invent a call nobody makes. The number still
+        travels as contact data.
+        """
+        row = self._rows()["Phone Only"]
+
+        self.assertEqual(row["order_channel"], "none")
+        self.assertEqual(row["contact"]["phone"], "01234 567890")
 
     def test_a_benchmark_is_never_orderable_even_when_it_has_a_page(self) -> None:
         """The precedence that matters: a figure you cannot buy from.
@@ -461,7 +476,8 @@ class OrderChannelTests(AppTestCase):
 
         self.assertEqual(by_name["Page Only"]["order_channel"], "web")
         self.assertEqual(by_name["Page Only"]["contact"]["url"], "https://page.example.com/order")
-        self.assertEqual(by_name["Phone Only"]["order_channel"], "phone")
+        # A number alone is not a channel, but it is still contact data.
+        self.assertEqual(by_name["Phone Only"]["order_channel"], "none")
         self.assertEqual(by_name["Phone Only"]["contact"]["phone"], "01234 567890")
 
     def test_an_unpriced_attempt_still_says_how_to_ask_it(self) -> None:

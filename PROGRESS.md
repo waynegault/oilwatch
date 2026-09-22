@@ -1,13 +1,14 @@
 # OilWatch Progress Summary
 
-**Date:** 16 September 2026
+**Date:** 22 September 2026
 **Package version:** 0.1.0 (unchanged since the prototype — see `pyproject.toml`)
 
 > This file supersedes a stale March-2026 version that described an empty
 > database and a single test file. None of that is true any more. Figures below
-> were verified on 2026-09-16. Individual sections name the date they were
-> checked where that is not this one; the database counts are as of the date
-> stated beside them.
+> were verified on 2026-09-16; the test count, the tool count and the database
+> figures listed here were re-checked on 2026-09-22. Individual sections name the
+> date they were checked where that is not this one; the database counts are as
+> of the date stated beside them.
 
 ---
 
@@ -21,11 +22,11 @@ It is a working system, not a prototype:
 
 | Area | State |
 |------|-------|
-| Modules under `oilwatch/` | 55 Python files |
-| Supplier connectors | 15 supplier-specific, plus 4 generic |
-| CLI commands | 21 |
+| Modules under `oilwatch/` | 54 Python files |
+| Supplier connectors | 14 supplier-specific, plus 4 generic |
+| CLI commands | 20 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 718, all passing offline |
+| Tests | 709, all passing offline |
 | Database | 17 active suppliers (28 including retired), 602 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -36,7 +37,7 @@ It is a working system, not a prototype:
 
 | File | Purpose |
 |------|---------|
-| `cli.py` | CLI entry point (21 commands) |
+| `cli.py` | CLI entry point (20 commands) |
 | `cli_handlers.py` | One handler per CLI command; the browser/Graph ones live here |
 | `service.py` | `OilWatchApp` — orchestration used by both CLI and MCP |
 | `mcp_server.py` | FastMCP server, 10 tools; streamable HTTP on `/mcp`, or `--stdio` |
@@ -68,21 +69,21 @@ It is a working system, not a prototype:
 Generic: `base.py`, `manual.py`, `price_page.py`, `http_form.py`,
 `browser_base.py`.
 
-Supplier-specific (`oilwatch/connectors/suppliers/`, 15): `valueoils`,
+Supplier-specific (`oilwatch/connectors/suppliers/`, 14): `valueoils`,
 `valueoils_browser`, `homefuels_direct`, `homefuels_direct_browser`, `rix`,
 `rix_browser`, `scottish_fuels`, `scottish_fuels_browser`, `regency_oils`,
-`fuelsoft`, `fueltool`, `boilerjuice`, `highland_fuels`, `oilfast`,
-`telephone`.
+`fuelsoft`, `fueltool`, `boilerjuice`, `highland_fuels`, `oilfast`.
 
-Collection methods split three ways: plain HTTP where the price is
-server-rendered, browser automation (Playwright) where a form or login gates it,
-and a telephone script generator for the phone-only depots.
+Collection methods split two ways: plain HTTP where the price is
+server-rendered, and browser automation (Playwright) where a form or login gates
+it. Suppliers with no machine-readable price are asked by their enquiry form or
+by email; there is no phone connector, because the app never rings a supplier.
 
 ### CLI commands
 
 `init`, `discover`, `suppliers`, `quote`, `quote-all`, `cheapest`, `status`,
 `chart`, `time-series`, `import-spreadsheet`, `update-brent`,
-`record-purchase`, `purchases`, `schedule`, `phone-script`, `api-discover`,
+`record-purchase`, `purchases`, `schedule`, `api-discover`,
 `register`, `login`, `submit-requests`, `monitor-email`, `login-email`.
 
 There is no `place-order`: OilWatch does not order. Buying happens by phone or on
@@ -99,7 +100,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 718 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 709 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -108,13 +109,16 @@ monitoring, and end-to-end app wiring.
 
 ---
 
-## Database (as of 2026-09-18)
+## Database (as of 2026-09-22)
 
 - **Path:** `data/oilwatch.sqlite`
 - **Suppliers:** 28 (17 `active`; the rest historical, including Brogan Fuels,
   retired 2026-09-18 as part of Scottish Fuels)
-- **Quotes:** 602
+- **Quotes:** 630
 - **Orders:** 1
+- **Quote requests:** 6 — the asks written down, each with the `channel` it was
+  made by (`form` or `email`) and an `answered_at` for one a price closed (added
+  2026-09-22; the ledger note under Automation status has the reasoning)
 
 **Added 2026-09-10 — purchases can be recorded.** The `orders` table was
 write-only: `place_order` wrote to it but nothing ever read it back, so "who did
@@ -126,7 +130,7 @@ than guessed. `oilwatch purchases` and the read-only MCP `purchases` tool read
 them back, and `status` carries the last one. Nothing in this path drives a
 browser or contacts a supplier — recording is kept separate from buying.
 
-Quote timestamps span **2007-01-26 → 2026-09-15**, because
+Quote timestamps span **2007-01-26 → 2026-09-22**, because
 `import-spreadsheet` loaded the historical workbook. Recent automated runs
 (2026-09-09 22:19–22:40 and 2026-09-10 00:13) produced priced `ok` quotes for
 Scottish Fuels, Rix, Regency Oils, Connon Bros, Johnson Oils, HomeFuels Direct,
@@ -161,22 +165,80 @@ suppliers whose only priced row came from the spreadsheet import won on
   inclusive `You Pay £…` total (ex-VAT fuel + VAT + the broker's service charge,
   the total the supplier note names) — £1.1957/L inc-VAT for 1000L on the day —
   not from the headline `ppl`, which is ex-VAT and omits the charge.
-- **Phone-only:** Turriff Fuels, Carnegie Fuels.
+- **An ask is written down now, so silence can be told from a reply
+  (2026-09-22).** A supplier replies by hand, which made "we asked and they have
+  not answered" indistinguishable from "nobody ever asked" — in the database as
+  much as in an empty mailbox. `submit-requests` now records every form it
+  submits, and a new `quote_requests` table holds the ask with the `channel` it
+  was made by, the quantity, the postcode and an `answered_at`; a price from that
+  supplier closes its request, and `status` reports what is still owed as
+  `awaiting_reply`, oldest first, beside `no_quote_suppliers` — the last ask that
+  came back empty. Six are on record from the first run.
+- **A supplier with no form is asked by email (2026-09-22).**
+  `submit-requests --by-email` writes to the register's suppliers that have no
+  form but do carry an address, under the marked subject
+  `oilwatch quote request - <postcode> - <litres>L - <date>` so a reply is
+  findable, and records the ask as `channel: "email"`. Sending needed the
+  mailbox's `Mail.Send` scope added to the Entra app and re-consented through
+  `oilwatch login-email`; a reply is placed by sender domain, so
+  `compassfuel.co.uk` (Compass answers from a domain one letter shorter than its
+  website) and `turriff-fuels.co.uk` (Turriff's mail keeps the hyphen its website
+  dropped) both map to their rows rather than sitting unread.
+- **The phone route is gone — the app asks by form or by email, never rings
+  (2026-09-22).** Wayne's decision: OilWatch will never phone a supplier. The
+  route had been half-present since the start — `phone-script` generated a call
+  sheet, `TelephoneQuoteScript` was a registered "connector", `order_channel`
+  had `phone` and `phone_email` values, and a register record marked
+  `{"phone": true}` came back from `submit-requests` as "call this number". All
+  of it is removed rather than left as a thing nobody uses: a route the app
+  still describes is a route an agent may still take. What the vocabulary says
+  now is one thing — a supplier is asked by its quote form, or by email at the
+  address on record; a supplier with neither is *not asked*, and says so, rather
+  than being reported as a number to ring. `order_channel` loses `phone` and
+  `phone_email` (becoming `web`, `email`, `benchmark`, `none`, with a number
+  alone reporting `none`) and `requests_from` returns its form keys instead of
+  a second list of calls. The register key `quote_request.phone` is renamed
+  `quote_request.no_form`: it always meant "this one has no form", and reading a
+  phone number off a flag about forms is what let the two drift. Phone numbers
+  stay everywhere they are *data* — the register's `phone` field, the DB column,
+  `contact.phone` — and the `--phone` flags that carry the owner's own number
+  into a supplier's form are untouched. Counts move with it: CLI 21 → 20,
+  supplier connectors 15 → 14, modules under `oilwatch/` 55 → 54.
+- **The sweep asks a model only about the mail its patterns miss (2026-09-22).**
+  An unrecognised sender was named in the log only when `extract_ppl` found a
+  price, which is a regex standing in for a judgement about meaning: a genuine
+  quote in an uncovered format read as "not fuel", so the one case the alert
+  exists for was the one it stayed quiet about. The question is now put to
+  TypeSafe's Jev — `extract_ppl` still runs first, being free and exact — held to
+  a probability (`fuel_mail_min_probability`, 0.8) and cached per sender domain,
+  so the unresolved mail left in the mailbox costs one request, not one per sweep.
+- **BoilerJuice's journey needs two selects answered (2026-09-22).** Its quote
+  page would not price until the oil type and tanker size were chosen — both
+  marked `required`, so the submission was rejected without saying why — and the
+  no-price failure now names what the page actually held rather than only that it
+  carried no price. With the selects answered the journey prices again.
+- **No published price, but reachable (2026-09-22).** Turriff Fuels and Carnegie
+  Fuels have neither a quote form nor a published price, so nothing can be
+  scraped — but both carry an address (Turriff's, `rory@turriff-fuels.co.uk`, was
+  on its contact page), so `--by-email` asks them and no quote depends on a phone
+  call.
 - **Quote by request (2026-09-18):** Oilfast Insch, Compass Fuels, Gleaner Oils,
   Nationwide Fuels and Crown Oil each have a live quote page that answers a
   person rather than the app — a wpforms form, a Gravity Forms pair, or a lead
   form behind Turnstile — so they carry `reason: quote_by_request` and their
   `order_page` in the register, not `no_quote_page`. The register itself is
   `config/suppliers.json`: the suppliers it knows, the domains never to treat as
-  one, and each supplier's `quote_request` saying whether it is asked by form or
-  by phone. It is version controlled; `config/settings.json` is not, and holds
+  one, and each supplier's `quote_request` saying whether it is asked by form —
+  where it has no form, an address on the record is what the app writes to. It is
+  version controlled; `config/settings.json` is not, and holds
   the owner's personal values and operational settings — address, postcode,
   credentials, the freshness window, the order quantity — but no supplier policy.
 - **Rows say what they are and how to act on them (2026-09-18).** Each priced row
   now carries `kind` (`supplier`/`benchmark` — Fueltool's record sets it, and the
   new column defaults to `supplier` for every other row), `order_channel` (`web`
-  when an `order_page` is recorded, else `phone_email` / `phone` / `email`, or
-  `benchmark`, or `none` for nothing recorded but a website) and a `contact` of
+  when an `order_page` is recorded, else `email`, or `benchmark`, or `none` when
+  neither is recorded — a phone number alone lands there since 2026-09-22, the
+  app never ringing a supplier) and a `contact` of
   `{phone, email, url}` where `url` is the ordering page when there is one. The
   winner carries the same three. This is the half of Hal's §2.3 ask that mattered
   most: "Fueltool is a benchmark, never the winner" and "give the ordering URL"
@@ -315,7 +377,8 @@ discarding the flag the user had just typed; the row is now consulted only when
 no URL was given. This surfaced from `tests/test_untested_modules.py`, added to
 close the last uncovered handler paths: the `phone-script` call-sheet loop and
 its `--output` export, `--supplier-id` resolution, `register`'s summary and its
-`--output` save, and `login-email`'s reporting.
+`--output` save, and `login-email`'s reporting. The call-sheet tests went with
+the command on 2026-09-22 (see the phone-route note above); the rest stand.
 
 ### MCP / OpenClaw integration
 
@@ -454,6 +517,13 @@ reach.
   file from the code, so the numbers above fail the suite when they go stale
   rather than sitting here misleading — which is what the 216-vs-88 test count
   and the 8-vs-9 tool count were doing.
+- **Resolved 2026-09-22:** the counts drifted once more, in the places nothing
+  reads. `refresh_status` became the tenth MCP tool on 2026-09-19 and the
+  test-derived places moved with it, but the prose did not: `AGENTS.md`'s trap
+  list, `user-guide.md` §14 and three rows of `docs/inspection.md` still said
+  nine, and inspection's expected tool list had stopped at nine names. All six now
+  say ten, with `refresh_status` restored to the list. The count is read from the
+  served object (`mcp.list_tools()`), not by spawning the stdio child.
 
 ---
 
@@ -501,3 +571,17 @@ reach.
    dev extras (`pip install -e .[dev]`, for `coverage`) and Playwright's browser
    download, which is version-pinned — a playwright upgrade needs a fresh
    `playwright install chromium` and prunes the superseded build.
+6. **DONE 2026-09-22 — a supplier is asked by form or by email, never by
+   phone.** A supplier is asked in exactly two ways: the register's quote forms
+   are submitted, or `submit-requests --by-email` writes to the ones with no form
+   but an address. A supplier with neither is not asked at all: it is reported as
+   unasked and stays out of `awaiting_reply`, because the app never asked it. Its
+   phone number is data, not a route — a number alone reports
+   `order_channel: none`. **Amended the same day:** the first version of this
+   reported such a supplier as a number to ring, which was the tail of a phone
+   route now removed entirely (`phone-script`, the telephone connector, the
+   `phone` / `phone_email` channels and the `quote_request.phone` register flag).
+   **The owner's own number is unaffected:** a supplier's form that requires a
+   phone number still gets his, through `--phone` — that is a form being filled
+   in, not a call being made, and it is written down so it is not stripped later
+   as leftover phone-route code.

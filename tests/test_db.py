@@ -453,12 +453,12 @@ class QuoteRequestTests(unittest.TestCase):
             }
         )
         self.db.record_quote_request(self.supplier_id, "form", requested_at="2026-09-22T09:00:00")
-        self.db.record_quote_request(other, "phone", requested_at="2026-09-21T09:00:00")
+        self.db.record_quote_request(other, "email", requested_at="2026-09-21T09:00:00")
 
         owed = self.db.outstanding_quote_requests()
 
         self.assertEqual([row["supplier_name"] for row in owed], ["Oilfast Insch", "Gleaner Oils"])
-        self.assertEqual(owed[0]["channel"], "phone")
+        self.assertEqual(owed[0]["channel"], "email")
 
 
 if __name__ == "__main__":
