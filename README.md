@@ -553,7 +553,8 @@ Oil Price Webscraper/
 │   ├── settings.example.json    # Copy to settings.json (gitignored)
 │   └── supplier_credentials.json # All passwords
 ├── data/
-│   ├── oilwatch.sqlite          # Database (generated)
+│   ├── oilwatch.sqlite          # Database (generated, gitignored)
+│   ├── oilwatch-history.sqlite  # Its sanitised price history (committed, see below)
 │   ├── oilwatch-market.png      # Latest chart (generated)
 │   └── oilwatch.log             # Unattended runs, rotating (generated)
 ├── oilwatch/
@@ -585,6 +586,7 @@ Oil Price Webscraper/
 │           └── ...
 ├── tools/
 │   ├── build_explorer.py        # Builds the data explorer page (see below)
+│   ├── build_snapshot.py        # Builds the committed price-history snapshot
 │   └── explorer_template.html   # Its template
 └── tests/
     └── test_app.py              # Unit tests
@@ -705,6 +707,33 @@ each embeds a snapshot of the database, so they are rebuilt rather than
 committed. The one network call is the USD→GBP reference rate the page converts
 Brent with, fetched at build time and named on the page with its date; when that
 fetch fails the page shows Brent in dollars rather than inventing a rate.
+
+## Price-history snapshot
+
+The live database is **not** committed — this repository is public and
+`data/oilwatch.sqlite` carries the owner's correspondence (the domains of every
+sender the sweep could not place), his mailbox's message ids and his delivery
+postcode. What is worth versioning is the price history, so
+`tools/build_snapshot.py` writes that half to `data/oilwatch-history.sqlite`,
+which *is* committed:
+
+```powershell
+python tools/build_snapshot.py           # writes data/oilwatch-history.sqlite
+python tools/build_snapshot.py --check   # print what would be written, write nothing
+```
+
+It keeps `suppliers`, `quotes`, `brent_crude`, `discounts` and `quote_requests`,
+and withholds the rest: tables that identify the owner or his mail are not copied
+(`sender_judgements`, `processed_messages`, `orders`), values that identify him
+are nulled on the rows that are kept (`discounts.code`,
+`quote_requests.postcode`), and his own details — read from `oilwatch.identity`,
+so the scrub cannot drift from what the connectors use — are replaced with
+`<redacted-…>` wherever they survive inside a kept note. The build is written
+into a fresh database rather than copied and pruned, because SQLite leaves a
+deleted row in the file's free pages; it then checks its own output, scanning
+every text column *and* the file's bytes for those details and for samples from
+the tables it dropped, and deletes the file rather than leave a snapshot that
+still carries one. `snapshot_meta` inside the file records what was withheld.
 
 ## Support & Documentation
 

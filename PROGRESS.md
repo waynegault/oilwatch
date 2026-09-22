@@ -120,6 +120,26 @@ monitoring, and end-to-end app wiring.
   made by (`form` or `email`) and an `answered_at` for one a price closed (added
   2026-09-22; the ledger note under Automation status has the reasoning)
 
+**Added 2026-09-22 — a sanitised price-history snapshot is committed.** The live
+database stays untracked, because this repository is public and the file carries
+the owner's correspondence, his mailbox's message ids and his postcode. The half
+worth versioning is now written to `data/oilwatch-history.sqlite` by
+`tools/build_snapshot.py`: it keeps `suppliers`, `quotes`, `brent_crude`,
+`discounts` and `quote_requests` (27 / 640 / 10,067 / 5 / 6 rows), withholds
+`sender_judgements`, `processed_messages`, `orders`, `sweeps` and `refresh_jobs`
+outright, nulls `discounts.code` and `quote_requests.postcode`, and replaces the
+owner's own details — taken from `oilwatch.identity`, not hardcoded — with
+`<redacted-…>` in the 172 kept notes that echoed them. It is built table by table
+into a fresh database rather than copied and pruned, because SQLite leaves a
+deleted row in the file's free pages, and it verifies its own output before
+writing: every text column and the file's bytes are scanned for those details and
+for samples from the tables it dropped, and the file is deleted rather than left
+behind if one turns up. `snapshot_meta` inside the file records what was
+withheld. Checked independently the same day: `PRAGMA integrity_check` is `ok`,
+the only redactions used are `<redacted-email>` and `<redacted-postcode>`, and no
+variant spelling survives — postcode with any spacing or case, `msn.com`, the
+surname, or a fragment of the owner's number, in columns or in bytes.
+
 **Added 2026-09-10 — purchases can be recorded.** The `orders` table was
 write-only: `place_order` wrote to it but nothing ever read it back, so "who did
 I buy from last time, and what did I pay" had no answer, and no agent could see

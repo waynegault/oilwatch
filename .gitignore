@@ -13,6 +13,13 @@ __pycache__/
 *.sqlite
 *.sqlite3
 
+# ...except the sanitised price-history snapshot, which is committed on purpose.
+# The live database holds the owner's correspondence, his mailbox's message ids
+# and his postcode, so it stays local; this one is built from it by
+# tools/build_snapshot.py with those withheld, and exists so the price history is
+# versioned. Rebuild it with that tool rather than by copying the live file.
+!data/oilwatch-history.sqlite
+
 # Logs (generated; the scheduler and the scheduled email sweep write here)
 *.log
 
