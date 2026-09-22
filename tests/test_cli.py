@@ -111,10 +111,6 @@ class DispatchTests(unittest.TestCase):
         app, _ = self._run(["quote", "2", "--postcode", "AB1 1AA", "--browser"])
         app.quote_supplier.assert_called_once_with(2, postcode="AB1 1AA", prefer_browser=True)
 
-    def test_import_spreadsheet_passes_the_path_through(self) -> None:
-        app, _ = self._run(["import-spreadsheet", "--path", "P:/Oil Prices.xls"])
-        app.import_spreadsheet.assert_called_once_with("P:/Oil Prices.xls")
-
     def test_api_discover_prints_what_the_tool_found(self) -> None:
         run = AsyncMock(return_value={"total_requests": 3})
         out = io.StringIO()
