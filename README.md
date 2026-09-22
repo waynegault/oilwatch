@@ -471,6 +471,7 @@ Supplier accounts, where required, live in `config/supplier_credentials.json`
   "radius_miles": 50,
   "quote_quantity_liters": 1000,
   "quote_max_workers": 4,
+  "fuel_mail_min_probability": 0.8,
   "default_postcode": "AB21 0YA",
   "scheduler": {
     "discovery_interval_hours": 168,

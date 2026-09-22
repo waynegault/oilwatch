@@ -142,6 +142,17 @@ line is how an oil company mailing from an unlisted domain (a CRM, a marketing
 host, a second brand) is noticed at all: its mail is skipped, so without it the
 sweep looks identical to one that found nothing. Subjects are not logged.
 
+Naming a domain is judged rather than blanket. `extract_ppl` is tried first
+because it is free and exact; when it finds no price the same question — does
+this read like a quote or a price for domestic heating oil? — goes to a model,
+and the domain is named only when that answer is at least
+`fuel_mail_min_probability` in `config/settings.json` (default `0.8`). Naming
+every unknown sender once put eighty of the owner's correspondents on a single
+line of a file on disk — a financial ombudsman case, NHS Scotland, his bank —
+and that is the fault the threshold exists to prevent. Verdicts are cached per
+sender domain, so an unrecognised sender costs one request rather than one per
+message, and a verdict below the threshold is stored but never named.
+
 The email sweep is a *separate* mechanism from price refresh and **is**
 scheduled — a supplier answers when it chooses, so polling is the only way to
 notice the reply without watching the inbox.

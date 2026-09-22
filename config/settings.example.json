@@ -18,6 +18,7 @@
   ],
   "login_urls": {},
   "microsoft_client_id": "",
+  "fuel_mail_min_probability": 0.8,
   "scheduler": {
     "discovery_interval_hours": 168,
     "quote_interval_hours": 24,
