@@ -276,7 +276,17 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             else:
                 ex_vat = await self._extract_price(page, quantity_liters)
                 if ex_vat is None:
-                    # No price found - return manual action required
+                    # Say what the page held. This path returned a bare reason
+                    # before, so a miss could not be told apart from a markup
+                    # change without another live run - the fault the sign-in
+                    # path above already corrected for itself.
+                    log.warning(
+                        "BoilerJuice quote page carried no readable price at %s; page (%s, %d chars):\n%s",
+                        page.url,
+                        "captured" if content else "empty",
+                        len(content),
+                        self._price_context(content),
+                    )
                     return QuoteResult(
                         supplier_id=int(supplier["id"]),
                         supplier_name=supplier["name"],
@@ -337,6 +347,22 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
         if not match:
             return None
         return float(match.group(1).replace(",", ""))
+
+    @staticmethod
+    def _price_context(content: str, limit: int = 1200) -> str:
+        """The markup around the first marker that could actually be a price.
+
+        A whole-page dump would be the ``<head>`` and nothing else, so this opens
+        a window before the marker instead. They are tried in order of how much
+        they say, because the bare word "price" matches the nav's "Price Charts"
+        link first on the real page - a window that shows nothing about the quote.
+        """
+        for pattern in (r'data-test="price', r"£|&pound;", r"You Pay", r"price"):
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                start = max(0, match.start() - limit // 3)
+                return content[start : start + limit]
+        return content[:limit]
 
     async def _quote_page_ready(self, page: PageLike) -> bool:
         """True once the quote form, or a rendered quote, is on the page."""
