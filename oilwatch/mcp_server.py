@@ -156,6 +156,11 @@ def status() -> dict[str, Any]:
     Also names the suppliers the most recent ask could not price, split into
     ``no_quote_suppliers`` (they gave no price) and ``failed_suppliers`` (the
     retrieval failed), so a report can give both without reading every note.
+
+    ``refresh`` is the last sweep's marker, not a quote timestamp: its
+    ``started_at`` and ``finished_at`` date the run itself (``started_by`` names
+    what kicked it off), so ``seconds_ago`` ages the sweep and says nothing about
+    how fresh the prices it left are — those carry their own ``observed_at``.
     """
     return _get_app().status()
 
