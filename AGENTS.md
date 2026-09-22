@@ -142,7 +142,7 @@ never asked it.
 
 - The tools are served over **stdio, spawned per session**: there is no port to
   check and no server to start. `openclaw mcp probe oilwatch` should report
-  **9 tools**.
+  **10 tools**.
 - The repo path contains a **space**, so a client that word-splits the stdio
   command fails with `spawn .../Projects/Oil ENOENT`; give such a client a
   space-free wrapper. `user-guide.md` §Traps has the working forms.

@@ -694,6 +694,6 @@ PYTHONUNBUFFERED=1 .venv/Scripts/python.exe -m oilwatch.cli quote-all --browser
   out unless `--timeout` or `MCPORTER_CALL_TIMEOUT` is raised.
 - The MCP server is **spawned per session over stdio** — there is no port to
   check and no server to start. If the tools look unhealthy,
-  `openclaw mcp probe oilwatch` should report **9 tools**.
+  `openclaw mcp probe oilwatch` should report **10 tools**.
 - Don't edit this repository to work around a supplier problem. Report what the
   tool said and let Wayne decide.

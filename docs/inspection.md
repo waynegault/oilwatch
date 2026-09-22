@@ -198,7 +198,7 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | 9.5 | 🔍 The agent brief is current | `grep -n "openclaw mcp probe" user-guide.md` | The brief (user-guide.md §14) states the tool count and the refresh cost |
 | 9.6 | 🔍 Connector documentation matches the registries | Compare `user-guide.md` §9's domain table with `_SUPPLIER_CONNECTORS` | The same domains, the same connector names |
 | 9.7 | 🔍 Every document ends with a newline | `tail -c 1 README.md` | Ends in `0a` |
-| 9.8 | 🔍 Every command and tool is named in the reference | `.venv\Scripts\python.exe -m unittest tests.test_docs.ReferenceTests` | Passes. README is the tool reference `AGENTS.md` sends an agent to, so it must name all 21 CLI subcommands (in a command position, so the prose word "quote" cannot stand in for the `quote` command) and all 9 MCP tools. On 2026-09-18 five commands were missing from it — `import-spreadsheet`, `login-email`, `submit-requests`, `time-series`, `update-brent` — so the check reads both lists back out of the code rather than trusting the prose |
+| 9.8 | 🔍 Every command and tool is named in the reference | `.venv\Scripts\python.exe -m unittest tests.test_docs.ReferenceTests` | Passes. README is the tool reference `AGENTS.md` sends an agent to, so it must name all 21 CLI subcommands (in a command position, so the prose word "quote" cannot stand in for the `quote` command) and all 10 MCP tools. On 2026-09-18 five commands were missing from it — `import-spreadsheet`, `login-email`, `submit-requests`, `time-series`, `update-brent` — so the check reads both lists back out of the code rather than trusting the prose |
 
 ## 10. Testing — High
 
@@ -218,8 +218,8 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 
 | # | Check | Command / Action | Expected |
 |---|-------|------------------|----------|
-| 11.1 | 🔍 Tool count | `.venv\Scripts\python.exe -m unittest tests.test_docs.CountTests.test_the_mcp_tool_count_matches_the_server` | Nine |
-| 11.2 | 🔍 A real handshake lists them | Spawn `python -m oilwatch.mcp_server --stdio` with an MCP client and call `list_tools` | Nine tools; `chart, cheapest, current_prices, list_suppliers, purchases, refresh_prices, status, time_series_chart, update_brent` |
+| 11.1 | 🔍 Tool count | `.venv\Scripts\python.exe -m unittest tests.test_docs.CountTests.test_the_mcp_tool_count_matches_the_server` | Ten |
+| 11.2 | 🔍 A real handshake lists them | Spawn `python -m oilwatch.mcp_server --stdio` with an MCP client and call `list_tools` | Ten tools; `chart, cheapest, current_prices, list_suppliers, purchases, refresh_prices, refresh_status, status, time_series_chart, update_brent` |
 | 11.3 | 🔍 A read call succeeds | Call `cheapest` over that session | `isError` is false |
 | 11.4 | 🔍 No write/order tool exists | Review the tool list | `purchases` reads only; nothing places an order |
 | 11.5 | 🔍 Slow tools say so | Read `refresh_prices`'s docstring | States minutes, per-supplier failure, and "do not call it in a loop" |
@@ -257,7 +257,7 @@ nothing. These are the checks that catch it.
 |---|-------|------------------|----------|
 | 14.1 | 🔍 The suite is green at the floor | `.venv\Scripts\python.exe -m coverage run -m unittest discover -s tests -t . && .venv\Scripts\python.exe -m coverage report -m` | All tests pass; total ≥ 94 |
 | 14.2 | 🔍 The CLI runs against the live database | `.venv\Scripts\python.exe -m oilwatch.cli status` | A market snapshot with a cheapest supplier, a trend and a recommendation |
-| 14.3 | 🔍 The MCP server handshakes | Spawn `--stdio` and list tools | Nine tools, and a read call returns without error |
+| 14.3 | 🔍 The MCP server handshakes | Spawn `--stdio` and list tools | Ten tools, and a read call returns without error |
 | 14.4 | 🔍 One supplier quoted end to end | `.venv\Scripts\python.exe -m oilwatch.cli quote <id> --browser` | A price with `observed_at` and a note naming the quantity and basis |
 | 14.5 | 🔍 No leftovers | `dir /b .qwen\tmp`; `git status --short` | No probe scripts or capture logs from this pass, and only intended changes in git. Pre-existing scratch is the owner's: name it, do not clear it (§6.5) |
 | 14.6 | 🔍 Findings recorded | Review the audit notes | Each finding has a severity, a location and a remediation |
