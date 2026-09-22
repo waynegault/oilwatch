@@ -67,9 +67,8 @@ class RegencyOilsConnector(BaseConnector):
         return (
             f"REGENCY OILS LTD - Quote Request for {quantity_liters}L Heating Oil\n\n"
             f"CONTACT OPTIONS:\n"
-            f"1. Phone: {self.phone}\n"
-            f"2. Website: {self.base_url}\n"
-            f"3. Click 'Click here for a free, instant no obligation quote'\n\n"
+            f"1. Website: {self.base_url}\n"
+            f"2. Click 'Click here for a free, instant no obligation quote'\n\n"
             f"INFORMATION TO PROVIDE:\n"
             f"- Fuel type: Heating Oil\n"
             f"- Quantity: {quantity_liters} litres\n"

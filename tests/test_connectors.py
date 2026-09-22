@@ -26,7 +26,11 @@ class ManualConnectorTests(unittest.TestCase):
         supplier = {"id": 1, "name": "A", "phone": "01224 123456", "email": None, "website": "https://a.example.com"}
         result = ManualConnector().quote(supplier, 1000, {})
         self.assertEqual(result.status, "manual_action_required")
-        self.assertIn("01224 123456", result.notes)
+        # The number on the record is contact data, not a route the note offers:
+        # the app asks by form or by email and never rings a supplier, so naming
+        # the site is the answer and the number is left off.
+        self.assertNotIn("01224 123456", result.notes)
+        self.assertIn("https://a.example.com", result.notes)
 
     def test_a_supplier_with_a_quote_page_is_not_reported_as_having_none(self) -> None:
         """The reason has to say which way the supplier is out of reach.

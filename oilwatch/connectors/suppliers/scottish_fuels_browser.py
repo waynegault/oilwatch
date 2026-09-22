@@ -446,7 +446,9 @@ class ScottishFuelsBrowserConnector(BaseConnector):
         an unrecognised case reports ``None`` — "unclassified" — rather than a
         guess that a consumer would then branch on.
         """
-        contact = ", ".join(p for p in [supplier.get("phone"), supplier.get("email"), supplier.get("website")] if p)
+        # The phone on the record is contact data, not a route this app offers:
+        # it never rings a supplier, so the note names an address or a page.
+        contact = ", ".join(p for p in [supplier.get("email"), supplier.get("website")] if p)
         return QuoteResult(
             supplier_id=int(supplier["id"]),
             supplier_name=supplier["name"],
@@ -455,6 +457,6 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             status="manual_action_required",
             reason=reason,
             source="scottish_fuels_browser",
-            notes=f"{notes} Contact: {contact or 'supplier website'}",
+            notes=f"{notes} Contact: {contact}" if contact else notes,
         )
 

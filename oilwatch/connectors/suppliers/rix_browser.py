@@ -29,7 +29,7 @@ class RixBrowserConnector(SyncBrowserConnector):
     source = "rix_browser"
     price_description = "Rix quote tool"
     no_price_note = "Could not extract a price from the Rix results page."
-    order_notes = "Order via the Rix quote tool or by phone (0800 542 4207)."
+    order_notes = "Order via the Rix quote tool."
     #: collect_price returns the Standard option's inclusive total per litre.
     price_is_inclusive = True
 

@@ -47,7 +47,7 @@ class SyncBrowserConnector(BaseConnector):
     source = ""
     price_description = ""
     no_price_note = "Could not extract a price from the page."
-    order_notes = "Order via the supplier's site or by phone."
+    order_notes = "Order via the supplier's site."
     #: Whether :meth:`collect_price` returns an already-inclusive per-litre price
     #: (the supplier's "total you pay") or an ex-VAT one the base lifts by the
     #: domestic rate. Default is the ex-VAT basis.
@@ -120,8 +120,11 @@ class SyncBrowserConnector(BaseConnector):
         ``reason`` is required: both callers know which case they are in, and a
         default here would be guessing where the row must not be a guess.
         """
+        # The phone on the record is contact data, not a route this app offers:
+        # it never rings a supplier, so the note names an address or a page and
+        # leaves the number off.
         contact = ", ".join(
-            p for p in [supplier.get("phone"), supplier.get("email"), supplier.get("website")] if p
+            p for p in [supplier.get("email"), supplier.get("website")] if p
         )
         return QuoteResult(
             supplier_id=int(supplier["id"]),
@@ -131,6 +134,6 @@ class SyncBrowserConnector(BaseConnector):
             status="manual_action_required",
             reason=reason,
             source=self.source,
-            notes=f"{notes} Contact: {contact or 'supplier website'}",
+            notes=f"{notes} Contact: {contact}" if contact else notes,
         )
 

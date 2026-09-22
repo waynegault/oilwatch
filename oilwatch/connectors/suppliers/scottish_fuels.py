@@ -67,9 +67,7 @@ class ScottishFuelsConnector(BaseConnector):
         return (
             f"SCOTTISH FUELS - Quote Request for {quantity_liters}L Heating Oil\n\n"
             f"CONTACT OPTIONS:\n"
-            f"1. Phone (General): {self.phone}\n"
-            f"2. Phone (Aberdeenshire): {self.local_phone}\n"
-            f"3. Website: {self.base_url}\n\n"
+            f"1. Website: {self.base_url}\n\n"
             f"ONLINE QUOTE (ACCOUNT REQUIRED):\n"
             f"- Sign up for online account (takes a few minutes)\n"
             f"- Access online quote generator for instant quotes\n"
@@ -82,7 +80,7 @@ class ScottishFuelsConnector(BaseConnector):
             f"- Contact details\n\n"
             f"NOTES:\n"
             f"- Prices fluctuate, no set price\n"
-            f"- Minimum order volumes may apply - check when calling\n"
+            f"- Minimum order volumes may apply - check on the website\n"
             f"- Carbon offset option available\n"
             f"- Order tracking available online"
         )

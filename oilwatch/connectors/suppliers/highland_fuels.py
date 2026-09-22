@@ -167,7 +167,9 @@ class HighlandFuelsConnector(BaseConnector):
         which case they are in, and a default would be this function guessing on
         their behalf — the one thing an unclassified row already fails to do.
         """
-        contact = ", ".join(p for p in [supplier.get("phone"), supplier.get("email"), supplier.get("website")] if p)
+        # The phone on the record is contact data, not a route this app offers:
+        # it never rings a supplier, so the note names an address or a page.
+        contact = ", ".join(p for p in [supplier.get("email"), supplier.get("website")] if p)
         return QuoteResult(
             supplier_id=int(supplier["id"]),
             supplier_name=supplier["name"],
@@ -176,6 +178,6 @@ class HighlandFuelsConnector(BaseConnector):
             status="manual_action_required",
             reason=reason,
             source="highland_fuels",
-            notes=f"{notes} Contact: {contact or 'supplier website'}",
+            notes=f"{notes} Contact: {contact}" if contact else notes,
         )
 

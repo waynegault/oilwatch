@@ -27,7 +27,8 @@ SUPPLIER = {
     "phone": "01234 567890",
 }
 
-# connector class, expected QuoteResult.source, a phone number that must reach the notes
+# connector class, expected QuoteResult.source, a phone on the record that must
+# NOT reach the notes
 MANUAL_CONNECTORS = [
     (OilfastConnector, "oilfast_manual", "01464 635999"),
     (RixConnector, "rix_manual", "01224 455477"),
@@ -47,13 +48,19 @@ class NoHttpClientTests(unittest.TestCase):
 
 
 class ManualQuoteTests(unittest.TestCase):
-    def test_quote_is_manual_and_carries_the_contacts(self) -> None:
+    def test_quote_is_manual_and_offers_no_phone_route(self) -> None:
+        """A manual note must not list a phone number as a way to ask.
+
+        The app asks by form or by email and never rings a supplier, so a note
+        carrying the number offers a route it will not take. The number stays on
+        the record as contact data — it is the note, not the field, that changes.
+        """
         for connector_cls, source, phone in MANUAL_CONNECTORS:
             with self.subTest(connector=connector_cls.__name__):
                 result = connector_cls().quote(SUPPLIER, 1000, {"postcode": "AB21 0YA"})
                 self.assertEqual(result.status, "manual_action_required")
                 self.assertEqual(result.source, source)
-                self.assertIn(phone, result.notes)
+                self.assertNotIn(phone, result.notes)
                 self.assertIn("1000", result.notes)
                 self.assertIsNone(result.price_per_liter)
 

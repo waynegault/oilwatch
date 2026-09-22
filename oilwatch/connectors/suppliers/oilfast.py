@@ -71,10 +71,8 @@ class OilfastConnector(BaseConnector):
         return (
             f"OILFAST INSCH - Quote Request for {quantity_liters}L Heating Oil\n\n"
             f"CONTACT OPTIONS:\n"
-            f"1. Phone (Insch Depot): {self.phone}\n"
-            f"2. Phone (General): {self.general_phone}\n"
-            f"3. Email: {self.email}\n"
-            f"4. Online Enquiry: {self.enquiry_url}\n\n"
+            f"1. Email: {self.email}\n"
+            f"2. Online Enquiry: {self.enquiry_url}\n\n"
             f"INFORMATION TO PROVIDE:\n"
             f"- Fuel type: Heating Oil (Kerosene)\n"
             f"- Quantity: {quantity_liters} litres\n"

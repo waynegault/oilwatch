@@ -199,7 +199,7 @@ class OilWatchApp:
 
             # Errors are worth a warning; the routine manual_action_required
             # results stay at debug so a normal run does not produce a wall of
-            # lines for suppliers that only ever quote by phone.
+            # lines for suppliers that have no price to give.
             status = payload.get("status")
             if status == "error":
                 log.warning("%s returned an error: %s", supplier["name"], payload.get("notes", ""))

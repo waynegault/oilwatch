@@ -186,9 +186,9 @@ suppliers whose only priced row came from the spreadsheet import won on
   dropped) both map to their rows rather than sitting unread.
 - **The phone route is gone — the app asks by form or by email, never rings
   (2026-09-22).** Wayne's decision: OilWatch will never phone a supplier. The
-  route had been half-present since the start — `phone-script` generated a call
-  sheet, `TelephoneQuoteScript` was a registered "connector", `order_channel`
-  had `phone` and `phone_email` values, and a register record marked
+  route had been half-present since the start — a call-sheet command generated a
+  dial list, a telephone "connector" was registered, `order_channel` had
+  `phone` and `phone_email` values, and a register record marked
   `{"phone": true}` came back from `submit-requests` as "call this number". All
   of it is removed rather than left as a thing nobody uses: a route the app
   still describes is a route an agent may still take. What the vocabulary says
@@ -202,8 +202,15 @@ suppliers whose only priced row came from the spreadsheet import won on
   phone number off a flag about forms is what let the two drift. Phone numbers
   stay everywhere they are *data* — the register's `phone` field, the DB column,
   `contact.phone` — and the `--phone` flags that carry the owner's own number
-  into a supplier's form are untouched. Counts move with it: CLI 21 → 20,
-  supplier connectors 15 → 14, modules under `oilwatch/` 55 → 54.
+  into a supplier's form are untouched. **Amended the same day: a note is not a
+  route either.** Five notes still led with "Contact via: <number>, …" (the
+  generic manual fallback — Carnegie Fuels, Crown Oil, Gleaner Oils, Nationwide
+  Fuels and Turriff Fuels), and Oilfast's, Rix's, Scottish Fuels' and Regency
+  Oils' own notes listed the number first, as did three `order_notes` strings
+  that said "or by phone". A note is read by the same agents that read `status`, so
+  the number is out of every note; it stays in the register, the DB column, the
+  `contact.phone` field and each connector's `raw_payload`. Counts move with it:
+  CLI 21 → 20, supplier connectors 15 → 14, modules under `oilwatch/` 55 → 54.
 - **The sweep asks a model only about the mail its patterns miss (2026-09-22).**
   An unrecognised sender was named in the log only when `extract_ppl` found a
   price, which is a regex standing in for a judgement about meaning: a genuine
@@ -375,7 +382,7 @@ live and is correct.
 `--url` and `--supplier-id`, the supplier row overwrote the URL, silently
 discarding the flag the user had just typed; the row is now consulted only when
 no URL was given. This surfaced from `tests/test_untested_modules.py`, added to
-close the last uncovered handler paths: the `phone-script` call-sheet loop and
+close the last uncovered handler paths: the call-sheet command's loop and
 its `--output` export, `--supplier-id` resolution, `register`'s summary and its
 `--output` save, and `login-email`'s reporting. The call-sheet tests went with
 the command on 2026-09-22 (see the phone-route note above); the rest stand.
@@ -579,7 +586,7 @@ reach.
    phone number is data, not a route — a number alone reports
    `order_channel: none`. **Amended the same day:** the first version of this
    reported such a supplier as a number to ring, which was the tail of a phone
-   route now removed entirely (`phone-script`, the telephone connector, the
+   route now removed entirely (the call-sheet command, the telephone connector, the
    `phone` / `phone_email` channels and the `quote_request.phone` register flag).
    **The owner's own number is unaffected:** a supplier's form that requires a
    phone number still gets his, through `--phone` — that is a form being filled
