@@ -246,9 +246,9 @@ class OilWatchApp:
 
         A change of *supplier* only: the incumbent repricing a penny is the
         ordinary case and an alert for it would be noise. Nothing in OilWatch runs
-        on a timer (see PROGRESS.md), so this fires during a sweep the owner
-        started - ten to thirty seconds per supplier, whose output is a wall of
-        JSON in which the one line that matters is easy to miss.
+        on a timer, so this fires during a sweep the owner started - ten to thirty
+        seconds per supplier, whose output is a wall of JSON in which the one line
+        that matters is easy to miss.
 
         A nicety rather than a record: it stays silent when the run did not change
         the answer, and a toast that cannot be shown is logged and dropped (see

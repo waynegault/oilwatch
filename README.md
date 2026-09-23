@@ -50,6 +50,21 @@ message from the inbox.
 
 ---
 
+## Verified counts
+
+These are read back out of the code by `tests/test_docs.py`, so a number here
+that goes stale fails the suite rather than sitting here misleading — which is
+what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
+
+| What | Count |
+|------|-------|
+| Tests | 743, all passing offline |
+| MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
+| CLI commands | 21 |
+| Modules under `oilwatch/` | 55 Python files |
+
+---
+
 ## Quick Start
 
 ### Installation
@@ -535,6 +550,36 @@ envelope looks like this (`blob` is base64-encoded binary ciphertext):
 - Geocoding sometimes fails for suppliers with incomplete addresses
 - Manually-imported spreadsheet prices share the `quotes` table with live scrapes, so recency filtering matters (see `max_quote_age_days`)
 
+### Deliberately not built
+
+Each of these is a decision rather than an omission, and the reason is the part
+worth keeping:
+
+- **Ordering** — OilWatch places no orders and has no tool that does. Buying is
+  manual; `record-purchase` writes down a purchase already made.
+- **Email and SMS alerts** — a refresh raises a Windows toast when the cheapest
+  *supplier* changes, and stops there. An alert email would go from the owner's own
+  mailbox, which every other route in this tool treats as a deliberate act, and an
+  SMS needs a provider and a number nobody has given. A price drop by the supplier
+  already cheapest raises nothing either: that is the ordinary case, and an alert
+  for it would be noise.
+- **Seasonal analysis and price prediction** — a predicted price, built from one
+  household's sparse quotes, is a number in front of someone deciding what to pay
+  for oil; and the rows old enough to carry a season are the imported 2007–2025
+  spreadsheet rather than this instrument.
+- **Deployment hardening** (health checks, an always-on host) — nothing here is
+  autostarted: prices are refreshed on request, and OpenClaw spawns the MCP server
+  over stdio on demand. There is no long-running service to health-check.
+- **A `reason` for a supplier declining your postcode** — deliberately absent from
+  the vocabulary. No refusal has ever been recorded: across all 640 quote rows
+  every supplier either priced the order or came back `no_quote_page`,
+  `quote_by_request` or `no_price_found`. A value in a closed contract set that
+  nothing produces is worse than none, so it waits for the first real refusal's own
+  text.
+- **A delivery-area check per postcode** — the same waiting game. What the app asks
+  today is each supplier's quote form for *this* postcode, which is the only
+  coverage that changes what an order from here costs.
+
 ---
 
 ## File Structure
@@ -544,8 +589,6 @@ Oil Price Webscraper/
 ├── README.md                    # This file - overview, install, CLI/MCP reference
 ├── AGENTS.md                    # The rules an agent needs - consumer contract
 ├── user-guide.md                # Day-to-day use, supplier reference, sign-in, agent brief
-├── ROADMAP.md                   # Development roadmap
-├── PROGRESS.md                  # Current progress status
 ├── pyproject.toml               # Package configuration
 ├── docs/
 │   └── inspection.md            # Repeatable audit checklist for this repo
@@ -600,6 +643,8 @@ Oil Price Webscraper/
 
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
+
+`python -m unittest discover -s tests -t .` — 743 tests, all offline.
 
 ### Run from the command line
 
@@ -745,8 +790,6 @@ still carries one. `snapshot_meta` inside the file records what was withheld.
 | `AGENTS.md` | The rules an agent needs: the shortest form of the brief, for anything driving the CLI or the MCP tools |
 | `user-guide.md` | Day-to-day use: prices, ordering, the supplier reference, accounts and sign-in, troubleshooting, and the brief to hand an AI agent |
 | `docs/inspection.md` | Repeatable audit checklist for this repository |
-| `ROADMAP.md` | Future development plans |
-| `PROGRESS.md` | Current implementation status |
 
 ---
 
@@ -756,11 +799,10 @@ MIT License
 
 ---
 
-**Last Updated:** 2026-09-15
+**Last Updated:** 2026-09-23
 **Version:** 0.1.0
 **Location:** Hatton of Fintray, Aberdeenshire, Scotland (AB21 0YA)
 
-> Current state detail is in `PROGRESS.md`; near-term plans in `ROADMAP.md`.
 > This is a personal tool for one home in Aberdeenshire, not a general-purpose
 > product — the home location and the supplier set are all deliberately specific
 > to that use.

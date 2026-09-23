@@ -3,8 +3,8 @@
 The consumer contract for OilWatch, for any agent driving its CLI or MCP server.
 `user-guide.md` §14 is the full brief; this file is the part that changes
 behaviour, so it is worth reading even when nothing else is. The full tool
-reference — every flag and return shape — is in `README.md`, and status in
-`PROGRESS.md`.
+reference — every flag and return shape — is in `README.md`, along with the
+verified counts and what this tool deliberately does not do.
 
 ## What you can call
 
@@ -142,7 +142,6 @@ leftover phone-route code.
 - **Never try to fix the gateway crash here.** A stdio child that misses its init
   budget can take the whole OpenClaw gateway down with a child-cleanup rejection;
   that is an OpenClaw defect, tracked upstream, not this repository's problem.
-  `PROGRESS.md` has the detail.
 
 ## Traps in the transport
 

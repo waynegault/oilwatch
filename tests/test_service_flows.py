@@ -163,11 +163,11 @@ def _quotes_at(prices: dict[str, float]):
 class CheapestAlertTests(AppTestCase):
     """A new cheapest supplier is toasted when a run the owner started finds one.
 
-    Nothing in OilWatch runs on a timer (see PROGRESS.md) — a refresh is an
-    explicit act — so this alert belongs on the refresh path: a sweep takes ten to
-    thirty seconds per supplier and prints a wall of JSON, which is where the one
-    line that matters is easy to miss. It is a nicety, not a record: the quote rows
-    are the record, and this only says that they changed the answer.
+    Nothing in OilWatch runs on a timer — a refresh is an explicit act — so this
+    alert belongs on the refresh path: a sweep takes ten to thirty seconds per
+    supplier and prints a wall of JSON, which is where the one line that matters is
+    easy to miss. It is a nicety, not a record: the quote rows are the record, and
+    this only says that they changed the answer.
     """
 
     def _record(self, ids: dict[str, int], prices: dict[str, float]) -> None:

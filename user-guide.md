@@ -5,8 +5,8 @@ the email enquiry route, accounts and sign-in, and the supplier-by-supplier
 reference.
 
 For what the project is, how to install it and the full CLI/MCP surface, see
-`README.md`. For current implementation status and plans, see `PROGRESS.md` and
-`ROADMAP.md`.
+`README.md` — which also carries the verified counts and the list of things
+OilWatch deliberately does not do, and `AGENTS.md` for the rules an agent needs.
 
 ---
 

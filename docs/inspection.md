@@ -24,8 +24,7 @@ In scope for every audit pass:
 - `*.bat` launchers — `oilwatch_env.bat`, `start_mcp_server.bat`,
   `start_scheduler.bat`, `monitor_email.bat`
 - `pyproject.toml` — dependencies, coverage floor, console scripts
-- `README.md`, `AGENTS.md`, `user-guide.md`, `docs/inspection.md`, `PROGRESS.md`,
-  `ROADMAP.md`
+- `README.md`, `AGENTS.md`, `user-guide.md`, `docs/inspection.md`
 - `data/oilwatch.sqlite` and `data/oilwatch.log` — generated, gitignored: read
   for content, never commit
 - `.gitignore`
@@ -193,13 +192,13 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | # | Check | Command / Action | Expected |
 |---|-------|------------------|----------|
 | 9.1 | 🔍 Documented counts match the code | `.venv\Scripts\python.exe -m unittest tests.test_docs -v` | Passes. `test_docs.py` reads the MCP tool count, the CLI subcommand count, the test count and the module count back out of the code, and checks that every tool and every command is named in the reference (§9.8) |
-| 9.2 | 🔧 Counts are updated when code changes | Add a tool, a command or a test | Update `PROGRESS.md` and `ROADMAP.md` in the same commit, or the suite fails |
+| 9.2 | 🔧 Counts are updated when code changes | Add a tool, a command or a test | Update the `Verified counts` block in `README.md` in the same commit, or the suite fails |
 | 9.3 | 🔍 The README index matches the files present | Compare the README's file tree and Support & Documentation table with `dir /b *.md` | Every listed document exists; no deleted document is still listed |
-| 9.4 | 🔧 No prices in the guide or README | `grep -rnE "£1\.[0-9]{3}" README.md user-guide.md` | No hardcoded prices — they rot within weeks; link to `oilwatch cheapest` instead. `PROGRESS.md` and `ROADMAP.md` are exempt: they are a dated record, and a price there is history, not a claim about today |
+| 9.4 | 🔧 No prices in the guide or README | `grep -rnE "£1\.[0-9]{3}" README.md user-guide.md` | No hardcoded prices — they rot within weeks; link to `oilwatch cheapest` instead |
 | 9.5 | 🔍 The agent brief is current | `grep -n "openclaw mcp probe" user-guide.md` | The brief (user-guide.md §14) states the tool count and the refresh cost |
 | 9.6 | 🔍 Connector documentation matches the registries | Compare `user-guide.md` §9's domain table with `_SUPPLIER_CONNECTORS` | The same domains, the same connector names |
 | 9.7 | 🔍 Every document ends with a newline | `tail -c 1 README.md` | Ends in `0a` |
-| 9.8 | 🔍 Every command and tool is named in the reference | `.venv\Scripts\python.exe -m unittest tests.test_docs.ReferenceTests` | Passes. README is the tool reference `AGENTS.md` sends an agent to, so it must name all 20 CLI subcommands (in a command position, so the prose word "quote" cannot stand in for the `quote` command) and all 10 MCP tools. On 2026-09-18 five commands were missing from it — `import-spreadsheet`, `login-email`, `submit-requests`, `time-series`, `update-brent` — so the check reads both lists back out of the code rather than trusting the prose |
+| 9.8 | 🔍 Every command and tool is named in the reference | `.venv\Scripts\python.exe -m unittest tests.test_docs.ReferenceTests` | Passes. README is the tool reference `AGENTS.md` sends an agent to, so it must name all 21 CLI subcommands (in a command position, so the prose word "quote" cannot stand in for the `quote` command) and all 10 MCP tools. On 2026-09-18 five commands were missing from it — `import-spreadsheet`, `login-email`, `submit-requests`, `time-series`, `update-brent` — so the check reads both lists back out of the code rather than trusting the prose |
 
 ## 10. Testing — High
 
@@ -220,7 +219,7 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | # | Check | Command / Action | Expected |
 |---|-------|------------------|----------|
 | 11.1 | 🔍 Tool count | `.venv\Scripts\python.exe -m unittest tests.test_docs.CountTests.test_the_mcp_tool_count_matches_the_server` | Ten |
-| 11.2 | 🔍 The count is real, not just declared | Read the served object in-process — `from oilwatch.mcp_server import mcp` then `asyncio.run(mcp.list_tools())` — not by spawning the stdio child, which is the path that can kill the gateway (PROGRESS.md's known defect) | Ten tools; `chart, cheapest, current_prices, list_suppliers, purchases, refresh_prices, refresh_status, status, time_series_chart, update_brent` |
+| 11.2 | 🔍 The count is real, not just declared | Read the served object in-process — `from oilwatch.mcp_server import mcp` then `asyncio.run(mcp.list_tools())` — not by spawning the stdio child, which is the path that can kill the gateway (the OpenClaw defect AGENTS.md names) | Ten tools; `chart, cheapest, current_prices, list_suppliers, purchases, refresh_prices, refresh_status, status, time_series_chart, update_brent` |
 | 11.3 | 🔍 A read call succeeds | Call `cheapest`, in-process or over a session if one is open | `isError` is false |
 | 11.4 | 🔍 No write/order tool exists | Review the tool list | `purchases` reads only; nothing places an order |
 | 11.5 | 🔍 Slow tools say so | Read `refresh_prices`'s docstring | States minutes, per-supplier failure, and "do not call it in a loop" |
@@ -258,7 +257,7 @@ nothing. These are the checks that catch it.
 |---|-------|------------------|----------|
 | 14.1 | 🔍 The suite is green at the floor | `.venv\Scripts\python.exe -m coverage run -m unittest discover -s tests -t . && .venv\Scripts\python.exe -m coverage report -m` | All tests pass; total ≥ 94 |
 | 14.2 | 🔍 The CLI runs against the live database | `.venv\Scripts\python.exe -m oilwatch.cli status` | A market snapshot with a cheapest supplier, a trend and a recommendation |
-| 14.3 | 🔍 The MCP server handshakes | Spawn `--stdio` and list tools — the one check that must take that path, and the one carrying PROGRESS.md's gateway risk; use the in-process read (§11.2) for the count itself | Ten tools, and a read call returns without error |
+| 14.3 | 🔍 The MCP server handshakes | Spawn `--stdio` and list tools — the one check that must take that path, and the one carrying the gateway risk AGENTS.md names; use the in-process read (§11.2) for the count itself | Ten tools, and a read call returns without error |
 | 14.4 | 🔍 One supplier quoted end to end | `.venv\Scripts\python.exe -m oilwatch.cli quote <id> --browser` | A price with `observed_at` and a note naming the quantity and basis |
 | 14.5 | 🔍 No leftovers | `dir /b .qwen\tmp`; `git status --short` | No probe scripts or capture logs from this pass, and only intended changes in git. Pre-existing scratch is the owner's: name it, do not clear it (§6.5) |
 | 14.6 | 🔍 Findings recorded | Review the audit notes | Each finding has a severity, a location and a remediation |
@@ -276,7 +275,7 @@ Hard-won rules from a real audit pass. Each is a check, not an anecdote.
 | 15.5 | 🔧 Report the site's own figures | Read the connector's result construction | The site's quantity, rate and total — not arithmetic on the value we requested |
 | 15.6 | 🔧 Silence is not evidence of failure | `grep -rn "did not take" oilwatch/browser_auth.py` | A success path logs its success. Only the failure paths logging made a *successful* sign-in read as a broken one |
 | 15.7 | 🔧 Invert any test that pinned a defect | Search the suite for the fixed behaviour | The test asserting the leak, the cwd default and the `send_keys` call were each rewritten when the behaviour was fixed, not deleted |
-| 15.8 | 🔧 Update guarded counts with the change | `.venv\Scripts\python.exe -m unittest tests.test_docs` | Passes. Adding a test or a tool without updating `PROGRESS.md`/`ROADMAP.md` fails the suite |
+| 15.8 | 🔧 Update guarded counts with the change | `.venv\Scripts\python.exe -m unittest tests.test_docs` | Passes. Adding a test or a tool without updating the `Verified counts` block in `README.md` fails the suite |
 | 15.9 | 🔧 Keep the repo path free of surprises for clients | `grep -n "Oil Price Webscraper" user-guide.md` | The space trap is documented, because a client that word-splits the stdio command cannot use the raw path |
 | 15.10 | 🔍 Read the recorded failure before changing code | `.venv\Scripts\python.exe -m oilwatch.cli status` | The `last_attempt_note` names what each connector actually got. Six "broken" suppliers were one input defect, not six connector bugs |
 | 15.11 | 🔧 An "unused" import may be a patch anchor | `grep -rn "<module>\.<name>" tests/` before deleting it | An import can be unused in the source and still load-bearing: a test that patches `thatmodule.name` needs the name to exist there. `F401` cannot see that, and removing `price_page.httpx` broke two tests. If it is only an anchor, fix the *test* to patch the module that really uses it |
