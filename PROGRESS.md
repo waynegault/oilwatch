@@ -26,7 +26,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 14 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 742, all passing offline |
+| Tests | 746, all passing offline |
 | Database | 17 active suppliers (27 including retired), 639 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -100,7 +100,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 742 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 746 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -673,3 +673,34 @@ reach.
    service error still returns `None` as before. `tests/test_geo.py`'s
    `RateLimitTests` pins all three, and both throttle tests fail against the old
    handler — the second with *no log line at all*, which is the silence itself.
+10. **DONE 2026-09-23 — a changed cheapest supplier is announced when a run finds
+    one.** `quote_all` reads the cheapest before the sweep and again after it, and
+    raises one Windows toast when the *supplier* changed, naming both prices
+    (`OilWatchApp._announce_the_cheapest_changed`, via the existing
+    `oilwatch/notify.py`). It belongs on the refresh path because nothing here runs
+    on a timer: an alert that depended on a schedule would contradict the
+    2026-09-15 decision, and a sweep is ten to thirty seconds per supplier whose
+    output is a wall of JSON, which is where the one line that matters is easy to
+    miss. Only a change of *supplier* — the incumbent repricing a penny is the
+    ordinary case — and a failed sweep says so through `notify_errors` instead of
+    claiming a change. `tests/test_service_flows.py::CheapestAlertTests` pins all
+    four cases, including that the first-ever price is announced with no "was".
+11. **OPEN 2026-09-23 — a delivery refusal gets its own reason when one is actually
+    seen.** The intent is that "does not deliver to this postcode" stops arriving as
+    `no_price_found` (a parse that found nothing) or `site_error` (the attempt
+    raised), because those two tell a reader to retry or to look at the connector —
+    and the refinement would make "delivers here" a fact in the data. It is not
+    built, because the evidence is not there yet: across **all 640 quote rows**
+    every supplier either priced the order or came back `no_quote_page`,
+    `quote_by_request` or `no_price_found`, and no note in any of them says a
+    postcode is not covered — searched 2026-09-23. Adding `outside_delivery_area`
+    to `QUOTE_REASONS` now would put a value in a closed contract set that nothing
+    produces and nothing has ever produced, which is the same fault `None` exists to
+    avoid. The refusal is not lost meanwhile: a browser one lands in
+    `no_price_found` with the connector's note beside it, and an emailed one is
+    logged as "nothing to record" and deliberately left unmarked in Deleted Items,
+    so it stays re-scannable. **Next step:** wire the reason against the first real
+    refusal's own text, the working rule for these scrapers. A `quote_judge`
+    verdict was considered as the producer and rejected — `reason` is a field
+    consumers branch on, and the judgement is used here to *name* a sender in a
+    warning, never to decide what a row means.

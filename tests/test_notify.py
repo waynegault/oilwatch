@@ -98,13 +98,23 @@ class ServiceIntegrationTests(unittest.TestCase):
                 start_sweep=lambda started_at, started_by: None,
                 finish_sweep=lambda started_at: None,
             ),
+            # The cheapest-supplier alert reads the market before the sweep and
+            # again after it. This fake prices nothing, so it has no market to read
+            # and no change to announce - what is under test here is the failure
+            # toast.
+            cheapest=lambda: {},
             settings=SimpleNamespace(quote_quantity_liters=1000, currency="GBP", quote_max_workers=4),
         )
         app.quotes = SimpleNamespace(quote_supplier=self._quote)
         # One cast, at the boundary: the namespace above stands in for an app.
-        # Both methods are bound, because quote_all now marks the sweep and then
-        # delegates the work — the marker is part of what is under test here.
+        # These methods are bound, because quote_all now marks the sweep, reads the
+        # market around it and then delegates the work — each is part of what is
+        # under test here.
         bound = cast(OilWatchApp, app)
+        app._cheapest_identity = lambda: OilWatchApp._cheapest_identity(bound)
+        app._announce_the_cheapest_changed = lambda before: (
+            OilWatchApp._announce_the_cheapest_changed(bound, before)
+        )
         app._quote_every_supplier = lambda postcode, prefer_browser, max_workers, job_id=None: (
             OilWatchApp._quote_every_supplier(
                 bound, postcode, prefer_browser, max_workers, job_id=job_id

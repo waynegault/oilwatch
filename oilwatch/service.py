@@ -129,13 +129,18 @@ class OilWatchApp:
         asked for the sweep is gone.
         """
         sweep_started_at = utcnow_naive().isoformat()
+        # Read before the run and again after it, so the alert below is about what
+        # this run changed rather than about the state of the database in general.
+        before = self._cheapest_identity()
         self.db.start_sweep(sweep_started_at, started_by)
         try:
-            return self._quote_every_supplier(
+            results = self._quote_every_supplier(
                 postcode, prefer_browser, max_workers, job_id=job_id
             )
         finally:
             self.db.finish_sweep(sweep_started_at)
+        self._announce_the_cheapest_changed(before)
+        return results
 
     def _quote_every_supplier(
         self,
@@ -226,6 +231,43 @@ class OilWatchApp:
 
             notify_errors(failed)
         return results
+
+    def _cheapest_identity(self) -> tuple[str | None, float | None]:
+        """Who is cheapest, and at what price, from what the database holds now."""
+        cheapest = self.cheapest().get("cheapest_supplier") or {}
+        name = cheapest.get("name")
+        price = cheapest.get("price_per_liter")
+        if not name or price is None:
+            return None, None
+        return str(name), float(price)
+
+    def _announce_the_cheapest_changed(self, before: tuple[str | None, float | None]) -> None:
+        """Toast a new cheapest supplier at the end of a run someone asked for.
+
+        A change of *supplier* only: the incumbent repricing a penny is the
+        ordinary case and an alert for it would be noise. Nothing in OilWatch runs
+        on a timer (see PROGRESS.md), so this fires during a sweep the owner
+        started - ten to thirty seconds per supplier, whose output is a wall of
+        JSON in which the one line that matters is easy to miss.
+
+        A nicety rather than a record: it stays silent when the run did not change
+        the answer, and a toast that cannot be shown is logged and dropped (see
+        oilwatch.notify). Note what it does *not* cover: a price drop by the
+        supplier already cheapest, and any alert by email or SMS - there is no
+        channel configured for either, and inventing one would mean sending from
+        the owner's mailbox or a number he has not given.
+        """
+        name, price = self._cheapest_identity()
+        if name is None or price is None or name == before[0]:
+            return
+        was_name, was_price = before
+        if was_name is not None and was_price is not None:
+            body = f"{name} at {price * 100:.1f}p/L, was {was_name} at {was_price * 100:.1f}p/L"
+        else:
+            body = f"{name} at {price * 100:.1f}p/L"
+        from oilwatch.notify import notify
+
+        notify("OilWatch: cheapest supplier changed", body)
 
     def _current_quotes(self) -> list[dict[str, Any]]:
         """Latest successful quote per supplier, ignoring stale history.

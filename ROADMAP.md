@@ -109,7 +109,7 @@ The orders table is unchanged and still the record of what was bought.
 | MCP server | ✅ Complete | 10 tools over streamable HTTP or stdio; OpenClaw spawns it on demand |
 | Scheduler | ✅ Complete | Background jobs for discovery and quotes |
 | CLI | ✅ Complete | 21 commands |
-| Tests | ✅ Complete | 742 tests, all offline |
+| Tests | ✅ Complete | 746 tests, all offline |
 | Email intake | ✅ Complete | Microsoft Graph monitor: extract reply price, record, delete mail |
 | Market context | ✅ Complete | Brent crude daily series from the EIA |
 
@@ -125,21 +125,47 @@ Since the Phases Above" with the evidence.
 
 ### Long-term (Low Priority)
 
-1. **Delivery area validation**
-   - Add postcode-level delivery area checks per supplier
-   - Some suppliers may not deliver to all postcodes within 50 miles
+1. **Delivery area validation** — waiting on evidence rather than on code.
 
-2. **Notification system**
-   - Add email/SMS alerts when a new cheapest supplier is found
-   - Add price drop alerts for tracked suppliers
+   Nothing in this install has ever recorded a delivery refusal. Across 640 quote
+   rows every supplier either priced the order or came back `no_quote_page`,
+   `quote_by_request` or `no_price_found`, and no note anywhere says it does not
+   cover the postcode. So the vocabulary change this needs —
+   `outside_delivery_area`, so that a refusal stops reading as a failed parse —
+   is deliberately **not** made yet: a value in a closed contract set that nothing
+   produces is worse than no value, the same reason `reason` carries `None` for
+   "unclassified" rather than a synonym for one of the real values.
 
-3. **Historical analysis**
-   - Add seasonal trend analysis
-   - Add price prediction based on historical patterns
+   Nothing is lost while it waits. A browser refusal lands in `no_price_found`
+   with the connector's own note already beside it, and an emailed one is logged
+   as "nothing to record" and left re-scannable in Deleted Items rather than
+   marked processed. Wire the reason against the first real refusal's text, which
+   is the working rule for these scrapers.
 
-4. **Deployment hardening**
-   - Add health check endpoints
-   - Document deployment to always-on host (VM, Raspberry Pi, etc.)
+   A model judgement was considered as the producer and rejected: `reason` is a
+   field consumers branch on, and this repository uses `quote_judge` to *name* a
+   sender in a warning, never to decide what a row means.
+
+2. ❌ **Dropped 2026-09-23 — historical analysis** (seasonal trends, and price
+   prediction from historical patterns).
+
+   **Why:** the prediction half would put a number in front of someone deciding
+   what to pay for oil, built from one household's sparse quotes; the seasonal
+   half would be a second trend view beside the one `analytics.py` already gives,
+   and the 406 priced rows that are old enough to carry a season are the imported
+   2007–2025 spreadsheet history, whose provenance is not the same instrument as
+   today's connectors. Both were written before the recency window and the
+   spreadsheet import existed.
+
+3. ❌ **Dropped 2026-09-23 — deployment hardening** (health check endpoints,
+   always-on host).
+
+   **Why:** it contradicts a decision this repository already made. OilWatch
+   refreshes on request and nothing is autostarted (2026-09-15: the scheduler's
+   Startup entry was retired, and the MCP server's before it), and OpenClaw spawns
+   the stdio server on demand — so there is no long-running service to health-check
+   and no always-on host to document. What state there is to report, `status` and
+   `refresh_status` already report.
 
 ---
 
@@ -177,4 +203,15 @@ older completion history.
   own `Retry-After`, and logs a throttle as a throttle instead of letting a 429
   read as "no such place" (`GeocoderRateLimited` subclasses
   `GeocoderServiceError`, which is exactly what the old handler swallowed it as).
+- **The cheapest-supplier alert** (2026-09-23) — a Windows toast when a refresh
+  changes which supplier is cheapest, naming both prices. It fires only on a run
+  someone started (nothing here runs on a timer) and only on a change of
+  *supplier*, because the incumbent repricing a penny is the ordinary case: a
+  sweep is ten to thirty seconds per supplier and its output is a wall of JSON,
+  which is where the one line that matters is easy to miss.
+  `OilWatchApp._announce_the_cheapest_changed`, pinned by
+  `tests/test_service_flows.py::CheapestAlertTests`. **Not built, deliberately:**
+  email and SMS alerts — an email would go from the owner's own mailbox, which
+  every other route in this tool treats as a deliberate act, and an SMS needs a
+  provider and a number nobody has given.
 

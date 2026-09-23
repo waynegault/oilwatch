@@ -141,6 +141,119 @@ class QuoteTests(AppTestCase):
         notify.assert_not_called()
 
 
+def _quotes_at(prices: dict[str, float]):
+    """A ``quote_supplier`` stand-in answering each named supplier at a price."""
+
+    def quote(supplier, quantity, postcode=None, prefer_browser=False):
+        price = prices[supplier["name"]]
+        return QuoteResult(
+            supplier_id=int(supplier["id"]),
+            supplier_name=supplier["name"],
+            observed_at=utcnow_naive(),
+            quantity_liters=quantity,
+            status="ok",
+            price_per_liter=price,
+            total_price=price * quantity,
+            source="test",
+        )
+
+    return quote
+
+
+class CheapestAlertTests(AppTestCase):
+    """A new cheapest supplier is toasted when a run the owner started finds one.
+
+    Nothing in OilWatch runs on a timer (see PROGRESS.md) — a refresh is an
+    explicit act — so this alert belongs on the refresh path: a sweep takes ten to
+    thirty seconds per supplier and prints a wall of JSON, which is where the one
+    line that matters is easy to miss. It is a nicety, not a record: the quote rows
+    are the record, and this only says that they changed the answer.
+    """
+
+    def _record(self, ids: dict[str, int], prices: dict[str, float]) -> None:
+        """What the database held before the run: one priced quote per supplier."""
+        for name, price in prices.items():
+            self.app.db.record_quote(
+                {
+                    "supplier_id": ids[name],
+                    "observed_at": utcnow_naive().isoformat(),
+                    "quantity_liters": 1000,
+                    "status": "ok",
+                    "price_per_liter": price,
+                    "total_price": price * 1000,
+                    "currency": "GBP",
+                    "source": "test",
+                    "notes": "",
+                    "raw_payload": {},
+                }
+            )
+
+    def _sweep(self, prices: dict[str, float]) -> MagicMock:
+        """Run a whole sweep returning these prices, and hand back the toast mock."""
+        with (
+            patch("oilwatch.notify.notify") as toast,
+            patch.object(self.app.quotes, "quote_supplier", _quotes_at(prices)),
+        ):
+            self.app.quote_all(max_workers=1)
+        return toast
+
+    def test_a_new_cheapest_supplier_is_announced_with_both_prices(self) -> None:
+        ids = self._init()
+        self._record(ids, {"ValueOils": 1.20, "Scottish Fuels": 1.10})
+
+        toast = self._sweep(
+            {"ValueOils": 1.05, "Scottish Fuels": 1.10, "Scottish Fuels Depot": 1.30}
+        )
+
+        toast.assert_called_once()
+        title, body = toast.call_args.args
+        self.assertIn("cheapest", title.lower())
+        self.assertEqual(body, "ValueOils at 105.0p/L, was Scottish Fuels at 110.0p/L")
+
+    def test_an_unchanged_cheapest_is_not_announced(self) -> None:
+        """The incumbent repricing a penny is the ordinary case, not news."""
+        ids = self._init()
+        self._record(ids, {"ValueOils": 1.20, "Scottish Fuels": 1.10})
+
+        toast = self._sweep(
+            {"ValueOils": 1.18, "Scottish Fuels": 1.09, "Scottish Fuels Depot": 1.30}
+        )
+
+        toast.assert_not_called()
+
+    def test_the_first_price_is_announced_without_a_predecessor(self) -> None:
+        """Nothing priced before the run means no "was" to name — not no alert."""
+        self._init()
+        self.assertIsNone(self.app._cheapest_identity()[0])
+
+        toast = self._sweep(
+            {"ValueOils": 1.05, "Scottish Fuels": 1.10, "Scottish Fuels Depot": 1.30}
+        )
+
+        toast.assert_called_once_with("OilWatch: cheapest supplier changed", "ValueOils at 105.0p/L")
+
+    def test_a_sweep_that_priced_nothing_announces_nothing(self) -> None:
+        """A run that came back empty says so through the failure toast, not this one.
+
+        ``notify`` is stubbed as well as ``notify_errors``: the two are separate
+        paths, and the point here is that a failed sweep makes no claim about the
+        cheapest supplier.
+        """
+        self._init()
+
+        with (
+            patch("oilwatch.notify.notify") as toast,
+            patch("oilwatch.notify.notify_errors") as failures,
+            patch.object(
+                self.app.quotes, "quote_supplier", side_effect=RuntimeError("browser died")
+            ),
+        ):
+            self.app.quote_all(max_workers=1)
+
+        failures.assert_called_once()
+        toast.assert_not_called()
+
+
 class ReportingTests(AppTestCase):
     def test_cheapest_and_current_prices_are_answerable_with_an_empty_database(self) -> None:
         snapshot = self.app.cheapest()
