@@ -109,7 +109,7 @@ The orders table is unchanged and still the record of what was bought.
 | MCP server | ✅ Complete | 10 tools over streamable HTTP or stdio; OpenClaw spawns it on demand |
 | Scheduler | ✅ Complete | Background jobs for discovery and quotes |
 | CLI | ✅ Complete | 21 commands |
-| Tests | ✅ Complete | 739 tests, all offline |
+| Tests | ✅ Complete | 742 tests, all offline |
 | Email intake | ✅ Complete | Microsoft Graph monitor: extract reply price, record, delete mail |
 | Market context | ✅ Complete | Brent crude daily series from the EIA |
 
@@ -119,33 +119,25 @@ The orders table is unchanged and still the record of what was bought.
 
 ### Short-term (Medium Priority)
 
-1. **Deepen test coverage** — the suite is green (see PROGRESS.md for the
-   current count), but gaps remain
-   - Add integration tests for each connector type
-   - Add tests for discovery service (mock HTTP)
-   - Add tests for analytics edge cases, especially the recency window
-     described in PROGRESS.md
-
-2. **Enhance error handling and logging**
-   - Add structured logging throughout
-   - Add retry logic for transient HTTP failures
-   - Add graceful degradation for geocoding rate limits
+None outstanding. The two that sat here — deepening test coverage, and error
+handling and logging — are done; what they asked for is listed under "Completed
+Since the Phases Above" with the evidence.
 
 ### Long-term (Low Priority)
 
-3. **Delivery area validation**
+1. **Delivery area validation**
    - Add postcode-level delivery area checks per supplier
    - Some suppliers may not deliver to all postcodes within 50 miles
 
-4. **Notification system**
+2. **Notification system**
    - Add email/SMS alerts when a new cheapest supplier is found
    - Add price drop alerts for tracked suppliers
 
-5. **Historical analysis**
+3. **Historical analysis**
    - Add seasonal trend analysis
    - Add price prediction based on historical patterns
 
-6. **Deployment hardening**
+4. **Deployment hardening**
    - Add health check endpoints
    - Document deployment to always-on host (VM, Raspberry Pi, etc.)
 
@@ -154,8 +146,8 @@ The orders table is unchanged and still the record of what was bought.
 ## Completed Since the Phases Above
 
 These sat under "Recommended Next Steps" while they were open; all are finished
-as of 2026-09-12 and kept here only as a pointer. See `PROGRESS.md` for the
-detail and for the older completion history.
+and kept here only as a pointer. See `PROGRESS.md` for the detail and for the
+older completion history.
 
 - `cheapest` recency fix — `latest_quotes(max_age_days=…)` driven by the
   `max_quote_age_days` setting.
@@ -165,4 +157,24 @@ detail and for the older completion history.
 - The OpenClaw `oilwatch` host-address chore — the HTTP URL was replaced by an
   on-demand stdio server, so there is no address to keep in step and the logon
   Startup entry was retired.
+- **Deepening test coverage** (2026-09-23) — the gap the item claimed is closed:
+  every connector type has integration tests (`test_connectors.py`,
+  `test_browser_connectors.py`, `test_supplier_connectors.py`,
+  `test_sync_browser_connectors.py`, `test_manual_connectors.py`,
+  `test_connector_bases/leftovers/lifecycle.py`, `test_browser_base_flows.py`,
+  `test_form_submit*.py`), discovery is covered with HTTP mocked
+  (`test_discovery.py`, `test_discovery_flows.py`), and the recency window and
+  the other analytics edges are pinned in `test_analytics.py` (`the window is
+  carried in both branches`) and `test_quote_validity.py`.
+- **Error handling and logging** (2026-09-23) — structured logging is
+  `oilwatch/logging_setup.py` (level from `OILWATCH_LOG_LEVEL`, rotating file for
+  the unattended launchers, and the per-message lines that make a sweep's summary
+  auditable); transient HTTP failures are retried in `oilwatch/http.py`
+  (`RETRY_STATUSES` {429, 500, 502, 503, 504}, jittered exponential backoff, plus
+  the transport's own retries), pinned by `test_http.py`; and geocoding now
+  degrades gracefully rather than silently — `GeoService` paces itself to
+  Nominatim's one-request-a-second policy, waits out a throttle on the provider's
+  own `Retry-After`, and logs a throttle as a throttle instead of letting a 429
+  read as "no such place" (`GeocoderRateLimited` subclasses
+  `GeocoderServiceError`, which is exactly what the old handler swallowed it as).
 

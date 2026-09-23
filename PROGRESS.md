@@ -26,7 +26,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 14 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 739, all passing offline |
+| Tests | 742, all passing offline |
 | Database | 17 active suppliers (27 including retired), 639 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -100,7 +100,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 739 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 742 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -658,3 +658,18 @@ reach.
    register: 14 entries, no duplicate names, so the refusal cannot stall a sync it
    already passes. `duplicates` still reports the pairs that predate the refusal,
    and `tests/test_supplier_integrity.py` pins both halves.
+9. **DONE 2026-09-23 — a geocoding throttle no longer reads as "no such place".**
+   Nominatim's policy is one request a second and a discovery run asks for several
+   spellings of every candidate in a burst, so it draws the limit. The 429 arrives
+   as `GeocoderRateLimited`, which *subclasses* `GeocoderServiceError` — the very
+   error `GeoService.geocode` already treated as "nothing here" — so a throttled
+   run was indistinguishable from one where the addresses genuinely do not
+   resolve, and discovery wrote "Could not geocode supplier." for every candidate
+   either way: a fact about the provider's patience recorded as a fact about the
+   supplier. `GeoService` now paces its own requests to the policy (rather than
+   merely retrying, which against a per-second limit fails again), waits out a
+   throttle on the provider's own `Retry-After` when one is sent, and logs a
+   throttle that outlasts the attempts as a throttle. A timeout or a genuine
+   service error still returns `None` as before. `tests/test_geo.py`'s
+   `RateLimitTests` pins all three, and both throttle tests fail against the old
+   handler — the second with *no log line at all*, which is the silence itself.
