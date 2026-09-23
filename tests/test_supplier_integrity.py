@@ -15,6 +15,7 @@ from pathlib import Path
 
 from oilwatch.db import Database
 from oilwatch.supplier_integrity import (
+    SupplierIdentityConflict,
     duplicate_supplier_groups,
     normalise_email,
     normalise_name,
@@ -138,18 +139,48 @@ class DatabaseDuplicateSupplierTests(unittest.TestCase):
         record.update(overrides)
         return record
 
-    def test_a_changed_website_creates_a_twin_the_check_reports(self) -> None:
-        """Reproduces the fault: the upsert cannot see that these are one supplier."""
-        self.db.upsert_supplier(self._record("Turriff Fuels", "https://turriff-fuels.co.uk"))
-        self.db.upsert_supplier(self._record("Turriff Fuels", "https://www.turrifffuels.com/"))
+    def test_a_changed_website_is_refused_rather_than_forked(self) -> None:
+        """The guard: the second write stops, so one supplier keeps one row.
 
-        # Two rows, because the conflict target is the website and it changed.
-        self.assertEqual(len(self.db.list_suppliers()), 2)
+        The fault's conditions reproduced exactly -- the register's host moved
+        while a row already held the name -- with the fix pinned: the write raises
+        instead of splitting the history across two rows.
+        """
+        self.db.upsert_supplier(self._record("Turriff Fuels", "https://turriff-fuels.co.uk"))
+
+        with self.assertRaises(SupplierIdentityConflict) as caught:
+            self.db.upsert_supplier(
+                self._record("Turriff Fuels", "https://www.turrifffuels.com/")
+            )
+
+        # No second row, and the message names both the website it refused and
+        # the row that already holds the name, so the operator can reconcile.
+        self.assertEqual(len(self.db.list_suppliers()), 1)
+        message = str(caught.exception)
+        self.assertIn("https://www.turrifffuels.com/", message)
+        self.assertIn("turriff-fuels.co.uk", message)
+
+    def test_a_twin_that_predates_the_guard_is_still_reported(self) -> None:
+        """The check keeps its subject: rows that forked before the refusal.
+
+        Seeded with SQL, because the refusal is exactly what stops the upsert from
+        building this state now -- the Turriff rows in the live database arrived
+        this way.
+        """
+        self._seed_twin(52, "Turriff Fuels", "https://turriff-fuels.co.uk")
+        self._seed_twin(193, "Turriff Fuels", "https://www.turrifffuels.com/")
 
         groups = self.db.find_duplicate_suppliers()
         self.assertEqual(len(groups), 1)
         self.assertEqual(groups[0]["key"], "turrifffuels")
         self.assertEqual(len(groups[0]["suppliers"]), 2)
+
+    def test_a_rename_that_keeps_the_website_is_not_refused(self) -> None:
+        """The refusal is about the website moving, not about the name changing."""
+        self.db.upsert_supplier(self._record("Turriff Fuels", "https://www.turrifffuels.com/"))
+        self.db.upsert_supplier(self._record("Turriff Fuels Ltd", "https://www.turrifffuels.com/"))
+
+        self.assertEqual([s["name"] for s in self.db.list_suppliers()], ["Turriff Fuels Ltd"])
 
     def test_repeated_upsert_of_one_website_is_not_a_duplicate(self) -> None:
         self.db.upsert_supplier(self._record("Turriff Fuels", "https://www.turrifffuels.com/"))
@@ -159,12 +190,27 @@ class DatabaseDuplicateSupplierTests(unittest.TestCase):
         self.assertEqual(self.db.find_duplicate_suppliers(), [])
 
     def test_an_inactive_twin_is_hidden_by_default_and_shown_on_request(self) -> None:
-        self.db.upsert_supplier(self._record("Turriff Fuels", "https://turriff-fuels.co.uk"))
-        self.db.mark_missing_suppliers_inactive(["https://www.turrifffuels.com/"])
-        self.db.upsert_supplier(self._record("Turriff Fuels", "https://www.turrifffuels.com/"))
+        self._seed_twin(52, "Turriff Fuels", "https://turriff-fuels.co.uk", status="inactive")
+        self._seed_twin(193, "Turriff Fuels", "https://www.turrifffuels.com/")
 
         self.assertEqual(self.db.find_duplicate_suppliers(), [])
         self.assertEqual(len(self.db.find_duplicate_suppliers(include_inactive=True)), 1)
+
+    def _seed_twin(self, supplier_id: int, name: str, website: str, **overrides: object) -> None:
+        """Write a row straight to the table, past the refusal the upsert now makes."""
+        columns: dict = {"id": supplier_id, "name": name, "website": website, "status": "active"}
+        columns.update(overrides)
+        names = ", ".join(columns)
+        marks = ", ".join("?" * len(columns))
+        conn = self.db.connect()
+        try:
+            with conn:
+                conn.execute(
+                    f"INSERT INTO suppliers ({names}) VALUES ({marks})",
+                    tuple(columns.values()),
+                )
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":

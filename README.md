@@ -138,11 +138,13 @@ python -m oilwatch.cli duplicates
 ```
 
 The `duplicates` check reports a supplier the register holds as more than one
-row. `upsert_supplier` keys on `website`, so a supplier whose site moves is
-inserted again rather than updated, and the two rows split its quote history
-between them — that is how a Turriff Fuels twin appeared on 2026-09-22. The
-check names the suspects and stops there: choosing the survivor is a judgement
-about identity, so it never merges or deletes.
+row. `upsert_supplier` keys on `website`, so a supplier whose site moves used to
+be inserted again rather than updated, and the two rows split its quote history
+between them — that is how a Turriff Fuels twin appeared on 2026-09-22. That
+write is now refused: the upsert raises `SupplierIdentityConflict` when the name
+is already recorded against a different website, and the check names the pairs
+that predate the refusal. Choosing the survivor is a judgement about identity, so
+neither path merges or deletes.
 
 ### Enquiry and Email Commands
 

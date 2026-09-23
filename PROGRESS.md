@@ -26,7 +26,7 @@ It is a working system, not a prototype:
 | Supplier connectors | 14 supplier-specific, plus 4 generic |
 | CLI commands | 21 |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| Tests | 734, all passing offline |
+| Tests | 739, all passing offline |
 | Database | 17 active suppliers (27 including retired), 639 quote rows, 1 order (2026-09-18) |
 
 ---
@@ -100,7 +100,7 @@ configured with a 300 s request timeout to accommodate it.
 
 ### Tests
 
-`python -m unittest discover -s tests -t .` — 734 tests, all offline (mocked HTTP,
+`python -m unittest discover -s tests -t .` — 739 tests, all offline (mocked HTTP,
 temp SQLite).
 
 Covers pricing/VAT, analytics, DB, config, connectors, supplier connectors,
@@ -644,3 +644,17 @@ reach.
    put a blank name in the alert line ("unrecognised sender(s):  - add the domain
    to SUPPLIER_DOMAINS"), asking for something that cannot be supplied. Such a
    message is still counted as unrecognised, so a sweep's arithmetic still holds.
+8. **DONE 2026-09-22 — a name already on another website is refused, not
+   forked.** `suppliers.website` is `NOT NULL UNIQUE` and `upsert_supplier`
+   conflicts on it, so a register entry whose host changed was *inserted* a second
+   time: the Turriff Fuels twin — two rows holding one supplier's quote history
+   between them — was the live example. The write now raises
+   `SupplierIdentityConflict` and names the existing row instead, so the fork
+   cannot happen silently. **The refusal decides nothing:** which website is the
+   real one is an operator's call, and repointing the row from a name comparison
+   would merge two companies silently, which is why `duplicates` reports and never
+   merges. It keys on the name alone because two trading names can share one
+   mailbox, so the email stays a reporting signal. Verified against the live
+   register: 14 entries, no duplicate names, so the refusal cannot stall a sync it
+   already passes. `duplicates` still reports the pairs that predate the refusal,
+   and `tests/test_supplier_integrity.py` pins both halves.

@@ -384,6 +384,83 @@ class DuplicateObservationTests(unittest.TestCase):
         self.db.record_discount({"supplier_id": self.supplier_id, "code": None, "amount_gbp": 12.0})
         self.assertEqual(len(self.db.active_discounts()), 2)
 
+    def test_a_resend_of_the_same_offer_refreshes_its_window(self) -> None:
+        """The deadline is most of what a code is worth, so a re-send must refresh it.
+
+        ValueOils re-sent all three of its codes on 2026-09-23 with a fresh 48
+        hours. The offers were identical, so the rows matched and the new window
+        was dropped with them - leaving the codes expired in ``active_discounts``
+        and out of every comparison built on it.
+        """
+        now = utcnow_naive()
+        offer = {
+            "supplier_id": self.supplier_id,
+            "code": "KJHA154306",
+            "amount_gbp": 12.0,
+            "min_litres": 1000,
+            "max_litres": 1999,
+        }
+        self.db.record_discount(
+            {
+                **offer,
+                "observed_at": (now - timedelta(days=13)).isoformat(),
+                "expires_at": (now - timedelta(days=11)).isoformat(),
+            }
+        )
+        self.assertEqual(self.db.active_discounts(), [], "the first window has lapsed")
+
+        resent = now - timedelta(hours=1)
+        self.db.record_discount(
+            {
+                **offer,
+                "observed_at": resent.isoformat(),
+                "expires_at": (resent + timedelta(hours=48)).isoformat(),
+                "source": "email",
+                "terms": "cannot be used in conjunction",
+            }
+        )
+
+        active = self.db.active_discounts()
+        self.assertEqual(len(active), 1, "a re-send refreshes the offer, it does not add one")
+        self.assertEqual(active[0]["expires_at"], (resent + timedelta(hours=48)).isoformat())
+        self.assertEqual(active[0]["observed_at"], resent.isoformat())
+        self.assertEqual(active[0]["terms"], "cannot be used in conjunction")
+
+    def test_an_older_message_cannot_undo_a_newer_window(self) -> None:
+        """Old mail must not overwrite what a newer message said.
+
+        The sweep reads the inbox and the recoverable bin together, so a message
+        that arrived first can be reached last - and would otherwise restore the
+        lapsed window over the live one.
+        """
+        now = utcnow_naive()
+        offer = {
+            "supplier_id": self.supplier_id,
+            "code": "KJHA154306",
+            "amount_gbp": 12.0,
+            "min_litres": 1000,
+            "max_litres": 1999,
+        }
+        self.db.record_discount(
+            {
+                **offer,
+                "observed_at": now.isoformat(),
+                "expires_at": (now + timedelta(hours=48)).isoformat(),
+            }
+        )
+        self.db.record_discount(
+            {
+                **offer,
+                "observed_at": (now - timedelta(days=13)).isoformat(),
+                "expires_at": (now - timedelta(days=11)).isoformat(),
+            }
+        )
+
+        active = self.db.active_discounts()
+        self.assertEqual(len(active), 1)
+        self.assertEqual(active[0]["expires_at"], (now + timedelta(hours=48)).isoformat())
+        self.assertEqual(active[0]["observed_at"], now.isoformat())
+
 
 class QuoteRequestTests(unittest.TestCase):
     """A request stays owed until a price answers it, and only a price does."""

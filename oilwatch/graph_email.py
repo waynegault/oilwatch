@@ -404,6 +404,20 @@ class GraphEmailMonitor:
                         "observed_at": stamp.isoformat(),
                     }
                 )
+            if offers:
+                # A discount-only message is the one branch that writes rows and
+                # still says nothing: `scanned` counts it, `unrecognised` does not,
+                # and every other known-sender branch leaves a line - so the sweep's
+                # own arithmetic stopped adding up. On 2026-09-23 the ValueOils mail
+                # was read, its three codes refreshed and the message deleted, all
+                # under "scanned 191, recorded 0, 190 from unrecognised" with
+                # nothing naming it, which is where a lost discount hides.
+                log.info(
+                    "captured %d discount offer(s) from %s (%s)",
+                    len(offers),
+                    supplier["name"],
+                    domain,
+                )
 
             ex_vat = extract_ppl(text)
             if ex_vat is None and not offers:

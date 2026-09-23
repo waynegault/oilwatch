@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from oilwatch.models import utcnow_naive
-from oilwatch.supplier_integrity import duplicate_supplier_groups
+from oilwatch.supplier_integrity import (
+    SupplierIdentityConflict,
+    conflicting_name_matches,
+    describe_identity_conflict,
+    duplicate_supplier_groups,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -233,6 +238,24 @@ class Database:
             "notes": record.get("notes", ""),
         }
         with closing(self.connect()) as conn, conn:
+            # A changed website must not mint a second row for one supplier. The
+            # conflict target is the website, so the old row would survive beside
+            # the new one and the quote history would sit split across both --
+            # Turriff Fuels' twin appeared exactly that way. Stop and name the rows
+            # rather than deciding which is real: that decision is a merge, and a
+            # wrong merge destroys history silently.
+            conflicts = conflicting_name_matches(
+                (dict(row) for row in conn.execute("SELECT id, name, website FROM suppliers")),
+                record["name"],
+                record["website"],
+            )
+            if conflicts:
+                raise SupplierIdentityConflict(
+                    f"refusing to record {record['name']!r} at {record['website']!r}: "
+                    f"{describe_identity_conflict(conflicts)} already holds that name on a "
+                    "different website. Repoint the existing row, or correct the register, "
+                    "rather than forking the quote history."
+                )
             conn.execute(
                 """
                 INSERT INTO suppliers (
@@ -728,11 +751,22 @@ class Database:
         be mined twice (its id changes when it moves to another folder, which
         slips past the processed-message ledger) and duplicate rows only add
         noise to every comparison.
+
+        A later message restating the same offer is not that repeat, though.
+        Suppliers re-send a campaign with the same codes and a fresh deadline -
+        ValueOils repeated all three of its codes on 2026-09-23 - and the deadline
+        is most of what a code is worth, so a repeat whose ``observed_at`` is
+        newer than the stored row's refreshes that row in place: one row per
+        offer, carrying the window most recently stated. Comparing dates rather
+        than merely matching the offer is what keeps old mail from undoing a
+        newer statement, which matters because the sweep reads the inbox and the
+        bin together, not in the order the messages arrived.
         """
+        observed_at = record.get("observed_at") or utcnow_naive().isoformat()
         with closing(self.connect()) as conn, conn:
             existing = conn.execute(
                 """
-                SELECT id FROM discounts
+                SELECT id, observed_at FROM discounts
                 WHERE supplier_id IS ? AND code IS ? AND amount_gbp = ?
                   AND min_litres IS ? AND max_litres IS ?
                 """,
@@ -745,6 +779,21 @@ class Database:
                 ),
             ).fetchone()
             if existing is not None:
+                if observed_at > (existing["observed_at"] or ""):
+                    conn.execute(
+                        """
+                        UPDATE discounts
+                        SET expires_at = ?, terms = ?, source = ?, observed_at = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            record.get("expires_at"),
+                            record.get("terms", ""),
+                            record.get("source", "email"),
+                            observed_at,
+                            existing["id"],
+                        ),
+                    )
                 return int(existing["id"])
             cursor = conn.execute(
                 """
@@ -762,7 +811,7 @@ class Database:
                     record.get("expires_at"),
                     record.get("terms", ""),
                     record.get("source", "email"),
-                    record.get("observed_at", utcnow_naive().isoformat()),
+                    observed_at,
                 ),
             )
             return self._inserted_id(cursor)

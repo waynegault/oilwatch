@@ -8,8 +8,12 @@ appeared exactly that way on 2026-09-22 — the register was repointed at
 ``www.turrifffuels.com`` and a second row was created next to the
 ``turriff-fuels.co.uk`` row, each holding part of the quote history.
 
-Nothing in the write path can notice that: the two rows share no column the
-upsert keys on. This module looks for the pairs afterwards.
+The write path now refuses to build such a twin: :meth:`Database.upsert_supplier`
+raises :class:`SupplierIdentityConflict` when the incoming record's name is
+already recorded against a different website, so the second write stops and the
+operator reconciles instead of the history splitting. That refusal decides
+nothing — it only declines to guess. This module reports the pairs that predate
+the refusal, or that arrived by some other route.
 
 :func:`duplicate_supplier_groups` reports them and never merges them. Which rows
 are genuinely the same supplier is an operator's call, not a name comparison's,
@@ -42,6 +46,51 @@ def normalise_name(name: object) -> str:
 def normalise_email(email: object) -> str:
     """Fold a contact address, which is compared case-insensitively."""
     return str(email or "").strip().casefold()
+
+
+class SupplierIdentityConflict(RuntimeError):
+    """A supplier's name is already recorded on another website.
+
+    Raised by :meth:`oilwatch.db.Database.upsert_supplier` instead of inserting a
+    second row. The write stops because which website is the real one is the
+    operator's call; a name comparison that repointed the existing row would
+    merge two companies silently, which is what this module exists to prevent.
+    """
+
+
+def conflicting_name_matches(
+    suppliers: Iterable[dict[str, Any]],
+    name: object,
+    website: object,
+) -> list[dict[str, Any]]:
+    """The recorded rows that share ``name`` but sit on a different website.
+
+    A row on the *same* website is the ordinary update case and is not returned,
+    so an empty result means the write can proceed. The name is folded exactly as
+    the reporting check folds it, so the refusal and the report agree on what
+    "the same name" means.
+
+    Only the name is decisive here, where the report also keys on the email: two
+    trading names can legitimately share one mailbox, so an email is a reason to
+    look at a pair, not a reason to refuse a write.
+    """
+    key = normalise_name(name)
+    if not key:
+        return []
+    site = str(website or "")
+    return [
+        row
+        for row in suppliers
+        if normalise_name(row.get("name")) == key and str(row.get("website") or "") != site
+    ]
+
+
+def describe_identity_conflict(conflicts: Iterable[dict[str, Any]]) -> str:
+    """Name each conflicting row by id and website, oldest id first."""
+    return "; ".join(
+        f"id {row.get('id')} ({row.get('website')})"
+        for row in sorted(conflicts, key=_by_id)
+    )
 
 
 def _summary(supplier: dict[str, Any]) -> dict[str, Any]:

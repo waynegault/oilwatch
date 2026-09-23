@@ -457,6 +457,32 @@ class GraphSweepRerunTests(unittest.TestCase):
         self.assertIn("Feedback Friday", text)
         self.assertIn("left where it is", text)
 
+    def test_a_discount_only_message_says_what_it_captured(self) -> None:
+        """Codes with no price beside them still have to leave a line.
+
+        This branch writes discount rows and deletes the message, and it used to
+        do both without a word - which made it the one message a sweep counts and
+        never names: `scanned` includes it, `unrecognised` does not, and no other
+        known-sender branch is silent. On 2026-09-23 the sweep that read the
+        ValueOils mail reported `scanned 191, recorded 0, 190 from unrecognised
+        sender(s)` with its three codes refreshed and nothing naming it, which is
+        the same unaccountable arithmetic that hid a message on 2026-09-21.
+        """
+        message = self._message("MMM", "inbox-id")
+        message["body"] = {
+            "contentType": "text",
+            "content": "£10 OFF 500-999 litres - Code: UWCNI154305",
+        }
+
+        with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:
+            recorded, deleted = self._sweep([message], [])
+
+        text = "\n".join(captured.output)
+        self.assertEqual(recorded, [], "a discount is not a quote")
+        self.assertIn("captured 1 discount offer(s) from Rix (rix.co.uk)", text)
+        self.assertIn("sweep: scanned 1, recorded 0, 0 from unrecognised", text)
+        self.assertEqual(len(deleted), 1, "the message is cleared as processed")
+
     def test_a_newsletter_is_cleared_but_not_marked_processed(self) -> None:
         """Supplier mail with nothing in it is swept out, not left to pile up.
 
