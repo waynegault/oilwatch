@@ -15,7 +15,8 @@ database leaves it stale and nothing else notices. That happened three times on
 2026-09-24 — a deduplication, a supplier phone correction and the note
 describing it each reached the database and not the file, and the phone
 correction changed a *value* and no count, so a count comparison alone would
-have called the export current.
+have called the export current. The columns listed in ``_VOLATILE_COLUMNS`` are
+compared by neither, because they are clock readings that move on every `init`.
 
 **Built, not copied.** SQLite leaves a deleted row in the file's free pages, so a
 copy that dropped a table could still carry that table's contents. Every kept
@@ -331,6 +332,14 @@ def leftovers(source: Path, target: Path, replacements: list[tuple[str, str]]) -
     return found
 
 
+#: Columns whose value is a clock reading rather than data, so the export is not
+#: stale when they move. ``upsert_supplier`` sets ``last_seen_at`` on every
+#: conflict — every `init`, and every discovery sweep — and comparing it would
+#: report the export as behind each time the register is applied, for a timestamp
+#: no reader came for. A guard that cries wolf is a guard people learn to ignore.
+_VOLATILE_COLUMNS = {("suppliers", "last_seen_at")}
+
+
 def table_fingerprint(
     connection: sqlite3.Connection, table: str, columns: list[str]
 ) -> tuple[int, str]:
@@ -375,12 +384,15 @@ def committed_export_drift(source: Path = SOURCE, target: Path = TARGET) -> list
             changed: list[str] = []
             behind = 0
             for table, columns in KEPT_COLUMNS.items():
+                compared = [
+                    column for column in columns if (table, column) not in _VOLATILE_COLUMNS
+                ]
                 try:
-                    have_rows, have_digest = table_fingerprint(have, table, columns)
+                    have_rows, have_digest = table_fingerprint(have, table, compared)
                 except sqlite3.Error:
                     # A table the export does not have at all: it predates it.
                     have_rows, have_digest = 0, ""
-                want_rows, want_digest = table_fingerprint(want, table, columns)
+                want_rows, want_digest = table_fingerprint(want, table, compared)
                 if have_rows != want_rows:
                     behind += abs(want_rows - have_rows)
                     missing.append(

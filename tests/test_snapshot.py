@@ -16,6 +16,7 @@ from __future__ import annotations
 import importlib.util
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from oilwatch.db import Database
@@ -112,6 +113,25 @@ class CommittedExportDriftTests(unittest.TestCase):
         self.assertIn("BEHIND", lines[0])
         self.assertTrue(any("behind by 1 row(s)" in line for line in lines), lines)
         self.assertTrue(any("quotes: 0 committed, 1 would be written" in line for line in lines), lines)
+
+    def test_re_applying_the_register_is_not_drift(self) -> None:
+        """`init` moves a last-seen timestamp on every row, and that is not data.
+
+        Comparing it would report the export as behind every time the register is
+        applied — which is how a check that is meant to be read gets ignored.
+
+        The clock is moved by hand rather than by re-running the upsert: its
+        ``CURRENT_TIMESTAMP`` has one-second resolution, so a re-apply inside the
+        same second would leave the column alone and the test would pass without
+        the exclusion it exists for.
+        """
+        with closing(self.live.connect()) as connection, connection:
+            connection.execute("UPDATE suppliers SET last_seen_at = '2030-01-01 00:00:00'")
+
+        lines = self.drift()
+
+        self.assertEqual(len(lines), 1, lines)
+        self.assertIn("in step", lines[0])
 
     def test_an_absent_export_is_stated_rather_than_compared(self) -> None:
         self.committed_path.unlink()
