@@ -76,6 +76,28 @@ def day_of(observed_at: str) -> str:
     return observed_at[:10]
 
 
+def rank_for_display(rows: list[dict]) -> list[dict]:
+    """The current-window rows in the order a reader should meet them.
+
+    Cheapest *effective* price first — the same basis `cheapest` names the winner
+    on, so the table cannot disagree with the card above it. It could: the rows
+    arrive from `current_prices` in headline order (``db.latest_quotes`` orders on
+    ``price_per_liter``), so a code that changed who leads left the card naming one
+    supplier and the top row another.
+
+    A benchmark sorts last whatever it costs. Fueltool's UK average is routinely
+    below every real quote, and a table whose first row is a figure rather than a
+    supplier is the misreading ``kind`` exists to prevent.
+    """
+
+    def key(row: dict) -> tuple[int, float]:
+        effective = row.get("effective_price_per_liter")
+        price = effective if effective is not None else row["price_per_liter"]
+        return (1 if row.get("kind") == "benchmark" else 0, float(price))
+
+    return sorted(rows, key=key)
+
+
 def build_payload(app: OilWatchApp) -> dict:
     quotes = [row for row in app.db.all_quotes() if row["status"] == "ok" and row["price_per_liter"]]
     suppliers = app.db.list_suppliers()
@@ -167,20 +189,27 @@ def build_payload(app: OilWatchApp) -> dict:
     current = {
         "as_of": envelope["as_of"],
         "window_days": envelope["window_days"],
-        "quotes": [
-            {
-                "name": row["supplier_name"],
-                "website": row["website"],
-                "order_page": row.get("order_page"),
-                "price_per_liter": row["price_per_liter"],
-                "effective_price_per_liter": row.get("effective_price_per_liter"),
-                "observed_at": row["observed_at"],
-                "valid_until": row.get("valid_until"),
-                "discount": row.get("discount"),
-                "reason": row.get("reason"),
-            }
-            for row in envelope["quotes"]
-        ],
+        "quotes": rank_for_display(
+            [
+                {
+                    "name": row["supplier_name"],
+                    "website": row["website"],
+                    "order_page": row.get("order_page"),
+                    "price_per_liter": row["price_per_liter"],
+                    "effective_price_per_liter": row.get("effective_price_per_liter"),
+                    "observed_at": row["observed_at"],
+                    "valid_until": row.get("valid_until"),
+                    "discount": row.get("discount"),
+                    "reason": row.get("reason"),
+                    # The page has to be able to say "this row is a figure, not a
+                    # supplier" and to name the winner's own row — the two things a
+                    # reader gets wrong from a bare price table.
+                    "kind": row.get("kind"),
+                    "order_channel": row.get("order_channel"),
+                }
+                for row in envelope["quotes"]
+            ]
+        ),
         "no_quote_suppliers": envelope["no_quote_suppliers"],
         "failed_suppliers": envelope["failed_suppliers"],
         "excluded_suppliers": envelope["excluded_suppliers"],

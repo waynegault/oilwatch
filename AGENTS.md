@@ -13,12 +13,16 @@ verified counts and what this tool deliberately does not do.
 `chart`, `time_series_chart`. Costs minutes: `refresh_prices`. Reaches the
 network: `update_brent`.
 
-**Through the CLI — twenty-one commands**, as `oilwatch <command>` or
+**Through the CLI — twenty-two commands**, as `oilwatch <command>` or
 `python -m oilwatch.cli <command>`: `init`, `discover`, `suppliers`, `duplicates`,
 `quote`,
-`quote-all`, `cheapest`, `status`, `chart`, `time-series`, `update-brent`,
+`quote-all`, `cheapest`, `current-prices`, `status`, `chart`, `time-series`,
+`update-brent`,
 `import-spreadsheet`, `record-purchase`, `purchases`, `schedule`, `api-discover`,
 `register`, `login`, `submit-requests`, `monitor-email`, `login-email`.
+`current-prices` is the CLI form of the `current_prices` read — the per-supplier
+rows, with the effective price after any code; `cheapest` is the winner alone and
+`status` carries no priced rows at all.
 `oilwatch --help` gives the flags; `README.md` is the reference.
 
 A few of these have consequences beyond this machine, so call them

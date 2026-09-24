@@ -53,6 +53,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("cheapest")
     subparsers.add_parser("status")
+    # The per-supplier read, which the MCP surface has had all along as
+    # `current_prices`. Without it the richest read in the app was reachable only
+    # from an agent, so a shell fell back to `cheapest` (the winner alone),
+    # `status` (the snapshot, which carries no priced rows) or the database
+    # itself — and reading the database directly loses the enrichment that makes
+    # the rows comparable at all: the effective price after any discount code, the
+    # best applicable code, and how the supplier can be ordered from.
+    subparsers.add_parser("current-prices")
     subparsers.add_parser("chart")
     subparsers.add_parser("time-series")
 

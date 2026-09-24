@@ -44,6 +44,9 @@
   th[aria-sort="ascending"]::after { content: " ▴"; color: var(--ink); }
   td.num, th.num { text-align: right; }
   tbody tr:hover { background: var(--surface-2); }
+  tbody tr.winner td:first-child { font-weight: 600; }
+  tbody tr.winner td { background: #eef7f0; }
+  tbody tr.benchmark td { color: var(--ink-soft); }
   .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink-soft); }
   .pill.ok { border-color: #bcd7c2; background: #eef7f0; color: var(--good); }
   .pill.gap { border-color: #e6d3b8; background: #fdf6ec; color: var(--warn); }
@@ -87,7 +90,7 @@
   <div class="cardgrid" id="cards"></div>
 
   <h2>Who is quoting today</h2>
-  <p class="sub">The suppliers behind the current comparison, and the ones it cannot include — each with the reason its last attempt recorded.</p>
+  <p class="sub">The suppliers behind the current comparison, and the ones it cannot include — each with the reason its last attempt recorded. Cheapest <em>effective</em> price first, the same basis the winner is chosen on, so a discount code cannot make this table disagree with the line above it; the benchmark sorts last, whatever it costs.</p>
   <div class="panel">
     <div class="scroll"><table id="nowTable"></table></div>
   </div>
@@ -193,14 +196,19 @@ function renderSummary() {
 }
 
 function renderNow() {
-  const rows = CURRENT.quotes.map((q) => `<tr>
-    <td>${esc(q.name)}</td>
+  const winnerName = (DATA.snapshot && DATA.snapshot.cheapest_supplier || {}).name;
+  const rows = CURRENT.quotes.map((q) => {
+    const isBenchmark = q.kind === "benchmark";
+    const cls = [q.name === winnerName ? "winner" : "", isBenchmark ? "benchmark" : ""].filter(Boolean).join(" ");
+    return `<tr${cls ? ` class="${cls}"` : ""}>
+    <td>${esc(q.name)}${isBenchmark ? ' <span class="pill">benchmark</span>' : ""}${q.name === winnerName ? ' <span class="pill ok">cheapest</span>' : ""}</td>
     <td class="num">${gbp(q.price_per_liter)}</td>
     <td class="num">${q.discount ? gbp(q.effective_price_per_liter) : '<span class="muted">no code</span>'}</td>
     <td>${q.discount ? `<code>${esc(q.discount.code || "—")}</code> <span class="muted">£${num(q.discount.amount_gbp, 2)} off</span>` : "—"}</td>
     <td>${esc(q.observed_at.slice(0, 16).replace("T", " "))}</td>
     <td>${q.order_page ? `<a href="${esc(q.order_page)}" rel="noopener">order</a>` : (q.website ? `<a href="${esc(q.website)}" rel="noopener">site</a>` : "—")}</td>
-  </tr>`).join("");
+  </tr>`;
+  }).join("");
   $("nowTable").innerHTML = `<thead><tr><th>Supplier</th><th class="num">Headline</th><th class="num">Effective</th><th>Discount</th><th>Quoted at</th><th>Link</th></tr></thead><tbody>${rows}</tbody>`;
 
   const groups = [

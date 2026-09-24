@@ -120,6 +120,18 @@ def _cmd_status(app: OilWatchApp, args: argparse.Namespace) -> None:
     _print(app.status())
 
 
+def _cmd_current_prices(app: OilWatchApp, args: argparse.Namespace) -> None:
+    """Every priced supplier, as fields — the CLI form of the MCP read.
+
+    The same envelope the `current_prices` tool returns, so a shell gets the
+    effective price, the applicable discount, `kind`, `order_channel` and the
+    contact block per supplier, rather than the winner alone (`cheapest`) or a
+    summary with no priced rows (`status`). The alternative a reader had was the
+    database file itself, which carries none of that enrichment.
+    """
+    _print(app.current_prices())
+
+
 def _cmd_chart(app: OilWatchApp, args: argparse.Namespace) -> None:
     _print({"chart_path": app.chart()})
 
@@ -450,6 +462,7 @@ HANDLERS: dict[str, Callable[[OilWatchApp, argparse.Namespace], None]] = {
     "quote-all": _cmd_quote_all,
     "cheapest": _cmd_cheapest,
     "status": _cmd_status,
+    "current-prices": _cmd_current_prices,
     "chart": _cmd_chart,
     "time-series": _cmd_time_series,
     "import-spreadsheet": _cmd_import_spreadsheet,

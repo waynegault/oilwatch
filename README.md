@@ -58,9 +58,9 @@ what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
 
 | What | Count |
 |------|-------|
-| Tests | 778, all passing offline |
+| Tests | 781, all passing offline |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
-| CLI commands | 21 |
+| CLI commands | 22 |
 | Modules under `oilwatch/` | 55 Python files |
 
 ---
@@ -122,6 +122,11 @@ python -m oilwatch.cli quote 3 --postcode "AB21 0YA"  # HomeFuels Direct
 
 # Show CHEAPEST supplier with average and variance
 python -m oilwatch.cli cheapest
+
+# Every priced supplier as fields: effective price after any discount code, the
+# code itself, kind, order_channel and contact. The per-row read, where `cheapest`
+# is the winner alone and `status` carries no priced rows at all.
+python -m oilwatch.cli current-prices
 
 # Show cheapest supplier + price direction + buy/hold recommendation
 python -m oilwatch.cli status
@@ -648,7 +653,7 @@ Oil Price Webscraper/
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
 
-`python -m unittest discover -s tests -t .` — 778 tests, all offline.
+`python -m unittest discover -s tests -t .` — 781 tests, all offline.
 
 ### Run from the command line
 
