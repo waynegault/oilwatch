@@ -121,3 +121,5 @@ CREATE TABLE sweeps (
     finished_at TEXT,
     started_by TEXT
 );
+
+CREATE INDEX idx_quotes_supplier_observed_at ON quotes (supplier_id, observed_at);

@@ -60,9 +60,11 @@ def collect() -> str:
         connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
         try:
             rows = connection.execute(
+                # Tables first, then indexes: an index line reads as an aside until
+                # you have seen the table it belongs to.
                 "SELECT sql FROM sqlite_master "
                 "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' "
-                "ORDER BY type, name"
+                "ORDER BY CASE type WHEN 'table' THEN 0 ELSE 1 END, name"
             ).fetchall()
         finally:
             connection.close()

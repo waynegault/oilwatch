@@ -158,6 +158,15 @@ CREATE TABLE IF NOT EXISTS sender_judgements (
     judged_at TEXT NOT NULL,
     covers_through TEXT
 );
+
+-- Every read of `quotes` groups by supplier and takes that supplier's newest row
+-- (`latest_quotes`, `stale_quotes`, `not_refreshed_quotes`, and the direct-read
+-- EXISTS clause beside them), and without this the plan for each is a full scan of
+-- the table plus a temporary B-tree for the GROUP BY. The table grows by one row
+-- per supplier per sweep, so the shape is the point rather than today's ~660 rows.
+-- On an existing database this arrives the same way the columns above do: the
+-- schema script runs again on the next `init`, and IF NOT EXISTS makes that free.
+CREATE INDEX IF NOT EXISTS idx_quotes_supplier_observed_at ON quotes (supplier_id, observed_at);
 """
 
 #: How close an email row has to be to a direct read of the same supplier to
