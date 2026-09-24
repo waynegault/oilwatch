@@ -65,11 +65,18 @@ while [ "$i" -lt 40 ]; do
     # with the above path as the current directory. UNC paths are not supported" into
     # the unit's own journal, where it reads like a fault and is not one. Nothing else
     # about the run changes; the path is where `cd` lands, not where the script lives.
-    if systemd-run --user --unit=oil-mcp-ttl --on-active="${TTL_MINUTES}min" \
-      --working-directory=/mnt/c/Windows "$DOWN" >/dev/null 2>&1; then
+    if run_error=$(systemd-run --user --unit=oil-mcp-ttl --on-active="${TTL_MINUTES}min" \
+      --working-directory=/mnt/c/Windows "$DOWN" 2>&1); then
       echo "oil-mcp-up: listening on $host:$PORT (stops itself in ${TTL_MINUTES} min; 'oil-mcp-down' stops it now)"
+    elif systemctl --user is-active --quiet oil-mcp-ttl.timer; then
+      # A second invocation can lose the race for the unit name — systemd answers
+      # "Unit oil-mcp-ttl.timer was already loaded or has a fragment file" — and that
+      # is not a failure of the arrangement: a stop is scheduled, by the other one.
+      # Ask the condition instead of reporting this invocation's luck. One timer is
+      # enough, and the old wording told the caller to go and stop it by hand.
+      echo "oil-mcp-up: listening on $host:$PORT (a stop was already scheduled by another invocation)"
     else
-      echo "oil-mcp-up: listening on $host:$PORT (could NOT schedule the stop - run oil-mcp-down when done)" >&2
+      echo "oil-mcp-up: listening on $host:$PORT (could NOT schedule the stop: $run_error - run oil-mcp-down when done)" >&2
     fi
     exit 0
   fi

@@ -81,6 +81,20 @@ class WslHelperScriptTests(unittest.TestCase):
         self.assertIn("remaining=$(listening_pids)", script, "the port must be re-probed")
         self.assertIn("still has a listener", script, "a listener left over means failure")
 
+    def test_the_start_script_asks_whether_a_stop_is_already_scheduled(self) -> None:
+        """A second start can lose the race for the transient unit's name.
+
+        systemd answers "Unit oil-mcp-ttl.timer was already loaded or has a fragment
+        file", which is not a failure of the arrangement — the stop is scheduled, by
+        the other invocation. The old wording reported that as "could NOT schedule
+        the stop", and redirected systemd's own message to /dev/null so the reason
+        was invisible too.
+        """
+        script = (ROOT / "oil-mcp-up.sh").read_text(encoding="utf-8")
+
+        self.assertIn("is-active --quiet oil-mcp-ttl.timer", script, "ask the condition")
+        self.assertIn("run_error=$(systemd-run", script, "keep systemd's own message")
+
 
 if __name__ == "__main__":
     unittest.main()
