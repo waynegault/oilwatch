@@ -141,6 +141,14 @@ leftover phone-route code.
   tool said and let the owner decide.
 - **Never pass a `/mnt/c/...` path as an *argument*** to the Windows python — WSL
   interop translates the executable path but not argument paths.
+- **Never hand it a path the WSL shell *wrote*, either.** A shell redirect runs on
+  the WSL side, so `oilwatch.cli status > /tmp/out.json` puts the file in *WSL's*
+  `/tmp` and the Windows interpreter then looks for `C:\tmp\out.json` and raises
+  `FileNotFoundError` — on a command that worked, with its output one namespace
+  away. Keep such a file inside the repo (both sides agree on
+  `.../Oil Price Webscraper/data/`) and read it by a relative path, or skip the
+  file: pipe it into the reader, or do it in one `python -c`. `user-guide.md`
+  §Traps has the working forms.
 - **Never try to fix the gateway crash here.** A stdio child that misses its init
   budget can take the whole OpenClaw gateway down with a child-cleanup rejection;
   that is an OpenClaw defect, tracked upstream, not this repository's problem.

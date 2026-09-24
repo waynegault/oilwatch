@@ -691,6 +691,31 @@ PYTHONUNBUFFERED=1 .venv/Scripts/python.exe -m oilwatch.cli quote-all --browser
 
 - **Never pass a `/mnt/c/...` path as an *argument*** to the Windows python: WSL
   interop translates the executable path but not argument paths. `-m` needs none.
+- **Nor hand it a path the WSL shell *wrote*.** A redirect runs on the WSL side, so
+  a temp file lands in *WSL's* filesystem while the Windows interpreter resolves
+  the same `/tmp/...` string as `C:\tmp\...`. The command succeeds, and the read
+  fails. Verified 2026-09-24:
+
+  ```bash
+  cd "/mnt/c/Users/wayne/GitHub/Python/Projects/Oil Price Webscraper"
+  ./.venv/Scripts/python.exe -m oilwatch.cli status > /tmp/ow-status.json 2>&1
+  ./.venv/Scripts/python.exe -c "import json; json.load(open('/tmp/ow-status.json'))"
+  # FileNotFoundError: [Errno 2] No such file or directory: '/tmp/ow-status.json'
+  # …while the file is sitting at \\wsl.localhost\Ubuntu-24.04\tmp\ow-status.json,
+  # holding the status JSON the run produced.
+  ```
+
+  Keep the file inside the repo, which is the one place both namespaces agree on,
+  and read it by a *relative* path — or skip the file, which also sidesteps the
+  argument-path trap above:
+
+  ```bash
+  cd "/mnt/c/Users/wayne/GitHub/Python/Projects/Oil Price Webscraper"
+  ./.venv/Scripts/python.exe -m oilwatch.cli status > data/ow-status.json
+  ./.venv/Scripts/python.exe -c "import json; d = json.load(open('data/ow-status.json')); print(d['recommendation'])"
+  # or in one process, with nothing to cross:
+  ./.venv/Scripts/python.exe -c "from oilwatch.service import OilWatchApp; print(OilWatchApp().status()['recommendation'])"
+  ```
 - **A client that builds the stdio command by splitting it on spaces cannot use
   this path.** The repo lives under `Oil Price Webscraper`, so a client that
   word-splits the command sees `.../Projects/Oil` and fails with
