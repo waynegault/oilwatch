@@ -59,7 +59,14 @@ while [ "$i" -lt 40 ]; do
     DOWN="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/oil-mcp-down"
     systemctl --user stop oil-mcp-ttl.timer >/dev/null 2>&1 || true
     systemctl --user reset-failed oil-mcp-ttl.service >/dev/null 2>&1 || true
-    if systemd-run --user --unit=oil-mcp-ttl --on-active="${TTL_MINUTES}min" "$DOWN" >/dev/null 2>&1; then
+    # The unit's working directory is set to a Windows-side one, because its default
+    # is the user manager's (/home/wayne), which interop hands to a Windows process as
+    # a \\wsl.localhost\... UNC path — and cmd.exe then prints "CMD.EXE was started
+    # with the above path as the current directory. UNC paths are not supported" into
+    # the unit's own journal, where it reads like a fault and is not one. Nothing else
+    # about the run changes; the path is where `cd` lands, not where the script lives.
+    if systemd-run --user --unit=oil-mcp-ttl --on-active="${TTL_MINUTES}min" \
+      --working-directory=/mnt/c/Windows "$DOWN" >/dev/null 2>&1; then
       echo "oil-mcp-up: listening on $host:$PORT (stops itself in ${TTL_MINUTES} min; 'oil-mcp-down' stops it now)"
     else
       echo "oil-mcp-up: listening on $host:$PORT (could NOT schedule the stop - run oil-mcp-down when done)" >&2

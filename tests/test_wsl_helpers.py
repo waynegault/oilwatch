@@ -60,6 +60,27 @@ class WslHelperScriptTests(unittest.TestCase):
                 first_line = (ROOT / name).read_bytes().split(b"\n", 1)[0]
                 self.assertEqual(first_line, b"#!/bin/sh", f"{name} starts with {first_line!r}")
 
+    def test_the_stop_script_decides_by_the_port_not_by_its_kill_count(self) -> None:
+        """Two overlapping stops must both succeed.
+
+        They see the same pid; the first removes it, and the second's taskkill fails
+        for having nothing left to kill. Deciding the exit status on that count made
+        the second run exit 1, and systemd recorded it as a failed transient unit —
+        two of them on 2026-09-24 at 17:14, both having done their job. The rule
+        cannot be exercised from here (it needs the real Windows netstat), so what is
+        pinned is that the rule is still written down: success is the port being
+        clear, failure is a listener remaining.
+        """
+        script = (ROOT / "oil-mcp-down.sh").read_text(encoding="utf-8")
+
+        self.assertNotIn(
+            '[ "$stopped" -gt 0 ] || exit 1',
+            script,
+            "success must not be decided by the kill count",
+        )
+        self.assertIn("remaining=$(listening_pids)", script, "the port must be re-probed")
+        self.assertIn("still has a listener", script, "a listener left over means failure")
+
 
 if __name__ == "__main__":
     unittest.main()

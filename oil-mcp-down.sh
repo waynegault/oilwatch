@@ -17,6 +17,13 @@ set -eu
 SYS=/mnt/c/Windows/System32
 PORT="${MCP_PORT:-8000}"
 
+# The port's listening pids, so the same question can be asked before and after.
+listening_pids() {
+  "$SYS/netstat.exe" -ano | tr -d '\r' \
+    | awk -v port=":$PORT" '$1 == "TCP" && $4 == "LISTENING" && $2 ~ port { print $5 }' \
+    | sort -u
+}
+
 for exe in "$SYS/netstat.exe" "$SYS/taskkill.exe"; do
   if [ ! -x "$exe" ]; then
     echo "oil-mcp-down: no $exe on this machine" >&2
@@ -24,9 +31,7 @@ for exe in "$SYS/netstat.exe" "$SYS/taskkill.exe"; do
   fi
 done
 
-pids=$("$SYS/netstat.exe" -ano | tr -d '\r' \
-  | awk -v port=":$PORT" '$1 == "TCP" && $4 == "LISTENING" && $2 ~ port { print $5 }' \
-  | sort -u)
+pids=$(listening_pids)
 
 if [ -z "$pids" ]; then
   echo "oil-mcp-down: nothing listening on port $PORT"
@@ -39,9 +44,21 @@ for pid in $pids; do
   if "$SYS/taskkill.exe" /PID "$pid" /F >/dev/null 2>&1; then
     echo "oil-mcp-down: stopped pid $pid"
     stopped=$((stopped + 1))
-  else
-    echo "oil-mcp-down: could not stop pid $pid" >&2
   fi
 done
 
-[ "$stopped" -gt 0 ] || exit 1
+# The exit status is the *condition*, never this invocation's kill count. Two runs
+# overlap routinely — the TTL timer fires while a hand-run is in flight, or two
+# timers fire together — and then they both see the listening pid, the first one
+# removes it, and the second's taskkill fails because there is nothing left to
+# kill. Counting wins made that second run exit 1, and systemd recorded it as a
+# failed transient unit: two of them on 2026-09-24 at 17:14, both oil-mcp-down,
+# both having done their job. "The listener I wanted gone is gone" is success.
+remaining=$(listening_pids)
+if [ -z "$remaining" ]; then
+  [ "$stopped" -gt 0 ] || echo "oil-mcp-down: port $PORT was already clear - another invocation stopped it"
+  exit 0
+fi
+
+echo "oil-mcp-down: port $PORT still has a listener (pids: $remaining)" >&2
+exit 1
