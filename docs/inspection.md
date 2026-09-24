@@ -234,6 +234,7 @@ working directory, but a spawned MCP server does not inherit the repo as its cwd
 | 12.3 | 🔍 History is preserved, not deleted | `grep -n "def all_quotes\|def latest_quotes" oilwatch/db.py` | Reads filter by window; rows are not removed |
 | 12.4 | 🔍 Migrations backfill | Read `db.init_schema` | New columns are added and existing rows backfilled (e.g. `valid_until` = observed + 24 h) |
 | 12.5 | 🔍 Generated files stay out of git | `git status --short data/` | Nothing reported — `*.sqlite`, `*.log` and `*.png` are ignored |
+| 12.6 | 🔧 A register change and its snapshot rebuild go in the same commit | `.venv\Scripts\python.exe tools\build_snapshot.py --check` | Says "in step with the live database". `data/oilwatch-history.sqlite` is a *copy*, rebuilt by hand, so the database is the source and the export lags it silently: nothing refreshes it, and no test can see the drift, because a checkout has the export and the live database is the one file deliberately never committed. On 2026-09-24 it went stale three times in one session — a deduplication, ValueOils' phone correction, and the note describing that correction — and the phone corrected a *value* while changing no count, which is why `--check` compares every table by its row count **and** by a digest of its kept columns |
 
 ## 13. Supplier Connector Accuracy — High
 

@@ -6,10 +6,10 @@ rows are *meant* to appear in: the rule that keeps the table from disagreeing wi
 the winner named above it. Getting it wrong is silent — the page still renders,
 with the wrong row at the top.
 
-`tools/` holds no other test. Its scripts are verified by running them
-(`build_snapshot.py` checks its own output, `build_explorer.py` writes the page and
-runs `node --check` on it), which is why this file loads the tool by path rather
-than importing it as a package.
+`tools/` scripts are verified by running them (`build_snapshot.py` checks its own
+output, `build_explorer.py` writes the page and runs `node --check` on it), which
+is why this file loads the tool by path rather than importing it as a package.
+`test_snapshot.py` does the same for the snapshot tool's staleness report.
 """
 
 from __future__ import annotations

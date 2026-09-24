@@ -8,7 +8,14 @@ prices, the suppliers and the record of who was asked — so this writes that in
 
     python tools/build_snapshot.py [--check]
 
-``--check`` prints what would be written and stops; nothing is written.
+``--check`` prints what would be written, then says whether the committed export
+still matches it, and writes nothing either way. Say whether it is behind,
+because the export is rebuilt by hand: every change to the register or the
+database leaves it stale and nothing else notices. That happened three times on
+2026-09-24 — a deduplication, a supplier phone correction and the note
+describing it each reached the database and not the file, and the phone
+correction changed a *value* and no count, so a count comparison alone would
+have called the export current.
 
 **Built, not copied.** SQLite leaves a deleted row in the file's free pages, so a
 copy that dropped a table could still carry that table's contents. Every kept
@@ -32,9 +39,11 @@ snapshot that still carries one.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sqlite3
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -322,9 +331,108 @@ def leftovers(source: Path, target: Path, replacements: list[tuple[str, str]]) -
     return found
 
 
+def table_fingerprint(
+    connection: sqlite3.Connection, table: str, columns: list[str]
+) -> tuple[int, str]:
+    """How many rows a table holds and a digest of the values it holds them in.
+
+    Both, because neither alone answers the question: a count misses a corrected
+    value (ValueOils' phone on 2026-09-24 changed no counts) and a digest misses
+    nothing but says only "different" without saying what moved.
+    """
+    hasher = hashlib.sha256()
+    rows = 0
+    for row in connection.execute(f"SELECT {', '.join(columns)} FROM {table} ORDER BY rowid"):
+        rows += 1
+        for value in row:
+            hasher.update(b"\x00" if value is None else str(value).encode("utf-8", "replace"))
+            hasher.update(b"\x1f")
+        hasher.update(b"\x1e")
+    return rows, hasher.hexdigest()
+
+
+def committed_export_drift(source: Path = SOURCE, target: Path = TARGET) -> list[str]:
+    """How the committed export differs from what would be written right now.
+
+    The comparison goes through a real build in a temporary file rather than
+    column by column: a hand-rolled comparison would have to re-implement the
+    redaction, and the first thing it would get wrong is which differences are
+    meant to be there.
+
+    The paths are parameters so this can be pointed at any pair of databases -
+    which is what lets a test drive it without reaching into the module.
+    """
+    if not target.exists():
+        return [f"committed export  none at {target.name}, so there is nothing to compare"]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        candidate = Path(tmp) / "candidate.sqlite"
+        build(source, candidate)
+        have = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        want = sqlite3.connect(f"file:{candidate}?mode=ro", uri=True)
+        try:
+            missing: list[str] = []
+            changed: list[str] = []
+            behind = 0
+            for table, columns in KEPT_COLUMNS.items():
+                try:
+                    have_rows, have_digest = table_fingerprint(have, table, columns)
+                except sqlite3.Error:
+                    # A table the export does not have at all: it predates it.
+                    have_rows, have_digest = 0, ""
+                want_rows, want_digest = table_fingerprint(want, table, columns)
+                if have_rows != want_rows:
+                    behind += abs(want_rows - have_rows)
+                    missing.append(
+                        f"    {table}: {have_rows} committed, {want_rows} would be written"
+                    )
+                elif have_digest != want_digest:
+                    changed.append(f"{table} ({have_rows} rows)")
+            built = _committed_built_at(target)
+        finally:
+            have.close()
+            want.close()
+
+    if not missing and not changed:
+        return [f"committed export  in step with the live database{built}"]
+
+    lines = [
+        "committed export  BEHIND - rebuild it with: python tools/build_snapshot.py",
+        *missing,
+    ]
+    if behind:
+        lines.append(f"    -> behind by {behind} row(s)")
+    if changed:
+        lines.append(f"    same row counts, different values in: {', '.join(changed)}")
+    if built:
+        lines.append(f"   {built.strip()}")
+    return lines
+
+
+def _committed_built_at(target: Path = TARGET) -> str:
+    """When the committed export says it was built, if it says."""
+    if not target.exists():
+        return ""
+    try:
+        snapshot = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        try:
+            row = snapshot.execute(
+                "SELECT value FROM snapshot_meta WHERE key = 'built_at'"
+            ).fetchone()
+        finally:
+            snapshot.close()
+    except sqlite3.Error:
+        return ""
+    return f" (built {row[0]})" if row else ""
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check", action="store_true", help="print what would be written only")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="print what would be written, and whether the committed export is behind",
+    )
     args = parser.parse_args()
 
     if args.check:
@@ -335,6 +443,9 @@ def main() -> None:
             print(f"{table:<16} {count:>6} rows   {len(columns)} columns kept")
         print(f"withheld         {', '.join(WITHHELD_TABLES)}")
         live.close()
+        print()
+        for line in committed_export_drift():
+            print(line)
         return
 
     written = build(SOURCE, TARGET)
