@@ -58,7 +58,7 @@ what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
 
 | What | Count |
 |------|-------|
-| Tests | 758, all passing offline |
+| Tests | 771, all passing offline |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
 | CLI commands | 21 |
 | Modules under `oilwatch/` | 55 Python files |
@@ -484,28 +484,29 @@ Supplier accounts, where required, live in `config/supplier_credentials.json`
 
 ### Main Config (`config/settings.json`)
 
-```json
-{
-  "home": {
-    "label": "Hatton of Fintray, Aberdeenshire, Scotland",
-    "latitude": 57.23875,
-    "longitude": -2.2643
-  },
-  "radius_miles": 50,
-  "quote_quantity_liters": 1000,
-  "quote_max_workers": 4,
-  "fuel_mail_min_probability": 0.8,
-  "default_postcode": "AB21 0YA",
-  "scheduler": {
-    "discovery_interval_hours": 168,
-    "quote_interval_hours": 24,
-    "email_monitor_interval_hours": 1,
-    "email_monitor_start_hour": 8,
-    "email_monitor_end_hour": 23,
-    "email_monitor_days": "mon-fri"
-  }
-}
-```
+Copy `config/settings.example.json` and edit it. That file is the complete,
+shipped template, and `tests/test_docs.py` keeps its keys in step with what
+`oilwatch/config.py` actually reads — so it cannot drift from the loader the way
+a copy kept here would. (A copy here did: it omitted `database_path` and
+`chart_path`, which the loader reads by subscript, so a settings file built from
+it failed at startup with a `KeyError` rather than taking a default.)
+
+Everything has a default except those two. The settings worth understanding
+rather than copying:
+
+| Key | Meaning |
+|-----|---------|
+| `home` | The delivery point: `label` is geocoded, `latitude`/`longitude` skip that. It is also the address a supplier is asked to deliver to |
+| `default_postcode` | The postcode used when `config/contact.json` has none |
+| `radius_miles` | How far from `home` discovery keeps a candidate supplier |
+| `search_queries` | The web searches discovery runs |
+| `quote_quantity_liters` | The order size every quote is for |
+| `quote_max_workers` | How many suppliers are quoted at once; `1` restores the strictly sequential run |
+| `max_quote_age_days` | The freshness window. Code default 30; this install sets 1, because a quote stands at most a day |
+| `fuel_mail_min_probability` | How likely an unknown sender's mail must read as a fuel quote before the sweep names that sender |
+| `scheduler.email_monitor_start_hour` / `_end_hour` / `_interval_hours` | The inbox sweep's window (inclusive) and the step through it, as a weekday cron. A window that runs backwards or a step of zero is refused by name rather than failing inside `range()` |
+| `login_urls` | Where `oilwatch login <supplier>` signs in, per supplier key |
+| `microsoft_client_id` | The Entra app (client) id for the mailbox grant — public, not a secret |
 
 ### Credentials (`config/supplier_credentials.json`)
 
@@ -647,7 +648,7 @@ Oil Price Webscraper/
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
 
-`python -m unittest discover -s tests -t .` — 758 tests, all offline.
+`python -m unittest discover -s tests -t .` — 771 tests, all offline.
 
 ### Run from the command line
 

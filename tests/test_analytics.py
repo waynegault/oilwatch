@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 from oilwatch.analytics import AnalyticsService
 
@@ -371,6 +372,55 @@ class MixedMissingPriceTests(unittest.TestCase):
         self.assertEqual(result["cheapest_supplier"]["name"], "Priced")
         self.assertEqual(result["average_price_per_liter"], 0.74)
         self.assertEqual(result["quotes_considered"], 1)
+
+
+class UnreadableTimestampTests(unittest.TestCase):
+    """One bad timestamp must not take the market views down with it.
+
+    Every view groups by day, and ``_day_of`` parses ``observed_at`` to do it —
+    so a single hand-edited or imported row raised ``ValueError`` out of the
+    ``status`` tool and both charts. ``build_time_series_chart`` guarded the
+    identical parse on its own path; the shared filter is the one place that
+    covers the snapshot, the trend and the price chart at once.
+    """
+
+    QUOTES: ClassVar[list[dict]] = [
+        make_quote(1, "Good", "2026-03-20T10:00:00", 0.74),
+        make_quote(2, "Bad", "not-a-timestamp", 0.60),
+    ]
+
+    def test_a_bad_row_is_skipped_and_the_good_one_still_compares(self) -> None:
+        """Every view drops it, the ranking included.
+
+        The ranking matters most: `latest_quotes` windows its rows with a string
+        comparison on `observed_at`, so a garbage timestamp sorts *after* any real
+        date and passes the freshness window — leaving a row that could win
+        "cheapest" while being invisible to the trend and both charts.
+        """
+        snapshot = AnalyticsService.latest_market_snapshot(self.QUOTES)
+        self.assertEqual(snapshot["cheapest_supplier"]["name"], "Good")
+        self.assertEqual(snapshot["quotes_considered"], 1)
+
+        with self.assertLogs("oilwatch.analytics", level="WARNING"):
+            trend = AnalyticsService.price_trend(self.QUOTES)
+        self.assertEqual(trend["cheapest_per_day"], [0.74], "the bad row is not a day")
+
+    def test_the_skip_is_said_out_loud(self) -> None:
+        """A row dropped in silence is a row in the database and in no report."""
+        with self.assertLogs("oilwatch.analytics", level="WARNING") as captured:
+            AnalyticsService.price_trend(self.QUOTES)
+
+        text = "\n".join(captured.output)
+        self.assertIn("Bad", text, "the supplier is named")
+        self.assertIn("not-a-timestamp", text, "and so is the value that could not be read")
+
+    def test_the_chart_survives_it_too(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "chart.png"
+            with self.assertLogs("oilwatch.analytics", level="WARNING"):
+                result = AnalyticsService.build_chart(self.QUOTES, out)
+
+            self.assertTrue(result.exists(), "the chart is still drawn, from the good row")
 
 
 if __name__ == "__main__":

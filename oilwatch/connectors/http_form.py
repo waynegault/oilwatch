@@ -27,18 +27,56 @@ class HTTPFormConnector(BaseConnector):
         context: dict[str, Any],
     ) -> QuoteResult:
         config = supplier.get("connector_config", {})
-        response = self._send_request(
-            method=config.get("quote_method", "POST"),
-            url=config["quote_url"],
-            fields=config.get("quote_fields", {}),
-            supplier=supplier,
-            quantity_liters=quantity_liters,
-            context=context,
-        )
-        price_match = re.search(config["price_regex"], response.text, re.IGNORECASE)
+        quote_url = config.get("quote_url", "")
+        pattern = config.get("price_regex")
+        if not quote_url or not pattern:
+            # The one failure that still raises: a register entry that names no
+            # URL or no price pattern is a configuration error, and every reason
+            # the contract defines describes what a *site* did. A row would
+            # misdescribe it; `quote-all` reports the raise as an error row
+            # anyway, and `quote <id>` names the missing setting outright.
+            missing = "quote_url" if not quote_url else "price_regex"
+            raise ValueError(f"Supplier {supplier['name']} is missing {missing} configuration.")
+
+        try:
+            response = self._send_request(
+                method=config.get("quote_method", "POST"),
+                url=quote_url,
+                fields=config.get("quote_fields", {}),
+                supplier=supplier,
+                quantity_liters=quantity_liters,
+                context=context,
+            )
+        except httpx.HTTPError as exc:
+            return self._manual(
+                supplier,
+                quantity_liters,
+                f"HTTP error posting to {quote_url}: {exc}",
+                "site_error",
+                status="error",
+            )
+
+        price_match = re.search(pattern, response.text, re.IGNORECASE)
         if not price_match:
-            raise ValueError(f"No price matched on quote response for {supplier['name']}")
+            # It answered and carried nothing this pattern could read, which is
+            # what no_price_found means — not a fault in the retrieval.
+            return self._manual(
+                supplier,
+                quantity_liters,
+                f"No price matched on the quote response from {response.url}.",
+                "no_price_found",
+            )
+
         price = self._normalise_price(price_match.group(1), config)
+        if price is None:
+            # Matched, and not a number: a parse failure, so `site_error`.
+            return self._manual(
+                supplier,
+                quantity_liters,
+                f"Could not read {price_match.group(1)!r} in the quote response as a price.",
+                "site_error",
+                status="error",
+            )
         return QuoteResult(
             supplier_id=int(supplier["id"]),
             supplier_name=supplier["name"],
@@ -49,6 +87,37 @@ class HTTPFormConnector(BaseConnector):
             total_price=inclusive_total(price, quantity_liters),
             source="http_form",
             raw_payload={"url": str(response.url), "status_code": response.status_code},
+        )
+
+    def _manual(
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        notes: str,
+        reason: str,
+        *,
+        status: str = "manual_action_required",
+    ) -> QuoteResult:
+        """A quote this connector cannot give, with the reason it cannot.
+
+        ``status`` is ``manual_action_required`` when the site itself decided —
+        it answered and had no price — and ``error`` when the attempt fell over,
+        which is what ``reason="site_error"`` says. A consumer branches on the
+        difference, so a post that timed out reported as "nothing to give" sends
+        the reader to the wrong next step.
+        """
+        # The phone on the record is contact data, not a route this app offers:
+        # it never rings a supplier, so the note names an address or a page.
+        contact = ", ".join(p for p in [supplier.get("email"), supplier.get("website")] if p)
+        return QuoteResult(
+            supplier_id=int(supplier["id"]),
+            supplier_name=supplier["name"],
+            observed_at=self.now(),
+            quantity_liters=quantity_liters,
+            status=status,
+            reason=reason,
+            source="http_form",
+            notes=f"{notes} Contact: {contact}" if contact else notes,
         )
 
     def _send_request(
@@ -90,10 +159,11 @@ class HTTPFormConnector(BaseConnector):
         )
 
     @staticmethod
-    def _normalise_price(text: str, config: dict[str, Any]) -> float:
+    def _normalise_price(text: str, config: dict[str, Any]) -> float | None:
+        """The captured text as GBP per litre, or ``None`` if it is not a number."""
         price = normalise_price_per_litre(text)
         if price is None:
-            raise ValueError(f"Could not parse price from {text!r}")
+            return None
         # The scraped value is assumed to already include VAT unless the
         # supplier config declares an ex-VAT rate to apply.
         vat_rate = config.get("vat_rate")

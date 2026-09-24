@@ -212,6 +212,31 @@ class WindowHoursTests(unittest.TestCase):
         """The un-configured default is 24h: one sweep a day, at the window's start."""
         self.assertEqual(_window_hours(8, 18, 24), "8")
 
+    def test_a_step_of_zero_is_refused_by_name(self) -> None:
+        """A settings typo must say which setting, not crash inside range().
+
+        ``range(8, 19, 0)`` is ``ValueError: range() arg 3 must not be zero``,
+        raised from inside ``start()`` before a single job was registered — a
+        message that names no setting and reaches the owner as a traceback.
+        """
+        for step in (0, -1):
+            with self.subTest(step=step):
+                with self.assertRaises(ValueError) as raised:
+                    _window_hours(8, 18, step)
+
+                self.assertIn("interval", str(raised.exception))
+                self.assertIn(str(step), str(raised.exception))
+
+    def test_a_window_that_runs_backwards_is_refused_by_name(self) -> None:
+        """``(18, 8)`` yields an empty hour list, which ``CronTrigger`` rejects."""
+        for start, end in ((18, 8), (0, 24), (-1, 8)):
+            with self.subTest(start=start, end=end):
+                with self.assertRaises(ValueError) as raised:
+                    _window_hours(start, end, 1)
+
+                self.assertIn("window", str(raised.exception))
+                self.assertIn(f"start hour {start} and end hour {end}", str(raised.exception))
+
 
 class EmailWindowTests(unittest.TestCase):
     """The email sweep is confined to the hours suppliers are open.

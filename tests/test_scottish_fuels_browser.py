@@ -20,11 +20,21 @@ QUOTE_URL = "https://quote.scottishfuels.co.uk/quote/"
 
 
 class FakeWebElement:
-    def __init__(self, text: str = "", value: str = "") -> None:
+    def __init__(
+        self,
+        text: str = "",
+        value: str = "",
+        *,
+        keeps_its_own_value: bool = False,
+    ) -> None:
         self.text = text
         self._value = value
         self.cleared = 0
         self.sent: list[str] = []
+        #: A control that ignores a scripted write and holds what it had is what
+        #: the page's own validation looks like from outside: it clamps to its
+        #: min/max/step, so the value we asked for is not the value it quotes.
+        self.keeps_its_own_value = keeps_its_own_value
 
     def clear(self) -> None:
         self.cleared += 1
@@ -96,8 +106,11 @@ class FakeDriver:
                 raise RuntimeError("stale element reference")
             return radio.label
         if args and "arguments[0].value = arguments[1]" in script:
-            # The DOM set the connector uses instead of clear()+send_keys().
-            args[0]._value = args[1]
+            # The DOM set the connector uses instead of clear()+send_keys(). A
+            # control that keeps its own value models the page clamping the
+            # write, which is what `set_quantity`'s return exists to report.
+            if not args[0].keeps_its_own_value:
+                args[0]._value = args[1]
             return None
         if args and "click" in script and self._after_quote_url:
             # Submitting the quote is what bounces a dead session to sign-in.
@@ -161,6 +174,30 @@ class ScottishFuelsBrowserConnectorTests(unittest.TestCase):
         self.assertEqual(driver.quantity.sent, [])
         self.assertEqual(driver.urls[0], QUOTE_URL)
         self.auth.close.assert_called_once()
+
+    def test_a_clamped_quantity_is_priced_against_what_the_site_holds(self) -> None:
+        """What the control holds afterwards is what the site will quote.
+
+        ``set_quantity`` returns the value the box holds after the write, because
+        the page clamps it to its own min/max/step — and the return was discarded.
+        When the full quote row could not be parsed, the fallback therefore
+        divided by the quantity we *asked* for, reporting a 500 L price as a
+        1000 L one: the same defect the "never clear the control" comment above
+        records, in the other direction.
+        """
+        driver = FakeDriver(body_text="Your quote\n99.50p per litre (Excl. VAT)\nLogout")
+        # The page did not take the write: it holds its own 500 L.
+        driver.quantity = FakeWebElement(value="500", keeps_its_own_value=True)
+
+        result = self._quote(driver)
+
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.quantity_liters, 500, "the quantity the site is pricing")
+        self.assertIn("asked for 1000L; the site quoted 500L", result.notes)
+        price_per_liter = result.price_per_liter
+        total_price = result.total_price
+        assert price_per_liter is not None and total_price is not None
+        self.assertAlmostEqual(total_price, round(price_per_liter * 500, 2), places=2)
 
     def test_the_sites_own_totals_are_used_for_the_quote(self) -> None:
         """The number reported is what Scottish Fuels quoted, not our sum."""

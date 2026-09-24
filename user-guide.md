@@ -322,9 +322,11 @@ returns a connector:
   server-rendered page.
 - **Browser** connectors are opt-in with `prefer_browser=True` (the CLI's
   `--browser`).
-- `valueoils.com` and `homefuelsdirect.co.uk` are in `_HTTP_WINS_OVER_BROWSER`:
-  their browser connectors are unreliable while the HTTP one works, so they never
-  take the browser path.
+- `homefuelsdirect.co.uk` is in `_HTTP_WINS_OVER_BROWSER`: its browser connector
+  is unreliable while the HTTP one works, so it never takes the browser path.
+  (ValueOils *was* there; it now opens the Quick Quote page itself and opts its
+  own connector out of request interception instead, so `--browser` does reach
+  its browser connector.)
 - When a supplier is browser-only and `prefer_browser` was not requested, the
   function returns `None` and the caller falls back to a manual quote.
 

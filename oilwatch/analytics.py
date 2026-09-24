@@ -6,6 +6,10 @@ from pathlib import Path
 from statistics import mean, median, pvariance
 from typing import Any
 
+from oilwatch.logging_setup import get_logger
+
+log = get_logger("analytics")
+
 #: Sources whose price is market context rather than an offer from a supplier.
 #: Fueltool publishes a UK average, so it must not win "cheapest" and must not
 #: drag the average or the variance around; it is reported separately instead.
@@ -69,7 +73,13 @@ class AnalyticsService:
         scrape that failed. That ambiguity is worst on a first call, which is
         why it belongs in the empty result too, not only the populated one.
         """
-        priced = [row for row in latest_quotes if row["price_per_liter"] is not None]
+        # Through the shared filter, like every other view: it is what makes the
+        # ranking, the trend and the charts describe the same set of quotes. Two
+        # things follow from that, and both are the point — a row whose timestamp
+        # cannot be read is left out of this ranking too (it would otherwise win
+        # "cheapest" while being invisible to the trend and the charts), and a
+        # row the database returned for a status other than `ok` is not a price.
+        priced = AnalyticsService._ok_priced(latest_quotes)
 
         # A comparison site publishing a UK average is not a supplier asking for
         # the order, so it is held apart from the market it describes.
@@ -153,13 +163,31 @@ class AnalyticsService:
         """Successful quotes carrying a price — the only ones that compare.
 
         Every market/statistic view filters on exactly this, so it lives in one
-        place rather than being restated in each grouping loop below.
+        place rather than being restated in each grouping loop below — including
+        the readability of the timestamp, which ``_day_of`` parses for every quote
+        that reaches this far and raises on. One malformed row, hand-edited or
+        imported, used to take the ``status`` tool and both charts down with it;
+        ``build_time_series_chart`` guarded the identical parse on its own path,
+        and this is the one place the other views share.
         """
-        return [
-            quote
-            for quote in quotes
-            if quote["status"] == "ok" and quote["price_per_liter"] is not None
-        ]
+        readable: list[dict[str, Any]] = []
+        for quote in quotes:
+            if quote["status"] != "ok" or quote["price_per_liter"] is None:
+                continue
+            try:
+                datetime.fromisoformat(quote["observed_at"])
+            except (TypeError, ValueError):
+                # Skipped, and said so: the row is in the database and would now
+                # be in no report at all, which is a thing to go and fix rather
+                # than to drop in silence.
+                log.warning(
+                    "skipping a quote from %s: observed_at %r is not a timestamp",
+                    quote.get("supplier_name"),
+                    quote.get("observed_at"),
+                )
+                continue
+            readable.append(quote)
+        return readable
 
     @staticmethod
     def _day_of(quote: dict[str, Any]) -> str:

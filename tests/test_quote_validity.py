@@ -122,11 +122,16 @@ class ValidityPersistenceTests(unittest.TestCase):
 
 class ComparisonShowsValidityTests(unittest.TestCase):
     def test_cheapest_reports_how_long_the_offer_stands(self) -> None:
+        # `status` is on every quote row, and the snapshot now reads these
+        # through the same filter as the trend and the charts — which is what
+        # keeps one bad timestamp from winning "cheapest" while being invisible
+        # everywhere else. A fixture without it is not a quote row.
         rows = [
             {
                 "supplier_id": 1,
                 "supplier_name": "A",
                 "website": "https://a.example.com",
+                "status": "ok",
                 "price_per_liter": 1.0,
                 "observed_at": OBSERVED.isoformat(),
                 "valid_until": (OBSERVED + timedelta(hours=24)).isoformat(),
@@ -135,6 +140,7 @@ class ComparisonShowsValidityTests(unittest.TestCase):
                 "supplier_id": 2,
                 "supplier_name": "B",
                 "website": "https://b.example.com",
+                "status": "ok",
                 "price_per_liter": 1.1,
                 "observed_at": OBSERVED.isoformat(),
                 "valid_until": (OBSERVED + timedelta(hours=6)).isoformat(),

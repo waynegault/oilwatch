@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Protocol
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -173,7 +173,12 @@ class DiscoveryService:
         values = query.get("uddg")
         if not values:
             return ""
-        return unquote(values[0])
+        # ``parse_qs`` has already percent-decoded the value, so the result of
+        # DuckDuckGo's own escaping is the target URL as it stands. Unquoting
+        # again — which this did — decodes a *literal* escape inside the target
+        # too: a page whose own path contains "%20" came back with a raw space,
+        # because DDG had encoded the percent sign as "%25".
+        return values[0]
 
     @staticmethod
     def _supplier_name_from_title(title: str, domain: str) -> str:

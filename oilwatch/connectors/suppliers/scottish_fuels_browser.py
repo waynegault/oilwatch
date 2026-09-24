@@ -175,7 +175,12 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                 # 500 L minimum — so it is never cleared. Clearing it silently
                 # turned every 1000 L quote into a 500 L one, which was then
                 # still reported, and priced, as 1000 L.
-                self.set_quantity(driver, quantity_liters)
+                #
+                # What it holds *afterwards* is kept, not just typed: the page
+                # clamps to its own min/max/step, so this is what the site will
+                # quote, and the fallback below prices against it rather than
+                # against the number we asked for.
+                typed_quantity = self.set_quantity(driver, quantity_liters)
                 time.sleep(0.5)
 
                 # Get Quote
@@ -237,8 +242,13 @@ class ScottishFuelsBrowserConnector(BaseConnector):
 
         # What the site states, not what we multiply out: its own inclusive
         # total for the quantity it quoted, with the per-litre rate derived from
-        # that so the two can never disagree.
-        quoted_quantity = int((quoted or {}).get("quantity") or quantity_liters)
+        # that so the two can never disagree. Falling back to `typed_quantity`
+        # before the asked-for figure: when the full quote row could not be
+        # parsed, the control still says what the site was asked to price, and
+        # the page clamps it.
+        quoted_quantity = int(
+            (quoted or {}).get("quantity") or typed_quantity or quantity_liters
+        )
         if quoted and quoted["inc_vat_total"] > 0:
             total_price = quoted["inc_vat_total"]
             price_per_liter = round(total_price / quoted_quantity, 4)

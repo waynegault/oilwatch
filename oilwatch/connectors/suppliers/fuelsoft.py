@@ -4,14 +4,21 @@ Several local suppliers use the Fuelsoft "WEBPLUS / WebOrdering" ASP.NET quote
 form. It has no server-rendered price - the quote is computed after entering a
 delivery postcode and product, via a JSON API behind the page
 (``Quotes/deliveryschedules/quote/...``). This connector drives the form with
-Playwright and reads the ``PPL`` (price-per-litre, ex-VAT) from that API's JSON
-response.
+Playwright and reads the **standard option's inclusive total** (``Total``, pence
+for the whole order, inc VAT) from that API's JSON response, dividing it by the
+litres quoted.
+
+The response also carries a ``PPL``, which is *not* what is read: it is
+price-per-litre ex-VAT, and taking it would drop VAT and any surcharge the
+option adds. ``price_is_inclusive`` below is the same decision stated where the
+base class reads it.
 
 The form is a fragile, stateful WebForms page (cookie dialog, hidden fields),
-so every step is best-effort: on any failure the connector returns
-``manual_action_required`` with the supplier contact details rather than a bogus
-price. Each best-effort step logs why it was skipped, so a failed run can be
-diagnosed instead of only showing the final "manual" fallback.
+so every step is best-effort: on any failure the connector returns an error row
+for a raised attempt, or ``manual_action_required`` where the page answered
+without a price, rather than a bogus figure. Each best-effort step logs why it
+was skipped, so a failed run can be diagnosed instead of only showing the final
+fallback.
 """
 
 from __future__ import annotations

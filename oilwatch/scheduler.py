@@ -12,7 +12,24 @@ log = get_logger("scheduler")
 
 
 def _window_hours(start: int, end: int, step: int) -> str:
-    """Cron hour list for a daily window, e.g. ``(8, 18, 2)`` -> ``8,10,...,18``."""
+    """Cron hour list for a daily window, e.g. ``(8, 18, 2)`` -> ``8,10,...,18``.
+
+    Validated here rather than left to the two libraries that consume it: a
+    settings typo used to surface as ``range() arg 3 must not be zero`` from
+    inside ``start()`` before any job was registered, or as an empty ``hour``
+    that ``CronTrigger`` rejected — neither of which names the setting the owner
+    actually has to fix. The window is inclusive of both ends.
+    """
+    if step <= 0:
+        raise ValueError(
+            f"the email monitor's interval must be a positive number of hours, not {step}"
+        )
+    if not 0 <= start <= end <= 23:
+        raise ValueError(
+            "the email monitor's window must be within one day and run forwards: "
+            f"got start hour {start} and end hour {end}; both belong between 0 and 23, "
+            "with the start not after the end"
+        )
     return ",".join(str(hour) for hour in range(start, end + 1, step))
 
 

@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import httpx
+
 import oilwatch
 from oilwatch.connectors.http_form import HTTPFormConnector
 from oilwatch.connectors.manual import ManualConnector
@@ -139,6 +141,41 @@ class PricePageConnectorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             connector.quote(self.supplier, 1000, {})
 
+    def test_a_page_with_no_price_is_a_row_not_a_traceback(self) -> None:
+        """The connectors returned error rows; these two raised out of `quote <id>`.
+
+        Latent while no register row names them, but a page that is redesigned or
+        a site that will not answer must be reported the way every supplier
+        connector reports the same two cases.
+        """
+        with patch("oilwatch.http.httpx.Client") as Client:
+            Client.return_value.get.return_value = fake_response("<html>no prices today</html>")
+            result = PricePageConnector().quote(self.supplier, 1000, {})
+
+        self.assertEqual(result.status, "manual_action_required")
+        self.assertEqual(result.reason, "no_price_found")
+        self.assertIsNone(result.price_per_liter)
+
+    def test_a_dead_site_is_an_error_row(self) -> None:
+        with patch("oilwatch.http.httpx.Client") as Client:
+            Client.return_value.get.side_effect = httpx.ConnectError("no route")
+            result = PricePageConnector().quote(self.supplier, 1000, {})
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "site_error")
+        self.assertIn("HTTP error fetching", result.notes)
+
+    def test_a_price_that_will_not_parse_is_an_error_row(self) -> None:
+        """The pattern matched and the text is not a number: a parse failure."""
+        self.supplier["connector_config"]["price_regex"] = r"price:\s*(\S+)"
+        with patch("oilwatch.http.httpx.Client") as Client:
+            Client.return_value.get.return_value = fake_response("Kerosene price: POA")
+            result = PricePageConnector().quote(self.supplier, 1000, {})
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "site_error")
+        self.assertIn("POA", result.notes)
+
 
 class HTTPFormConnectorTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -165,23 +202,54 @@ class HTTPFormConnectorTests(unittest.TestCase):
         self.assertEqual(result.price_per_liter, 1.42)
         self.assertEqual(result.total_price, 1420.0)
 
-    def test_quote_raises_when_no_price_matches(self) -> None:
-        """A redesigned response must fail loudly, not be read as a price."""
+    def test_a_response_without_a_price_is_a_row_not_a_traceback(self) -> None:
+        """A redesigned response must be reported as a gap, never read as a price.
+
+        It used to raise out of `oilwatch quote <id>`; the row that replaces it
+        says which of the two things happened — here the site answered and had no
+        price, which is `no_price_found` rather than a fault in the retrieval.
+        """
         with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
             Client.return_value.request.return_value = fake_response("<html>No prices today</html>")
-            with self.assertRaises(ValueError) as caught:
-                HTTPFormConnector().quote(self.supplier, 1000, {"postcode": "AB21 0YA"})
+            result = HTTPFormConnector().quote(self.supplier, 1000, {"postcode": "AB21 0YA"})
 
-        self.assertIn("No price matched", str(caught.exception))
+        self.assertEqual(result.status, "manual_action_required")
+        self.assertEqual(result.reason, "no_price_found")
+        self.assertIsNone(result.price_per_liter)
 
-    def test_quote_raises_when_the_matched_text_is_not_a_price(self) -> None:
+    def test_a_match_that_is_not_a_price_is_an_error_row(self) -> None:
         supplier = self._supplier(price_regex=r'"price_per_liter"\s*:\s*([^,}]+)')
         with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
             Client.return_value.request.return_value = fake_response('{"price_per_liter": "POA"}')
-            with self.assertRaises(ValueError) as caught:
-                HTTPFormConnector().quote(supplier, 1000, {})
+            result = HTTPFormConnector().quote(supplier, 1000, {})
 
-        self.assertIn("Could not parse price", str(caught.exception))
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "site_error")
+        self.assertIn("POA", result.notes)
+
+    def test_a_post_that_raises_is_an_error_row(self) -> None:
+        with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
+            Client.return_value.request.side_effect = httpx.ReadTimeout("timed out")
+            result = HTTPFormConnector().quote(self.supplier, 1000, {})
+
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "site_error")
+        self.assertIn("HTTP error posting", result.notes)
+
+    def test_a_row_without_configuration_still_raises(self) -> None:
+        """A register entry that names no URL or pattern is not a site problem.
+
+        Every reason the contract defines describes what a site did, so there is
+        no honest row for it: the raise names the missing setting, and `quote-all`
+        turns it into an error row of its own.
+        """
+        for config in ({"price_regex": r"(\d+\.\d+)"}, {"quote_url": "https://a.example.com"}):
+            with self.subTest(config=sorted(config)):
+                supplier = {**self.supplier, "connector_config": config}
+                with self.assertRaises(ValueError) as raised:
+                    HTTPFormConnector().quote(supplier, 1000, {})
+
+                self.assertIn("configuration", str(raised.exception))
 
     def test_quote_applies_a_configured_ex_vat_rate(self) -> None:
         supplier = self._supplier(vat_rate=0.05)

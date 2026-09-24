@@ -23,6 +23,19 @@ class NormalisePriceTests(unittest.TestCase):
         self.assertEqual(normalise_price_per_litre("1.46"), 1.46)
         self.assertEqual(normalise_price_per_litre(1.46), 1.46)
 
+    def test_the_boundary_is_pence(self) -> None:
+        """A bare "100" is £1.00/L, not £100/L.
+
+        The heuristic divides at 100 and used a strict ``>``, so exactly 100 —
+        an ordinary kerosene price in pence — came back a hundred pounds a litre.
+        Nothing has ever quoted £100/L: the realistic pence range starts at
+        about 100, and the realistic pounds range is £0.5-£2.
+        """
+        self.assertEqual(normalise_price_per_litre("100"), 1.0)
+        self.assertEqual(normalise_price_per_litre(100), 1.0)
+        # And the far side of the boundary still reads as pounds.
+        self.assertEqual(normalise_price_per_litre("99.15"), 99.15)
+
     def test_strips_currency_symbol(self) -> None:
         self.assertEqual(normalise_price_per_litre("£1.46"), 1.46)
 

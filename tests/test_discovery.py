@@ -58,6 +58,20 @@ class UrlAndNameTests(unittest.TestCase):
     def test_redirect_without_a_target_is_empty(self) -> None:
         self.assertEqual(DiscoveryService._unwrap_duckduckgo_url("https://duckduckgo.com/l/?uddg="), "")
 
+    def test_an_escaped_character_in_the_target_survives_whole(self) -> None:
+        """Decoded once, not twice.
+
+        ``parse_qs`` has already percent-decoded the value, so the second
+        ``unquote`` this used to do decoded the target's *own* escapes as well: a
+        page whose path contains "%20" — which DuckDuckGo hands over encoded as
+        "%2520" — came back with a raw space in it, and a URL with a space in it
+        is not the page that was found.
+        """
+        url = "https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.co.uk%2Fa%2520b"
+        self.assertEqual(
+            DiscoveryService._unwrap_duckduckgo_url(url), "https://example.co.uk/a%20b"
+        )
+
     def test_name_prefers_the_non_generic_part(self) -> None:
         self.assertEqual(
             DiscoveryService._supplier_name_from_title("Heating Oil Prices | Turriff Fuels", "x.co.uk"),

@@ -25,10 +25,14 @@ def normalise_price_per_litre(raw: str | int | float | None) -> float | None:
     """Normalise a raw per-litre price to GBP per litre.
 
     Heating oil in the UK is quoted in pence per litre (e.g. ``155.80``) or,
-    less commonly, in pounds per litre (e.g. ``1.558``). Anything above 100 is
+    less commonly, in pounds per litre (e.g. ``1.558``). Anything from 100 up is
     treated as pence and divided by 100; everything else is assumed to already
     be pounds. This covers the realistic range of pence (roughly 100-300p) and
     pounds (roughly £0.5-£2.0) without ambiguity.
+
+    The boundary is ``>=``, not ``>``: 100p is £1.00/L, an ordinary kerosene
+    price, while £100/L is not a price any supplier has ever quoted — so a bare
+    "100" belongs on the pence side, where the strict test sent it to £100.
 
     Returns ``None`` for empty/unparseable input.
     """
@@ -42,7 +46,7 @@ def normalise_price_per_litre(raw: str | int | float | None) -> float | None:
         value = float(raw)
     except (TypeError, ValueError):
         return None
-    if value > 100:
+    if value >= 100:
         value /= 100
     return round(value, 4)
 
