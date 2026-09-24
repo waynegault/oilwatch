@@ -8,7 +8,7 @@ OilWatch automatically tracks heating oil prices from local suppliers, finds the
 
 ## What This Codebase Does
 
-OilWatch solves the problem of finding the best price for domestic heating oil (kerosene) in the Hatton of Fintray, Aberdeenshire area (AB21 0YA).
+OilWatch solves the problem of finding the best price for domestic heating oil (kerosene) in the Hatton of Fintray, Aberdeenshire area.
 
 ### Core Capabilities
 
@@ -97,7 +97,7 @@ python -m oilwatch.cli init
 python -m oilwatch.cli discover
 
 # Collect quotes from all suppliers
-python -m oilwatch.cli quote-all --postcode "AB21 0YA"
+python -m oilwatch.cli quote-all --postcode "AB00 0AA"
 
 # Find cheapest supplier
 python -m oilwatch.cli cheapest
@@ -105,6 +105,9 @@ python -m oilwatch.cli cheapest
 # Generate price chart
 python -m oilwatch.cli chart
 ```
+
+`AB00 0AA` in these examples is a placeholder: `quote-all` geocodes the postcode
+you pass and searches from there, so substitute your own.
 
 ---
 
@@ -114,11 +117,11 @@ python -m oilwatch.cli chart
 
 ```powershell
 # Get quotes from ALL suppliers (automated + manual instructions)
-python -m oilwatch.cli quote-all --postcode "AB21 0YA"
+python -m oilwatch.cli quote-all --postcode "AB00 0AA"
 
 # Get quote from SINGLE supplier (by ID number)
-python -m oilwatch.cli quote 2 --postcode "AB21 0YA"  # ValueOils
-python -m oilwatch.cli quote 3 --postcode "AB21 0YA"  # HomeFuels Direct
+python -m oilwatch.cli quote 2 --postcode "AB00 0AA"  # ValueOils
+python -m oilwatch.cli quote 3 --postcode "AB00 0AA"  # HomeFuels Direct
 
 # Show CHEAPEST supplier with average and variance
 python -m oilwatch.cli cheapest
@@ -222,7 +225,7 @@ purchase cannot be filed against the wrong one.
 # Run the scheduler by hand for a while (daily quotes, weekly discovery).
 # Nothing starts it automatically: prices are refreshed on demand, so this is
 # opt-in.
-python -m oilwatch.cli schedule --postcode "AB21 0YA"
+python -m oilwatch.cli schedule --postcode "AB00 0AA"
 
 # Serve the MCP tools over streamable HTTP, for a client that dials a URL.
 # OpenClaw does not need this - it spawns the server over stdio on demand - and
@@ -269,7 +272,7 @@ python -m oilwatch.cli import-spreadsheet --path "Oil Prices.xls"
 python -m oilwatch.cli api-discover --url "https://www.valueoils.com"
 
 # Register accounts on supplier websites
-python -m oilwatch.cli register --postcode "AB21 0YA"
+python -m oilwatch.cli register --postcode "AB00 0AA"
 ```
 
 ---
@@ -358,7 +361,7 @@ snapshot = status()
 
 # 2. Refresh only when the stored prices look old — this takes minutes
 if snapshot["trend"]["direction"] == "insufficient_data":
-    refresh_prices(postcode="AB21 0YA")
+    refresh_prices(postcode="AB00 0AA")
     snapshot = status()
 
 # 3. Report
@@ -762,7 +765,7 @@ python -m oilwatch.cli record-purchase "HomeFuels Direct" --price-per-liter 1.09
 
 ```powershell
 # 1. Collect all quotes
-python -m oilwatch.cli quote-all --postcode "AB21 0YA"
+python -m oilwatch.cli quote-all --postcode "AB00 0AA"
 
 # 2. Generate chart
 python -m oilwatch.cli chart
@@ -839,7 +842,7 @@ MIT License
 
 **Last Updated:** 2026-09-23
 **Version:** 0.1.0
-**Location:** Hatton of Fintray, Aberdeenshire, Scotland (AB21 0YA)
+**Location:** Hatton of Fintray, Aberdeenshire, Scotland
 
 > This is a personal tool for one home in Aberdeenshire, not a general-purpose
 > product — the home location and the supplier set are all deliberately specific

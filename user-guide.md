@@ -22,10 +22,10 @@ explicit act:
 
 ```powershell
 # Every supplier (browser automation; roughly 1-3 minutes, one visible window)
-python -m oilwatch.cli quote-all --browser --postcode "AB21 0YA"
+python -m oilwatch.cli quote-all --browser --postcode "AB00 0AA"
 
 # One supplier, by id (run `oilwatch suppliers` for the ids)
-python -m oilwatch.cli quote 1 --postcode "AB21 0YA" --browser
+python -m oilwatch.cli quote 1 --postcode "AB00 0AA" --browser
 
 # Read the market
 python -m oilwatch.cli cheapest    # winner + average + variance
@@ -234,7 +234,7 @@ store and the command above instead.
 
 1. Trigger the connector so credentials exist:
    ```powershell
-   python -m oilwatch.cli quote 1 --postcode "AB21 0YA"
+   python -m oilwatch.cli quote 1 --postcode "AB00 0AA"
    ```
 2. Read the generated password back from the store (above).
 3. Register on the supplier's site with your email and that password.
@@ -555,7 +555,7 @@ out or the code read to use OilWatch correctly.
 ---
 
 You have **OilWatch** — a heating-oil price tracker for Wayne's delivery address
-(Hatton of Fintray, AB21 0YA, Aberdeenshire). It is a Python project at
+(Hatton of Fintray, Aberdeenshire). It is a Python project at
 `/mnt/c/Users/wayne/GitHub/Python/Projects/Oil Price Webscraper`, reachable from
 WSL through the Windows venv python at `.venv/Scripts/python.exe`.
 
