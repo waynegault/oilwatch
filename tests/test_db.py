@@ -253,14 +253,52 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(self.db.not_refreshed_quotes(), [])
 
     def test_mark_missing_suppliers_inactive(self) -> None:
-        self.db.upsert_supplier(self._supplier("A", "https://a.example.com"))
-        self.db.upsert_supplier(self._supplier("B", "https://b.example.com"))
+        # Both rows carry the query that found them, i.e. discovery owns them.
+        self.db.upsert_supplier(
+            self._supplier("A", "https://a.example.com", query="heating oil aberdeenshire")
+        )
+        self.db.upsert_supplier(
+            self._supplier("B", "https://b.example.com", query="heating oil aberdeenshire")
+        )
         self.db.mark_missing_suppliers_inactive(["https://a.example.com"])
 
         suppliers = self.db.list_suppliers(include_inactive=True)
         by_website = {s["website"]: s["status"] for s in suppliers}
         self.assertEqual(by_website["https://a.example.com"], "active")
         self.assertEqual(by_website["https://b.example.com"], "inactive")
+
+    def test_a_register_row_is_never_retired_by_a_discovery_run(self) -> None:
+        """The register's suppliers are not search results, so a search cannot drop them.
+
+        ``quote_all`` quotes active rows only, so an unscoped version of this
+        marked the whole register inactive on the first ``discover`` — BoilerJuice
+        is excluded from discovery on purpose, and a quote page like
+        ``gleaner.co.uk/get-a-quote-or-place-an-order/`` is not something a search
+        returns. The suppliers the register exists to chase then stopped being
+        quoted, silently, until the next ``init`` set them active again.
+        """
+        self.db.upsert_supplier(self._supplier("Gleaner Oils", "https://www.gleaner.co.uk/"))
+        self.db.upsert_supplier(
+            self._supplier("Found By Search", "https://found.example.com", query="oil")
+        )
+
+        self.db.mark_missing_suppliers_inactive(["https://found.example.com"])
+
+        by_website = {s["website"]: s["status"] for s in self.db.list_suppliers(include_inactive=True)}
+        self.assertEqual(by_website["https://www.gleaner.co.uk/"], "active")
+        self.assertEqual(by_website["https://found.example.com"], "active")
+
+    def test_a_run_that_found_nothing_retires_only_what_discovery_owns(self) -> None:
+        self.db.upsert_supplier(self._supplier("Register Co", "https://register.example.com"))
+        self.db.upsert_supplier(
+            self._supplier("From A Search", "https://search.example.com", query="oil")
+        )
+
+        self.db.mark_missing_suppliers_inactive([])
+
+        by_website = {s["website"]: s["status"] for s in self.db.list_suppliers(include_inactive=True)}
+        self.assertEqual(by_website["https://register.example.com"], "active")
+        self.assertEqual(by_website["https://search.example.com"], "inactive")
 
     def test_connector_config_roundtrip(self) -> None:
         self.db.upsert_supplier(

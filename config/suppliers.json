@@ -49,6 +49,37 @@
       "notes": "Fuelsoft WEBPLUS platform (scraped via browser connector)."
     },
     {
+      "name": "ValueOils",
+      "website": "https://www.valueoils.com/regions/scotland/aberdeenshire/",
+      "status": "active",
+      "connector_type": "manual",
+      "notes": "Priced by the ValueOils HTTP connector from the regional page's server-rendered `Total You Pay` table, which is why the record's website *is* that page rather than the marketing root: `website` is what the connector reads when its config names no `quote_url`, and it is also the page a human enters the Quick Quote form on. Discovery found this row under the page title `Aberdeenshire Heating Oil & Gas Oil`, so until 2026-09-24 every report named a page instead of the supplier; the register is where the name comes from now. A future repoint of this URL must move this row, not add one - `upsert_supplier` keys on the website, and the name refusal beside it exists to stop the quote history splitting across a twin."
+    },
+    {
+      "name": "HomeFuels Direct",
+      "website": "https://homefuelsdirect.co.uk/home/heating-oil-prices/aberdeenshire",
+      "status": "active",
+      "connector_type": "manual",
+      "notes": "Priced by the HomeFuels HTTP connector from the live average in `#currentLivePrice`, which is why the record's website is the price page: the marketing root only links to it, and the connector reads the figure without signing in. Not asked by form or email - there is nothing to ask for, since the figure is public - so this record carries no `quote_request`, and `submit-requests` correctly does nothing with it. Repointing the website must move this row, not add one."
+    },
+    {
+      "name": "Scottish Fuels",
+      "website": "https://scottishfuels.co.uk/heating-oil-in-aberdeenshire/",
+      "status": "active",
+      "connector_type": "manual",
+      "connector_config": {
+        "order_page": "https://quote.scottishfuels.co.uk/quote/"
+      },
+      "notes": "Priced through the signed-in Magento quote portal (`scottish_fuels_browser`, after `oilwatch login scottish_fuels`), and the replies `monitor-email` reads come from the same supplier. This is the one row whose `connector_config` matters to a human: the `order_page` is the quote portal, which is what earns it `order_channel: web`. Certas Energy is the same company, hence its entry in SUPPLIER_DOMAINS. Carrying the config here is not optional - `upsert_supplier` writes `connector_config_json` unconditionally, so a record without it would wipe the order page the live row already has."
+    },
+    {
+      "name": "Rix",
+      "website": "https://www.rix.co.uk/locations/aberdeen-depot",
+      "status": "active",
+      "connector_type": "manual",
+      "notes": "The Aberdeen depot, whose quote comes from the Rix quote tool (`rix_browser`) - browser-only, because the HTTP path is a contact-only connector that cannot price it. The form requires a phone number, which the connector now takes from the contact record rather than a drama number. Repointing the website must move this row, not add one."
+    },
+    {
       "name": "Gleaner Oils",
       "website": "https://www.gleaner.co.uk/",
       "status": "active",
@@ -68,7 +99,7 @@
       "status": "active",
       "phone": "0800 224 224",
       "connector_type": "manual",
-      "notes": "Quote via form."
+      "notes": "Priced by its own `getoffers.php` XML API through the Highland Fuels connector, which needs the postcode; `highlandfuels.co.uk` is the domain the router matches, and the connector carries its own kerosene product code. This record said \"Quote via form.\" until 2026-09-24 and that was wrong twice over: nothing here drives a form, and asking this supplier by form as well would be a second enquiry for a price the app already reads. `SUPPLIER_FORMS[\"highland_fuels\"]` still exists as a hand-run fallback (`oilwatch submit-requests --suppliers highland_fuels`) for the day the API stops answering; it is deliberately not named in `quote_request`, so a normal `submit-requests` run leaves it alone."
     },
     {
       "name": "Fueltool",

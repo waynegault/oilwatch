@@ -23,6 +23,7 @@ from oilwatch.geo import GeoService
 from oilwatch.logging_setup import get_logger
 from oilwatch.models import QuoteResult, utcnow_naive
 from oilwatch.quotes import QuoteService
+from oilwatch.supplier_integrity import SupplierIdentityConflict
 
 log = get_logger("service")
 
@@ -63,8 +64,23 @@ class OilWatchApp:
         candidates = self.discovery.discover()
         stored = 0
         active_websites: list[str] = []
+        identity_conflicts: list[str] = []
         for candidate in candidates:
-            self.db.upsert_supplier(candidate.to_record())
+            try:
+                self.db.upsert_supplier(candidate.to_record())
+            except SupplierIdentityConflict as exc:
+                # A candidate whose name is already recorded against another
+                # website — almost always a supplier the register owns, seen by
+                # the search at a new URL. The write is refused rather than
+                # forking the row, because a wrong merge destroys quote history
+                # silently and `upsert_supplier` keys on the website alone. What
+                # it must not do is take the rest of the run down with it: one
+                # moved page would otherwise discard every candidate after it,
+                # and leave the run with no summary at all. Reported here, and
+                # named in the result, so the operator can repoint the row.
+                log.warning("discovery candidate refused: %s", exc)
+                identity_conflicts.append(f"{candidate.name} ({candidate.website}): {exc}")
+                continue
             active_websites.append(candidate.website)
             stored += 1
         self.db.mark_missing_suppliers_inactive(active_websites)
@@ -72,6 +88,9 @@ class OilWatchApp:
             "stored_suppliers": stored,
             "radius_miles": self.settings.radius_miles,
             "home": self.settings.home.label,
+            # Always present, like the empty market's counts: a caller should not
+            # have to tell "no conflicts" from an older server's missing key.
+            "identity_conflicts": identity_conflicts,
         }
 
     def suppliers(self, include_inactive: bool = False) -> list[dict[str, Any]]:

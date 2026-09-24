@@ -952,13 +952,31 @@ class Database:
             return conn.total_changes - before
 
     def mark_missing_suppliers_inactive(self, active_websites: list[str]) -> None:
+        """Retire the suppliers a discovery run no longer finds.
+
+        Scoped to the rows discovery owns — the ones whose ``query`` records the
+        search that found them. The register's records are not search results and
+        never will be: BoilerJuice is in ``excluded_domains``, and Gleaner's,
+        Scottish Fuels' and the Fuelsoft suppliers' websites are quote pages no
+        search returns. Unscoped, a single ``discover`` marked every register row
+        inactive, and because ``quote_all`` quotes only active rows, the
+        suppliers the register exists to chase stopped being quoted until the
+        next ``init`` re-activated them — a silent state change with no line
+        anywhere saying it had happened.
+
+        A row with no ``query`` is therefore never retired here. An empty
+        candidate list still means "found nothing", and retires every row
+        discovery owns.
+        """
         with closing(self.connect()) as conn, conn:
+            owned = "query IS NOT NULL"
             if not active_websites:
-                conn.execute("UPDATE suppliers SET status = 'inactive'")
+                conn.execute(f"UPDATE suppliers SET status = 'inactive' WHERE {owned}")
                 return
             placeholders = ", ".join("?" for _ in active_websites)
             conn.execute(
-                f"UPDATE suppliers SET status = 'inactive' WHERE website NOT IN ({placeholders})",
+                f"UPDATE suppliers SET status = 'inactive' "
+                f"WHERE {owned} AND website NOT IN ({placeholders})",
                 active_websites,
             )
 

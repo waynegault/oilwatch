@@ -49,9 +49,15 @@ class SetupTests(AppTestCase):
 
     def test_suppliers_can_include_inactive(self) -> None:
         self.app.init()
+        # A row discovery owns — it carries the `query` that found it — because
+        # the register's rows are no longer retired by a search that misses them.
+        self.app.db.upsert_supplier(
+            {"name": "Gone From The Search", "website": "https://gone.example", "query": "oil"}
+        )
         self.app.db.mark_missing_suppliers_inactive(["https://www.valueoils.com"])
-        self.assertEqual(len(self.app.suppliers(include_inactive=True)), len(OVERRIDES))
-        self.assertLess(len(self.app.suppliers()), len(OVERRIDES))
+
+        self.assertEqual(len(self.app.suppliers(include_inactive=True)), len(OVERRIDES) + 1)
+        self.assertLess(len(self.app.suppliers()), len(OVERRIDES) + 1)
 
 
 class DiscoveryTests(AppTestCase):
@@ -63,6 +69,42 @@ class DiscoveryTests(AppTestCase):
 
         self.assertEqual(result["stored_suppliers"], 1)
         self.assertIn("New Fuels", [s["name"] for s in self.app.suppliers(include_inactive=True)])
+        self.assertEqual(result["identity_conflicts"], [])
+
+    def test_a_candidate_the_register_already_owns_is_reported_not_fatal(self) -> None:
+        """One moved page must not discard the rest of the search's candidates.
+
+        `upsert_supplier` refuses a row whose name is already recorded on another
+        website, which is what stops a supplier's quote history splitting across
+        two rows when a page moves. That refusal is raised per candidate, and a
+        sweep of a dozen candidates must not die on the one that moved — the run
+        that did would also skip `mark_missing_suppliers_inactive` and return
+        nothing at all, so the operator would see a traceback and no summary.
+        """
+        self.app.init()
+        self.app.db.upsert_supplier(
+            {"name": "Gleaner Oils", "website": "https://www.gleaner.co.uk/", "status": "active"}
+        )
+        moved = SupplierCandidate(
+            name="Gleaner Oils",
+            website="https://www.gleaner.co.uk/get-a-quote/",
+            query="heating oil",
+            status="active",
+        )
+        kept = SupplierCandidate(
+            name="Someone New", website="https://someone-new.example", query="heating oil"
+        )
+        with patch.object(self.app.discovery, "discover", return_value=[moved, kept]):
+            result = self.app.discover_suppliers()
+
+        self.assertEqual(result["stored_suppliers"], 1, "the candidate that could be stored, was")
+        self.assertEqual(len(result["identity_conflicts"]), 1)
+        self.assertIn("Gleaner Oils", result["identity_conflicts"][0])
+        self.assertIn("https://www.gleaner.co.uk/get-a-quote/", result["identity_conflicts"][0])
+
+        websites = {s["website"] for s in self.app.suppliers(include_inactive=True)}
+        self.assertIn("https://someone-new.example", websites)
+        self.assertNotIn("https://www.gleaner.co.uk/get-a-quote/", websites, "no forked row")
 
 
 class QuoteTests(AppTestCase):
