@@ -24,7 +24,7 @@ import contextlib
 import json
 import os
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -89,18 +89,30 @@ def sender_domain_from_email(email_addr: str) -> str:
 
 
 def message_received(message: dict[str, Any]) -> datetime:
-    """When the mailbox says a message arrived, naive like the rest of the app.
+    """When the mailbox says a message arrived, in UTC and naive.
 
     Graph sends "...Z", which ``fromisoformat`` accepts on 3.11+; the value is
-    kept naive so expiry comparisons never mix aware and naive datetimes, and so
-    it compares as a plain string against the ``covers_through`` a judgement
-    stored. A message with no usable date falls back to now, which is what the
+    converted to UTC and then kept naive, so expiry comparisons never mix aware
+    and naive datetimes and it still compares as a plain string against the
+    ``covers_through`` a judgement stored.
+
+    The conversion is the point. Dropping the offset instead - which is what this
+    did until 2026-09-24 - stores a message stamped "+0100" an hour *ahead* of
+    the truth, and ahead is the direction that matters: a quote row dated from
+    the email wins "newest" over the browser row it copies, which is exactly the
+    confusion the direct-read rule was added to settle. Every date this mailbox
+    has returned so far is "...Z", which is why nobody noticed.
+
+    A message with no usable date falls back to now, which is what the
     price-recording path always did.
     """
     raw = message.get("receivedDateTime") or ""
     if raw:
         with contextlib.suppress(ValueError):
-            return datetime.fromisoformat(raw).replace(tzinfo=None)
+            parsed = datetime.fromisoformat(raw)
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+            return parsed
     return utcnow_naive()
 
 

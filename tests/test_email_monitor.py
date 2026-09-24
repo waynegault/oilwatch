@@ -16,9 +16,11 @@ from oilwatch.graph_email import (
     GRAPH_ENDPOINT,
     REQUEST_SUBJECT_PREFIX,
     GraphEmailMonitor,
+    message_received,
     request_subject,
     sender_domain_from_email,
 )
+from oilwatch.models import utcnow_naive
 from oilwatch.pricing import DOMESTIC_VAT_RATE, apply_vat, inclusive_total
 
 
@@ -906,6 +908,46 @@ class QuoteRequestEmailTests(unittest.TestCase):
             monitor.send("info@carnegiefuels.co.uk", "a subject", "a body")
 
         self.assertIn("login-email", str(raised.exception))
+
+
+class MessageReceivedTests(unittest.TestCase):
+    """A message's own date, in UTC, however it was stamped.
+
+    The row this feeds is compared with the browser rows by plain string
+    comparison and wins "newest" when it is later, so storing an offset as if it
+    were UTC would put a UK-stamped message an hour ahead of the truth — the one
+    direction that changes which price a report shows.
+    """
+
+    def test_a_utc_stamp_is_what_graph_sends_and_what_is_stored(self) -> None:
+        received = message_received({"receivedDateTime": "2026-09-24T14:40:34Z"})
+
+        self.assertEqual(received, datetime(2026, 9, 24, 14, 40, 34))
+        self.assertIsNone(received.tzinfo)
+
+    def test_an_offset_stamp_is_converted_rather_than_dropped(self) -> None:
+        """The bug this replaced: `replace(tzinfo=None)` kept the wall-clock time.
+
+        A message stamped 14:40+01:00 arrived at 13:40 UTC, which is what the
+        browser rows it is compared against are recorded in.
+        """
+        received = message_received({"receivedDateTime": "2026-09-24T14:40:34+01:00"})
+
+        self.assertEqual(received, datetime(2026, 9, 24, 13, 40, 34))
+        self.assertIsNone(received.tzinfo)
+
+    def test_a_date_only_stamp_is_still_read(self) -> None:
+        self.assertEqual(
+            message_received({"receivedDateTime": "2026-09-24"}),
+            datetime(2026, 9, 24, 0, 0),
+        )
+
+    def test_an_unusable_date_falls_back_to_now(self) -> None:
+        """Which is what the price-recording path always did."""
+        before = utcnow_naive()
+
+        self.assertGreaterEqual(message_received({"receivedDateTime": "not a date"}), before)
+        self.assertGreaterEqual(message_received({}), before)
 
 
 if __name__ == "__main__":
