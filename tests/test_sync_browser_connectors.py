@@ -194,7 +194,7 @@ class FuelsoftConnectorTests(unittest.TestCase):
             )
         )
         with _patcher(page):
-            result = FuelsoftConnector().quote(self._supplier(), 1000, {"postcode": "AB21 0YA"})
+            result = FuelsoftConnector().quote(self._supplier(), 1000, {"postcode": "AB00 0AA"})
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "fuelsoft")
@@ -245,7 +245,7 @@ class RixBrowserConnectorTests(unittest.TestCase):
     def test_quote_reads_the_standard_total_from_the_results_page(self) -> None:
         page = FakePage(text=self.RIX_RESULTS, url="https://fuelquote.rix.co.uk/your-quote/123")
         with _patcher(page):
-            result = RixBrowserConnector().quote(SUPPLIER, 1000, {"postcode": "AB21 0YA"})
+            result = RixBrowserConnector().quote(SUPPLIER, 1000, {"postcode": "AB00 0AA"})
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "rix_browser")
@@ -325,7 +325,7 @@ class FuelsoftFormTests(unittest.TestCase):
         return {**SUPPLIER, "connector_config": {"quote_url": QUOTE_URL, **config}}
 
     def _quote(self, page: FakePage):
-        context = {"postcode": "AB21 0YA", "email": "quote@example.test", "home_label": HOME_LABEL}
+        context = {"postcode": "AB00 0AA", "email": "quote@example.test", "home_label": HOME_LABEL}
         with _patcher(page):
             return FuelsoftConnector().quote(self._supplier(), 1000, context)
 
@@ -347,7 +347,7 @@ class FuelsoftFormTests(unittest.TestCase):
         result = self._quote(page)
 
         self.assertEqual(result.status, "ok")
-        self.assertEqual(postcode.filled, ["AB21 0YA"])
+        self.assertEqual(postcode.filled, ["AB00 0AA"])
         self.assertEqual(address.filled, ["Hatton of Fintray"])
         self.assertEqual(email.filled, ["quote@example.test"])
         self.assertEqual(get_products.clicked, 1)

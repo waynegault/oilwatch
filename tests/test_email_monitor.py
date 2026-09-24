@@ -265,9 +265,9 @@ class CarnegieFuelsReplyTests(unittest.TestCase):
         "From: Wayne Gault <waynegault@msn.com>\n"
         "Sent: 22 September 2026 14:19\n"
         "To: Info <info@carnegiefuels.co.uk>\n"
-        "Subject: oilwatch quote request - AB21 0YA - 1000L - 2026-09-22\n\n"
+        "Subject: oilwatch quote request - AB00 0AA - 1000L - 2026-09-22\n\n"
         "Please could you quote for 1000 litres of heating oil (kerosene) "
-        "delivered to Hatton of Fintray, Aberdeenshire, Scotland, AB21 0YA.\n\n"
+        "delivered to Hatton of Fintray, Aberdeenshire, Scotland, AB00 0AA.\n\n"
         "Name: Wayne Gault\nEmail: waynegault@msn.com\nPhone: 07720061019\n"
     )
 
@@ -854,10 +854,10 @@ class QuoteRequestEmailTests(unittest.TestCase):
         "Re: <subject>" survives all three, so one search finds every request this
         install has made and every one still owed.
         """
-        subject = request_subject("AB21 0YA", 1000, on=datetime(2026, 9, 22, 12, 0))
+        subject = request_subject("AB00 0AA", 1000, on=datetime(2026, 9, 22, 12, 0))
 
         self.assertTrue(subject.startswith(REQUEST_SUBJECT_PREFIX))
-        self.assertIn("AB21 0YA", subject)
+        self.assertIn("AB00 0AA", subject)
         self.assertIn("1000L", subject)
         self.assertIn("2026-09-22", subject)
 

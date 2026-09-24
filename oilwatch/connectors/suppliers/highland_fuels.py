@@ -10,7 +10,7 @@ Request::
     <Request>
       <Product>043</Product>
       <Quantity>1000</Quantity>
-      <PostCode>AB21 0YA</PostCode>
+      <PostCode>AB00 0AA</PostCode>
       <VehicleSize>0</VehicleSize>
       <PromoCode></PromoCode>
       <RetQtyPrices>N</RetQtyPrices>

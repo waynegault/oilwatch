@@ -87,7 +87,7 @@ class LoginTests(unittest.TestCase):
 class FallbackTests(unittest.TestCase):
     def _fallback(self, connector, client):
         with patch("httpx.AsyncClient", return_value=client):
-            return asyncio.run(connector._fallback_to_http(SUPPLIER, 1000, {"postcode": "AB21 0YA"}))
+            return asyncio.run(connector._fallback_to_http(SUPPLIER, 1000, {"postcode": "AB00 0AA"}))
 
     def test_valueoils_fallback_reads_the_900l_total(self) -> None:
         client = FakeAsyncClient(VALUEOILS_REGIONAL)

@@ -77,8 +77,8 @@ class FakeClock:
 class GeocodeTests(unittest.TestCase):
     def test_returns_coordinates_and_address(self) -> None:
         service = GeoService()
-        service._geocoder = ScriptedGeocoder({"AB21 0YA": _location(57.15, -2.09, "Aberdeen")})
-        self.assertEqual(service.geocode("AB21 0YA"), (57.15, -2.09, "Aberdeen"))
+        service._geocoder = ScriptedGeocoder({"AB00 0AA": _location(57.15, -2.09, "Aberdeen")})
+        self.assertEqual(service.geocode("AB00 0AA"), (57.15, -2.09, "Aberdeen"))
 
     def test_unknown_place_is_none(self) -> None:
         service = GeoService()

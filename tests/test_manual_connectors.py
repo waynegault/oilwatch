@@ -57,7 +57,7 @@ class ManualQuoteTests(unittest.TestCase):
         """
         for connector_cls, source, phone in MANUAL_CONNECTORS:
             with self.subTest(connector=connector_cls.__name__):
-                result = connector_cls().quote(SUPPLIER, 1000, {"postcode": "AB21 0YA"})
+                result = connector_cls().quote(SUPPLIER, 1000, {"postcode": "AB00 0AA"})
                 self.assertEqual(result.status, "manual_action_required")
                 self.assertEqual(result.source, source)
                 self.assertNotIn(phone, result.notes)
@@ -80,8 +80,8 @@ class ContactDetailTests(unittest.TestCase):
         self.assertEqual(payload["email"], "insch@oilfast.co.uk")
 
     def test_rix_quote_includes_the_postcode(self) -> None:
-        result = RixConnector().quote(SUPPLIER, 1000, {"postcode": "AB21 0YA"})
-        self.assertIn("AB21 0YA", result.notes)
+        result = RixConnector().quote(SUPPLIER, 1000, {"postcode": "AB00 0AA"})
+        self.assertIn("AB00 0AA", result.notes)
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ class HighlandFuelsTests(unittest.TestCase):
     def _quote(self, *, response=None, error=None, supplier=None):
         target = "oilwatch.connectors.suppliers.highland_fuels.request_with_retry"
         with patch(target, side_effect=error, return_value=response) as request:
-            result = HighlandFuelsConnector().quote(supplier or SUPPLIER, 1000, {"postcode": "AB21 0YA"})
+            result = HighlandFuelsConnector().quote(supplier or SUPPLIER, 1000, {"postcode": "AB00 0AA"})
         return result, request
 
     def test_the_standard_offer_total_is_read(self) -> None:
@@ -53,7 +53,7 @@ class HighlandFuelsTests(unittest.TestCase):
         self.assertAlmostEqual(total_price, 1146.6, places=2)
         body = request.call_args.kwargs["content"]
         self.assertIn("<Product>043</Product>", body)
-        self.assertIn("<PostCode>AB21 0YA</PostCode>", body)
+        self.assertIn("<PostCode>AB00 0AA</PostCode>", body)
 
     def test_a_configured_product_is_used(self) -> None:
         supplier = {**SUPPLIER, "connector_config": {"product_value": "999"}}
@@ -102,7 +102,7 @@ class BoilerJuiceQuoteTests(unittest.TestCase):
 
     def _quote(self, page):
         return asyncio.run(
-            self.connector.get_quote_with_browser(SUPPLIER, 1000, {"postcode": "AB21 0YA"}, page)
+            self.connector.get_quote_with_browser(SUPPLIER, 1000, {"postcode": "AB00 0AA"}, page)
         )
 
     def test_a_quantity_dropdown_is_set_by_option_value(self) -> None:

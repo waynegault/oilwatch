@@ -197,7 +197,7 @@ class HTTPFormConnectorTests(unittest.TestCase):
     def test_quote_via_form(self) -> None:
         with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
             Client.return_value.request.return_value = fake_response('{"price_per_liter": 1.42}')
-            result = HTTPFormConnector().quote(self.supplier, 1000, {"postcode": "AB21 0YA"})
+            result = HTTPFormConnector().quote(self.supplier, 1000, {"postcode": "AB00 0AA"})
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.price_per_liter, 1.42)
         self.assertEqual(result.total_price, 1420.0)
@@ -211,7 +211,7 @@ class HTTPFormConnectorTests(unittest.TestCase):
         """
         with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
             Client.return_value.request.return_value = fake_response("<html>No prices today</html>")
-            result = HTTPFormConnector().quote(self.supplier, 1000, {"postcode": "AB21 0YA"})
+            result = HTTPFormConnector().quote(self.supplier, 1000, {"postcode": "AB00 0AA"})
 
         self.assertEqual(result.status, "manual_action_required")
         self.assertEqual(result.reason, "no_price_found")
@@ -255,7 +255,7 @@ class HTTPFormConnectorTests(unittest.TestCase):
         supplier = self._supplier(vat_rate=0.05)
         with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
             Client.return_value.request.return_value = fake_response('{"price_per_liter": 1.42}')
-            result = HTTPFormConnector().quote(supplier, 1000, {"postcode": "AB21 0YA"})
+            result = HTTPFormConnector().quote(supplier, 1000, {"postcode": "AB00 0AA"})
 
         price_per_liter = result.price_per_liter
         assert price_per_liter is not None
@@ -268,10 +268,10 @@ class HTTPFormConnectorTests(unittest.TestCase):
         )
         with patch("oilwatch.connectors.http_form.httpx.Client") as Client:
             Client.return_value.request.return_value = fake_response('{"price_per_liter": 1.42}')
-            HTTPFormConnector().quote(supplier, 1000, {"postcode": "AB21 0YA"})
+            HTTPFormConnector().quote(supplier, 1000, {"postcode": "AB00 0AA"})
 
         data = Client.return_value.request.call_args.kwargs["data"]
-        self.assertEqual(data, {"postcode": "AB21 0YA", "litres": "1000", "fixed": 1000})
+        self.assertEqual(data, {"postcode": "AB00 0AA", "litres": "1000", "fixed": 1000})
 
 if __name__ == "__main__":
     unittest.main()

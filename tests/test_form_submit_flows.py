@@ -170,7 +170,7 @@ class SubmitRequestTests(unittest.TestCase):
                 supplier,
                 name=kwargs.pop("name", "Wayne"),
                 email=kwargs.pop("email", "owner@example.test"),
-                postcode=kwargs.pop("postcode", "AB21 0YA"),
+                postcode=kwargs.pop("postcode", "AB00 0AA"),
                 address=kwargs.pop("address", ""),
                 quantity_liters=kwargs.pop("quantity_liters", 1000),
                 **kwargs,
@@ -190,7 +190,7 @@ class SubmitRequestTests(unittest.TestCase):
         self.assertEqual(driver.urls, [FORM["url"]])
         self.assertEqual(fields["your-name"].sent, ["Wayne"])
         self.assertEqual(fields["your-email"].sent, ["owner@example.test"])
-        self.assertEqual(fields["your-postcode"].sent, ["AB21 0YA"])
+        self.assertEqual(fields["your-postcode"].sent, ["AB00 0AA"])
         self.assertEqual(fields["your-name"].cleared, 1)
         self.assertTrue(driver.scripts)  # the submit click
 
@@ -236,7 +236,7 @@ class SubmitRequestTests(unittest.TestCase):
                 name="Wayne",
                 email="owner@example.test",
                 phone="",
-                postcode="AB21 0YA",
+                postcode="AB00 0AA",
                 address="",
                 quantity_liters=1000,
             )

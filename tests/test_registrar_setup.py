@@ -76,7 +76,7 @@ class ResultTests(unittest.TestCase):
             patch("oilwatch.auto_register.store_supplier_credentials"),
         ):
             result = asyncio.run(
-                registrar.register_scottish_fuels("Wayne", "a@b.c", "01224", "Hatton", "AB21 0YA")
+                registrar.register_scottish_fuels("Wayne", "a@b.c", "01224", "Hatton", "AB00 0AA")
             )
 
         self.assertEqual(result["status"], "registered")
@@ -84,7 +84,7 @@ class ResultTests(unittest.TestCase):
 
 class EntryPointTests(unittest.TestCase):
     def test_register_all_uses_the_configured_contact_as_defaults(self) -> None:
-        contact = types.SimpleNamespace(name="Wayne", email="owner@example.test", phone="01224", postcode="AB21 0YA")
+        contact = types.SimpleNamespace(name="Wayne", email="owner@example.test", phone="01224", postcode="AB00 0AA")
         registrar = MagicMock()
         registrar.register_all_suppliers = AsyncMock(return_value=[{"supplier": "ValueOils"}])
 
@@ -104,11 +104,11 @@ class EntryPointTests(unittest.TestCase):
             "owner@example.test",
             "01224",
             "",
-            "AB21 0YA",
+            "AB00 0AA",
         )
 
     def test_an_explicit_phone_is_kept_even_when_empty(self) -> None:
-        contact = types.SimpleNamespace(name="Wayne", email="a@b.c", phone="01224", postcode="AB21 0YA")
+        contact = types.SimpleNamespace(name="Wayne", email="a@b.c", phone="01224", postcode="AB00 0AA")
         registrar = MagicMock()
         registrar.register_all_suppliers = AsyncMock(return_value=[])
 

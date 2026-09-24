@@ -16,7 +16,7 @@ from oilwatch.credentials import CredentialStoreUnreadable
 from tests.fake_async_page import FakeAsyncPage, FakeElement
 
 FLOWS = ["register_scottish_fuels", "register_valueoils", "register_homefuels_direct"]
-ARGS = ("Wayne", "owner@example.test", "01224 000000", "Hatton of Fintry", "AB21 0YA")
+ARGS = ("Wayne", "owner@example.test", "01224 000000", "Hatton of Fintry", "AB00 0AA")
 
 REGISTER_BUTTON = ('name="register"', FakeElement(tag="BUTTON"))
 

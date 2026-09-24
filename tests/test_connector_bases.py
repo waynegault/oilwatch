@@ -34,7 +34,7 @@ class StubSyncConnector(SyncBrowserConnector):
 
 class SyncBrowserConnectorTests(unittest.TestCase):
     def test_quote_shapes_an_ok_result(self) -> None:
-        result = StubSyncConnector(1.10).quote(SUPPLIER, 1000, {"postcode": "AB21 0YA"})
+        result = StubSyncConnector(1.10).quote(SUPPLIER, 1000, {"postcode": "AB00 0AA"})
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(result.source, "stub")
@@ -45,7 +45,7 @@ class SyncBrowserConnectorTests(unittest.TestCase):
         assert total_price is not None
         self.assertAlmostEqual(total_price, 1155.0, places=2)
         self.assertIn("Stub page", result.notes)
-        self.assertIn("AB21 0YA", result.notes)
+        self.assertIn("AB00 0AA", result.notes)
 
     def test_no_price_falls_back_to_manual(self) -> None:
         result = StubSyncConnector(None).quote(SUPPLIER, 1000, {})

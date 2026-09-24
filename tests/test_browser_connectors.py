@@ -27,7 +27,7 @@ SUPPLIER = {
 
 def _quote(connector, page, quantity: int = 1000):
     return asyncio.run(
-        connector.get_quote_with_browser(SUPPLIER, quantity, {"postcode": "AB21 0YA"}, page)
+        connector.get_quote_with_browser(SUPPLIER, quantity, {"postcode": "AB00 0AA"}, page)
     )
 
 
@@ -313,7 +313,7 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
 
     #: The Quick Quote result, as ValueOils renders it (text, tags stripped).
     QUICK_QUOTE = (
-        "Delivery Options based on postcode AB21 0YA Quantity: 1000 (litres) "
+        "Delivery Options based on postcode AB00 0AA Quantity: 1000 (litres) "
         "Delivery Option Fuel ppl ex. VAT Total You Pay "
         "Standard Delivery - Estimated Delivery by Monday 28th Sep 2026 "
         "111.10p £1,187.55 Buy Now "
@@ -357,7 +357,7 @@ class ValueOilsBrowserConnectorTests(unittest.TestCase):
         total_price = result.total_price
         assert total_price is not None
         self.assertAlmostEqual(total_price, price_per_liter * 1000, places=2)
-        self.assertEqual(postcode.filled, ["AB21 0YA"])
+        self.assertEqual(postcode.filled, ["AB00 0AA"])
         self.assertEqual(quantity.filled, ["1000"])
         self.assertEqual(button.clicked, 1)
 

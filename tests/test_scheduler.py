@@ -86,7 +86,7 @@ class _StubScheduler:
 
 
 def _wired(
-    *, postcode: str | None = "AB21 0YA", **kwargs: Any
+    *, postcode: str | None = "AB00 0AA", **kwargs: Any
 ) -> tuple[OilWatchScheduler, _StubApp, _StubScheduler]:
     """A scheduler over a stub app, with apscheduler's scheduler stubbed too.
 
@@ -106,7 +106,7 @@ def _wired(
 class RefreshChainTests(unittest.TestCase):
     """The daily refresh chain: critical step first, the rest best-effort."""
 
-    def _scheduler(self, *, postcode: str | None = "AB21 0YA", **kwargs):
+    def _scheduler(self, *, postcode: str | None = "AB00 0AA", **kwargs):
         scheduler, app, _ = _wired(postcode=postcode, **kwargs)
         return scheduler, app
 

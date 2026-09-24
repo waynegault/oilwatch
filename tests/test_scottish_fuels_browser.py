@@ -143,7 +143,7 @@ class ScottishFuelsBrowserConnectorTests(unittest.TestCase):
 
     def _quote(self, driver: FakeDriver):
         self.auth.launch.return_value = driver
-        return self.connector.quote(SUPPLIER, 1000, {"postcode": "AB21 0YA"})
+        return self.connector.quote(SUPPLIER, 1000, {"postcode": "AB00 0AA"})
 
     def _expired_session(self, **driver_kwargs) -> FakeDriver:
         """A driver whose /quote/ load bounces to the sign-in screen."""

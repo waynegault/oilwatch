@@ -22,7 +22,7 @@ from oilwatch.cli import HANDLERS, build_parser, main
 #: pass-through test into a failure about identity.
 TEST_NAME = "A Person"
 TEST_EMAIL = "owner@example.test"
-TEST_POSTCODE = "AB21 0YA"
+TEST_POSTCODE = "AB00 0AA"
 IDENTITY_FLAGS = ["--name", TEST_NAME, "--email", TEST_EMAIL, "--postcode", TEST_POSTCODE]
 
 COMMANDS = [
@@ -36,12 +36,12 @@ COMMANDS = [
     ["chart"],
     ["time-series"],
     ["quote", "2"],
-    ["quote-all", "--postcode", "AB21 0YA", "--browser"],
+    ["quote-all", "--postcode", "AB00 0AA", "--browser"],
     ["purchases"],
     ["update-brent"],
     ["monitor-email"],
     ["login-email"],
-    ["schedule", "--postcode", "AB21 0YA"],
+    ["schedule", "--postcode", "AB00 0AA"],
     ["api-discover", "--url", "https://example.co.uk"],
     ["register"],
     ["login", "scottish_fuels"],
@@ -142,9 +142,9 @@ class DispatchTests(unittest.TestCase):
         self.assertIn("total_requests", out.getvalue())
 
     def test_quote_all_forwards_the_postcode_and_the_browser_flag(self) -> None:
-        app, _ = self._run(["quote-all", "--postcode", "AB21 0YA", "--browser"])
+        app, _ = self._run(["quote-all", "--postcode", "AB00 0AA", "--browser"])
         app.quote_all.assert_called_once_with(
-            postcode="AB21 0YA", prefer_browser=True, started_by="cli"
+            postcode="AB00 0AA", prefer_browser=True, started_by="cli"
         )
 
     def test_record_purchase_forwards_the_price_and_the_code(self) -> None:
@@ -460,12 +460,12 @@ class DispatchTests(unittest.TestCase):
         with (
             patch("oilwatch.cli.OilWatchApp", return_value=app),
             patch("oilwatch.cli_handlers.OilWatchScheduler") as scheduler,
-            patch.object(sys, "argv", ["oilwatch", "schedule", "--postcode", "AB21 0YA"]),
+            patch.object(sys, "argv", ["oilwatch", "schedule", "--postcode", "AB00 0AA"]),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             main()
 
-        scheduler.assert_called_once_with(app, postcode="AB21 0YA")
+        scheduler.assert_called_once_with(app, postcode="AB00 0AA")
         scheduler.return_value.run_forever.assert_called_once_with()
 
 

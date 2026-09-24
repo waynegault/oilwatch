@@ -171,7 +171,7 @@ class OilWatchAppTests(unittest.TestCase):
                 "connector_config": {},
             }
         )
-        self.app.db.record_quote_request(supplier_id, "form", postcode="AB21 0YA")
+        self.app.db.record_quote_request(supplier_id, "form", postcode="AB00 0AA")
 
         owed = self.app.status()["awaiting_reply"]
         self.assertEqual([row["supplier_name"] for row in owed], ["Asked"])

@@ -15,7 +15,7 @@
       "type": "debugpy",
       "request": "launch",
       "module": "oilwatch.cli",
-      "args": ["quote-all", "--postcode", "AB21 0YA"],
+      "args": ["quote-all"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
     },

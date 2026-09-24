@@ -167,7 +167,7 @@ class SubmitRequestTests(unittest.TestCase):
                 name="Wayne",
                 email="owner@example.test",
                 phone="",  # optional: skipped rather than filled empty
-                postcode="AB21 0YA",
+                postcode="AB00 0AA",
                 address="Hatton of Fintray",
                 quantity_liters=1000,
             )
@@ -176,7 +176,7 @@ class SubmitRequestTests(unittest.TestCase):
         self.assertEqual(driver.urls, [form["url"]])
         self.assertEqual(elements["name"].sent, ["Wayne"])
         self.assertEqual(elements["email"].sent, ["owner@example.test"])
-        self.assertEqual(elements["postcode"].sent, ["AB21 0YA"])
+        self.assertEqual(elements["postcode"].sent, ["AB00 0AA"])
         self.assertEqual(elements["amount"].sent, ["1000"])
         self.assertEqual(elements["name"].cleared, 1)
         self.assertEqual(elements["fuel_type"].sent, [])  # a select, handled as one

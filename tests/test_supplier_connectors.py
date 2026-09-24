@@ -53,7 +53,7 @@ class ValueOilsConnectorTests(unittest.TestCase):
         """
         with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as Client:
             Client.return_value.get.return_value = fake_response(VALUEOILS_PAGE)
-            result = ValueOilsConnector().quote(self.supplier, 1000, {"postcode": "AB21 0YA"})
+            result = ValueOilsConnector().quote(self.supplier, 1000, {"postcode": "AB00 0AA"})
 
         self.assertEqual(result.status, "ok")
         # £997.86 for 900L inc VAT + commission -> £1.1087/L.

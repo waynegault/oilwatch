@@ -74,7 +74,7 @@ class RunAllSuppliersTests(unittest.TestCase):
         ):
             collected = asyncio.run(
                 registrar.register_all_suppliers(
-                    "Wayne", "owner@example.test", "01224 000000", "Hatton of Fintry", "AB21 0YA"
+                    "Wayne", "owner@example.test", "01224 000000", "Hatton of Fintry", "AB00 0AA"
                 )
             )
 

@@ -577,7 +577,7 @@ class QuoteRequestTests(unittest.TestCase):
         return [row["supplier_name"] for row in self.db.outstanding_quote_requests()]
 
     def test_a_request_is_owed_until_a_price_from_that_supplier_arrives(self) -> None:
-        self.db.record_quote_request(self.supplier_id, "form", postcode="AB21 0YA")
+        self.db.record_quote_request(self.supplier_id, "form", postcode="AB00 0AA")
         self.assertEqual(self._could_be_expected(), ["Gleaner Oils"])
 
         self._quote("ok")
