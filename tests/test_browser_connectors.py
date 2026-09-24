@@ -263,6 +263,23 @@ class BoilerJuiceConnectorTests(unittest.TestCase):
         assert price_per_liter is not None
         self.assertAlmostEqual(price_per_liter, 0.8925, places=4)
 
+    def test_a_comma_delivery_total_is_not_read_as_a_price_per_litre(self) -> None:
+        """£1,195.70 is a delivery total, not £1.957 a litre.
+
+        The two unanchored patterns — ``price.*?£?(\\d+\\.\\d{2})`` and the same
+        for ``total`` — matched the digits *after* the comma, since the comma is
+        never parsed and ``\\d+`` simply starts at "195". That normalised to
+        £1.957/L and was then lifted another 5%, entering the database as an
+        ``ok`` quote. Both patterns are gone; every one left is anchored to a
+        per-litre unit or a two-word label.
+        """
+        page = JourneyPage(content="<html>Total price £1,195.70</html>")
+
+        result = _quote(self.connector, page)
+
+        self.assertIsNone(result.price_per_liter, "a total is not a price per litre")
+        self.assertEqual(result.status, "manual_action_required")
+
     def test_an_extraction_error_leaves_the_quote_for_manual_action(self) -> None:
         page = FakeAsyncPage(content="whatever")
 

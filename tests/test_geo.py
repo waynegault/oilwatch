@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import types
 import unittest
+from itertools import pairwise
 
 from geopy.exc import GeocoderRateLimited, GeocoderTimedOut
 
@@ -43,6 +44,19 @@ class ThrottledGeocoder:
             self._remaining -= 1
             raise GeocoderRateLimited("429", retry_after=2.5)
         return self._result
+
+
+class RecordingGeocoder(ScriptedGeocoder):
+    """A scripted geocoder that also notes the clock when each ask went out."""
+
+    def __init__(self, results: dict, clock: FakeClock) -> None:
+        super().__init__(results)
+        self._clock = clock
+        self.starts: list[float] = []
+
+    def geocode(self, query: str, timeout: float | None = None):
+        self.starts.append(self._clock())
+        return super().geocode(query, timeout)
 
 
 class FakeClock:
@@ -121,6 +135,35 @@ class RateLimitTests(unittest.TestCase):
 
         self.assertEqual(len(clock.slept), 1, "only the second ask has an interval to wait out")
         self.assertAlmostEqual(clock.slept[0], 0.8, places=6)
+
+    def test_the_interval_survives_an_ask_that_already_waited(self) -> None:
+        """Three asks, each a full second after the one before it.
+
+        The second ask waits out the interval, so the third must measure from the
+        moment that ask *went out* and not from the instant ``_pace`` was entered
+        for it — stamping the earlier instant leaves the third ask believing it
+        has already served the second it waited, sleeping nothing, and going out
+        0.2 s after the second, which is the burst the pacer exists to prevent.
+        """
+        clock = FakeClock()
+        service = GeoService(clock=clock, sleep=clock.sleep)
+        geocoder = RecordingGeocoder(
+            {
+                "a": _location(1.0, 2.0, "A"),
+                "b": _location(3.0, 4.0, "B"),
+                "c": _location(5.0, 6.0, "C"),
+            },
+            clock,
+        )
+        service._geocoder = geocoder
+
+        for query in ("a", "b", "c"):
+            service.geocode(query)
+            clock.now += 0.2  # each request took 200 ms on its own
+
+        starts = geocoder.starts
+        gaps = [round(later - earlier, 6) for earlier, later in pairwise(starts)]
+        self.assertEqual(gaps, [1.0, 1.0], f"start-to-start spacing collapsed: {gaps}")
 
     def test_a_throttle_is_waited_out_on_the_providers_own_remedy(self) -> None:
         clock = FakeClock()

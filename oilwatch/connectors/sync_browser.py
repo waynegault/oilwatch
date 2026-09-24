@@ -37,17 +37,16 @@ def sync_page(headless: bool = True) -> Iterator[Any]:
 class SyncBrowserConnector(BaseConnector):
     """Base for the synchronous Playwright connectors.
 
-    Subclasses set ``source``, ``price_description``, ``no_price_note`` and
-    ``order_notes``, and implement :meth:`collect_price`, which drives the page
-    and returns ``(ex_vat_price, raw_payload)`` — with ``None`` for the price
-    when the page yielded nothing parseable, so the caller quotes manually
-    rather than fabricating one.
+    Subclasses set ``source``, ``price_description`` and ``no_price_note``, and
+    implement :meth:`collect_price`, which drives the page and returns
+    ``(ex_vat_price, raw_payload)`` — with ``None`` for the price when the page
+    yielded nothing parseable, so the caller quotes manually rather than
+    fabricating one.
     """
 
     source = ""
     price_description = ""
     no_price_note = "Could not extract a price from the page."
-    order_notes = "Order via the supplier's site."
     #: Whether :meth:`collect_price` returns an already-inclusive per-litre price
     #: (the supplier's "total you pay") or an ex-VAT one the base lifts by the
     #: domestic rate. Default is the ex-VAT basis.
@@ -82,7 +81,11 @@ class SyncBrowserConnector(BaseConnector):
                 )
         except Exception as exc:  # noqa: BLE001
             return self._manual(
-                supplier, quantity_liters, f"Browser automation error: {exc}", "site_error"
+                supplier,
+                quantity_liters,
+                f"Browser automation error: {exc}",
+                "site_error",
+                status="error",
             )
 
         if ex_vat_price is None:
@@ -113,12 +116,27 @@ class SyncBrowserConnector(BaseConnector):
         )
 
     def _manual(
-        self, supplier: dict[str, Any], quantity_liters: int, notes: str, reason: str
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        notes: str,
+        reason: str,
+        *,
+        status: str = "manual_action_required",
     ) -> QuoteResult:
         """A quote this connector cannot give, with the reason it cannot.
 
         ``reason`` is required: both callers know which case they are in, and a
         default here would be guessing where the row must not be a guess.
+
+        ``status`` is ``manual_action_required`` for everything the supplier
+        itself decided — no price on the page, a portal that wants a sign-in —
+        and ``error`` for the one case where the attempt fell over, which is what
+        ``reason="site_error"`` means. The two are kept apart because a consumer
+        branches on them: ``service`` splits the last ask per supplier into the
+        ones with no price to give ("often doing exactly what it does") and the
+        ones worth looking at, so a browser that would not launch reported as the
+        first reads as a supplier with nothing to say.
         """
         # The phone on the record is contact data, not a route this app offers:
         # it never rings a supplier, so the note names an address or a page and
@@ -131,7 +149,7 @@ class SyncBrowserConnector(BaseConnector):
             supplier_name=supplier["name"],
             observed_at=self.now(),
             quantity_liters=quantity_liters,
-            status="manual_action_required",
+            status=status,
             reason=reason,
             source=self.source,
             notes=f"{notes} Contact: {contact}" if contact else notes,

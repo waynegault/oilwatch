@@ -58,7 +58,7 @@ what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
 
 | What | Count |
 |------|-------|
-| Tests | 743, all passing offline |
+| Tests | 758, all passing offline |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
 | CLI commands | 21 |
 | Modules under `oilwatch/` | 55 Python files |
@@ -287,7 +287,10 @@ meaning "no reason applies".
 Three separate vocabularies share the word `status` in this codebase, and only
 the first is a quote row's: quote rows (`ok` / `manual_action_required` /
 `error`), supplier rows (`active` / `inactive` / `manual_review`), and the result
-of a form submission or registration (`submitted`, `sent`, `no_address`, …).
+of a form submission or registration (`submitted`, `unconfirmed`, `sent`,
+`no_address`, …). `unconfirmed` is a submission the page did not acknowledge:
+only `submitted` is written to `quote_requests` and afterwards reported as
+`awaiting_reply`.
 
 Wherever a supplier row is not `ok`, it carries a machine-readable `reason`
 beside the prose in `notes`, so a gap can be explained without parsing English:
@@ -644,7 +647,7 @@ Oil Price Webscraper/
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
 
-`python -m unittest discover -s tests -t .` — 743 tests, all offline.
+`python -m unittest discover -s tests -t .` — 758 tests, all offline.
 
 ### Run from the command line
 

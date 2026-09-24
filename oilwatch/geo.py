@@ -117,13 +117,23 @@ class GeoService:
 
         Measured from the start of the previous request, so a request that slept
         its way through a throttle is not asked for a second one on top.
+
+        The stamp is deliberately the moment the request *goes out* — ``now``
+        plus the wait just taken — and not the moment ``_pace`` was entered. The
+        clock does not move while this method sleeps with the real ``time.sleep``,
+        and the recorded time is what the next call measures against: stamping
+        the pre-sleep instant leaves the next call seeing an interval it has
+        already waited out, sleeping nothing, and letting two requests out a
+        fraction of a second apart — the burst this class exists to prevent.
         """
         now = self._clock()
+        start = now
         if self._last_call is not None:
             remaining = self.MIN_INTERVAL_SECONDS - (now - self._last_call)
             if remaining > 0:
                 self._sleep(remaining)
-        self._last_call = now
+                start = now + remaining
+        self._last_call = start
 
     def geocode_first(self, queries: Iterable[str]) -> tuple[float, float, str] | None:
         for query in queries:

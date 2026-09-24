@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
+import os
 import secrets
 import string
+import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +20,27 @@ from oilwatch.models import utcnow_naive
 
 ENVELOPE_KEY = "format"
 ENVELOPE_FORMAT = "dpapi"
+
+#: Serialises the mutate-then-write pair below. Connectors quote several at
+#: once on a ThreadPoolExecutor, and the store is one process-wide manager, so
+#: two of them can reach `set_credentials` together: without this, one thread can
+#: be encoding the dict in `_save` while another inserts into it, which is a
+#: "dictionary changed size during iteration" rather than a tidy last-write-wins.
+#: Reentrant, because the mutate and the save each take it — nesting is the point.
+#: A lock per process cannot cover the detached `quote-all` worker, whose store is
+#: its own; `_write_atomically` is what keeps a second writer from being read
+#: mid-write.
+_WRITE_LOCK = threading.RLock()
+
+
+class CredentialStoreUnreadable(RuntimeError):
+    """The credentials file exists but could not be read.
+
+    Raised rather than returning an empty store, because the two are not the
+    same thing: a store that reads as empty leads the quote path to *generate a
+    fresh password and write it over the file*, which desynchronises a real
+    supplier account whose password was in there.
+    """
 
 
 def generate_password(length: int = 8) -> str:
@@ -67,7 +92,14 @@ class CredentialManager:
         self._load()
 
     def _load(self) -> None:
-        """Load credentials, accepting either the DPAPI envelope or plain JSON."""
+        """Load credentials, accepting either the DPAPI envelope or plain JSON.
+
+        Every way of failing lands in ``load_error`` rather than reading as an
+        empty store. The failure that matters is a *truncated* file — the shape a
+        write being read mid-flight leaves behind — because "no credentials" is
+        indistinguishable from "nothing stored yet" to everything downstream, and
+        the quote path responds to it by generating a new password.
+        """
         self._credentials = {}
         self._encrypted = False
         if not self.config_path.exists():
@@ -80,8 +112,9 @@ class CredentialManager:
 
         try:
             payload = json.loads(raw)
-        except json.JSONDecodeError:
-            payload = None
+        except json.JSONDecodeError as exc:
+            self.load_error = f"could not parse {self.config_path}: {exc}"
+            return
 
         if isinstance(payload, dict) and payload.get(ENVELOPE_KEY) == ENVELOPE_FORMAT:
             self._encrypted = True
@@ -94,42 +127,74 @@ class CredentialManager:
                 self.load_error = f"could not decrypt {self.config_path}: {exc}"
                 return
 
-        if isinstance(payload, dict):
-            self._credentials = payload.get("credentials", {})
-
-    def _save(self) -> None:
-        """Persist credentials, encrypting when the platform supports it."""
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"email": load_contact().email, "credentials": self._credentials}
-
-        if self._encrypt_on_save and secretstore.available():
-            plain = json.dumps(payload, indent=2).encode("utf-8")
-            envelope = {
-                ENVELOPE_KEY: ENVELOPE_FORMAT,
-                "hint": (
-                    "Encrypted with Windows DPAPI: readable only by this Windows "
-                    "account on this machine. Delete the file to start over."
-                ),
-                "blob": base64.b64encode(secretstore.protect(plain)).decode("ascii"),
-            }
-            self.config_path.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
-            self._encrypted = True
+        if not isinstance(payload, dict):
+            # Valid JSON of the wrong shape, e.g. a list: still not a store we
+            # can read, and still not a reason to overwrite it.
+            self.load_error = f"{self.config_path} is not a credentials store"
             return
 
-        self.config_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        self._encrypted = False
+        self._credentials = payload.get("credentials", {})
+
+    def _write_atomically(self, text: str) -> None:
+        """Replace the store in one step, so no reader sees a half-written file.
+
+        ``write_text`` truncates the target first: a second writer — the quote
+        sweeps run several connectors at once, and a background sweep is a
+        separate process with its own manager — can be read between the truncate
+        and the write, and a truncated store reads as no store at all. A temp
+        file in the same directory plus ``os.replace`` is atomic on Windows and
+        POSIX, so the file is either the old contents or the new ones.
+        """
+        directory = self.config_path.parent
+        directory.mkdir(parents=True, exist_ok=True)
+        handle, temp_name = tempfile.mkstemp(dir=directory, suffix=".tmp")
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                stream.write(text)
+            os.replace(temp_name, self.config_path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(temp_name)
+            raise
+
+    def _save(self) -> None:
+        """Persist credentials, encrypting when the platform supports it.
+
+        Refuses when the store could not be read: the file may hold other
+        suppliers' accounts, so writing would replace them with the one entry
+        this process happens to know about — and for the supplier whose password
+        was in the unreadable file, replace a working credential with a fresh
+        one. Repairing or deleting the file is a person's decision, so the error
+        names it and stops.
+        """
+        if self.load_error is not None:
+            raise CredentialStoreUnreadable(
+                f"refusing to write {self.config_path}: {self.load_error}. Move or "
+                "delete that file to start over, or repair it first."
+            )
+        payload = {"email": load_contact().email, "credentials": self._credentials}
+
+        with _WRITE_LOCK:
+            if self._encrypt_on_save and secretstore.available():
+                plain = json.dumps(payload, indent=2).encode("utf-8")
+                envelope = {
+                    ENVELOPE_KEY: ENVELOPE_FORMAT,
+                    "hint": (
+                        "Encrypted with Windows DPAPI: readable only by this Windows "
+                        "account on this machine. Delete the file to start over."
+                    ),
+                    "blob": base64.b64encode(secretstore.protect(plain)).decode("ascii"),
+                }
+                self._write_atomically(json.dumps(envelope, indent=2))
+                self._encrypted = True
+                return
+
+            self._write_atomically(json.dumps(payload, indent=2))
+            self._encrypted = False
 
     @property
     def is_encrypted(self) -> bool:
         """True when the file on disk is the DPAPI envelope."""
-        return self._encrypted
-
-    def resave(self) -> bool:
-        """Rewrite the file in the preferred format. Returns True if encrypted.
-
-        Converting an existing plain-text file is just load-then-save.
-        """
-        self._save()
         return self._encrypted
 
     def get_credentials(self, supplier_key: str) -> dict[str, str] | None:
@@ -166,7 +231,7 @@ class CredentialManager:
             email: Account email (defaults to the configured contact email)
             notes: Optional notes about the account
         """
-        self._credentials[supplier_key] = {
+        entry = {
             "email": email or load_contact().email,
             "password": password,
             "notes": notes,
@@ -174,7 +239,13 @@ class CredentialManager:
             # could read a creation time back out of a field named created_at.
             "created_at": utcnow_naive().isoformat(),
         }
-        self._save()
+        with _WRITE_LOCK:
+            # The assignment is inside the lock with the save, not just the save:
+            # `_save` encodes the whole dict, and an insert from another thread
+            # part-way through that encode raises "dictionary changed size during
+            # iteration" — instead of writing what both threads stored.
+            self._credentials[supplier_key] = entry
+            self._save()
 
     def generate_and_store_password(
         self,

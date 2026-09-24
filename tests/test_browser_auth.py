@@ -64,7 +64,6 @@ class FakeDriver:
         *,
         cookies: list | None = None,
         quit_raises: bool = False,
-        add_cookie_raises: bool = False,
         logout_links: list | None = None,
         elements_by_selector: dict[str, list] | None = None,
     ) -> None:
@@ -72,11 +71,9 @@ class FakeDriver:
         self._logout_links = logout_links or []
         self._elements_by_selector = elements_by_selector
         self.quit_raises = quit_raises
-        self.add_cookie_raises = add_cookie_raises
         self.urls: list[str] = []
         self.current_url: str = ""
         self.title: str = ""
-        self.added: list = []
         self.scripts: list[str] = []
         self.quit_calls = 0
         #: What a script reports back. The sign-in diagnostic reads its page
@@ -88,11 +85,6 @@ class FakeDriver:
 
     def get_cookies(self) -> list:
         return self._cookies
-
-    def add_cookie(self, cookie) -> None:
-        if self.add_cookie_raises:
-            raise RuntimeError("cookie belongs to another domain")
-        self.added.append(cookie)
 
     def quit(self) -> None:
         self.quit_calls += 1
@@ -305,11 +297,6 @@ class CookieTests(unittest.TestCase):
         """
         self.auth.driver = driver  # type: ignore[assignment]
 
-    def test_has_session_tracks_the_cookie_file(self) -> None:
-        self.assertFalse(self.auth.has_session())
-        self.auth.cookies_path().write_text("[]", encoding="utf-8")
-        self.assertTrue(self.auth.has_session())
-
     def test_save_writes_the_driver_cookies(self) -> None:
         self._use_driver(FakeDriver(cookies=[{"name": "session", "value": "abc"}]))
         path = self.auth.save_cookies()
@@ -317,24 +304,6 @@ class CookieTests(unittest.TestCase):
 
     def test_save_without_a_driver_writes_nothing(self) -> None:
         self.assertFalse(self.auth.save_cookies().exists())
-
-    def test_load_adds_every_applicable_cookie(self) -> None:
-        self.auth.cookies_path().write_text(json.dumps([{"name": "a"}, {"name": "b"}]), encoding="utf-8")
-        driver = FakeDriver()
-        self._use_driver(driver)
-        self.auth.load_cookies()
-        self.assertEqual(driver.added, [{"name": "a"}, {"name": "b"}])
-
-    def test_load_skips_a_cookie_for_another_domain(self) -> None:
-        self.auth.cookies_path().write_text(json.dumps([{"name": "a"}]), encoding="utf-8")
-        driver = FakeDriver(add_cookie_raises=True)
-        self._use_driver(driver)
-        self.auth.load_cookies()  # must not raise
-        self.assertEqual(driver.added, [])
-
-    def test_load_without_a_cookie_file_is_a_noop(self) -> None:
-        self._use_driver(FakeDriver())
-        self.auth.load_cookies()
 
     def test_close_quits_and_clears_the_driver(self) -> None:
         driver = FakeDriver()

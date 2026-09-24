@@ -33,8 +33,12 @@ _LIVE_PRICE_SELECTOR = "#currentLivePrice"
 #: The same span's value in the raw HTML, for the HTTP fallback's text scan.
 _LIVE_PRICE_RE = r'id=["\']?currentLivePrice["\']?[^>]*>\s*(\d+(?:\.\d{1,2})?)\s*<'
 
-#: The page's "NN pence per litre" wording, as a second fallback.
-_PENCE_PER_LITRE = r'(\d{2,3})\s*pence\s*per\s*litre'
+#: The page's "NN pence per litre" wording, as a second fallback. The decimal
+#: part is not optional: HomeFuels publishes "112.87 pence per litre", and a
+#: pattern stopping at the whole pence reads that as 87p — a fifth of the real
+#: price — because the leading digits are simply skipped. The HTTP connector's
+#: equivalent pattern carries the same group for the same reason.
+_PENCE_PER_LITRE = r'(\d{2,3}(?:\.\d{1,2})?)\s*pence\s*per\s*litre'
 
 
 class HomeFuelsDirectBrowserConnector(BrowserConnector):
@@ -53,7 +57,6 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
         self.base_url = "https://homefuelsdirect.co.uk"
         self.login_url = "https://homefuelsdirect.co.uk/my-account/"
         self.quote_url = "https://homefuelsdirect.co.uk/home/heating-oil-prices/aberdeenshire"
-        self._requires_login = False
 
     async def login(self, page: PageLike, email: str, password: str) -> bool:
         """Optional sign-in; HomeFuels quotes work signed-out (see the base)."""
@@ -143,7 +146,7 @@ class HomeFuelsDirectBrowserConnector(BrowserConnector):
             patterns = [
                 _LIVE_PRICE_RE,
                 _PENCE_PER_LITRE,
-                r'UK\s*Average.*?(\d{2,3})\s*pence',
+                r'UK\s*Average.*?(\d{2,3}(?:\.\d{1,2})?)\s*pence',
             ]
 
             for pattern in patterns:

@@ -131,8 +131,9 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                             reason="login_not_confirmed",
                         )
                     # Refresh the saved cookie backup too. The persistent profile
-                    # already holds the session, but the file is what
-                    # ``has_session()`` reports, and a stale one is a trap later.
+                    # is what carries the session — the file is a backup nothing
+                    # reads back — so a failure here is not worth more than the
+                    # debug line below, and the profile still holds the session.
                     try:
                         auth.save_cookies()
                     except Exception as exc:  # noqa: BLE001 - the profile still holds the session
@@ -194,6 +195,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
                 quantity_liters,
                 f"Browser automation error: {exc}",
                 reason="site_error",
+                status="error",
             )
 
         if final_url and self.is_login_page(final_url):
@@ -439,12 +441,20 @@ class ScottishFuelsBrowserConnector(BaseConnector):
         quantity_liters: int,
         notes: str,
         reason: str | None = None,
+        *,
+        status: str = "manual_action_required",
     ) -> QuoteResult:
         """A non-quote result, optionally classified.
 
         ``reason`` stays optional because the callers here do not all know one:
         an unrecognised case reports ``None`` — "unclassified" — rather than a
         guess that a consumer would then branch on.
+
+        ``status`` is ``manual_action_required`` except for the run that raised,
+        where ``reason="site_error"`` says the attempt itself fell over and the
+        row has to read as one: the consumers split a supplier that gave no price
+        from one whose retrieval failed, and only the second is a fault to look
+        at.
         """
         # The phone on the record is contact data, not a route this app offers:
         # it never rings a supplier, so the note names an address or a page.
@@ -454,7 +464,7 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             supplier_name=supplier["name"],
             observed_at=self.now(),
             quantity_liters=quantity_liters,
-            status="manual_action_required",
+            status=status,
             reason=reason,
             source="scottish_fuels_browser",
             notes=f"{notes} Contact: {contact}" if contact else notes,

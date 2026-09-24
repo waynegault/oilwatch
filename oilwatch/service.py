@@ -21,7 +21,7 @@ from oilwatch.db import Database
 from oilwatch.discovery import DiscoveryService
 from oilwatch.geo import GeoService
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import utcnow_naive
+from oilwatch.models import QuoteResult, utcnow_naive
 from oilwatch.quotes import QuoteService
 
 log = get_logger("service")
@@ -164,26 +164,38 @@ class OilWatchApp:
                 return result.to_record()
             except Exception as exc:  # noqa: BLE001
                 log.warning("Quote collection failed for %s: %s", supplier["name"], exc)
-                return {
-                    "supplier_id": supplier["id"],
-                    "supplier_name": supplier["name"],
-                    "observed_at": utcnow_naive().isoformat(),
-                    "quantity_liters": self.settings.quote_quantity_liters,
-                    "status": "error",
-                    "price_per_liter": None,
-                    "total_price": None,
-                    "currency": self.settings.currency,
-                    "source": supplier.get("connector_type", "unknown"),
-                    "notes": str(exc),
+                # Carried the exception as a plain dict until it was built through
+                # the model: that dict omitted `valid_until`, so the one row a
+                # consumer is likeliest to index over was the one whose shape
+                # differed from every other row in the response.
+                return QuoteResult(
+                    supplier_id=int(supplier["id"]),
+                    supplier_name=supplier["name"],
+                    observed_at=utcnow_naive(),
+                    quantity_liters=self.settings.quote_quantity_liters,
+                    status="error",
+                    price_per_liter=None,
+                    total_price=None,
+                    currency=self.settings.currency,
+                    source=supplier.get("connector_type", "unknown"),
+                    notes=str(exc),
                     # Classified rather than left to the exception's wording:
                     # the message is prose, and this is the one reason every
                     # raising path shares.
-                    "reason": "site_error",
-                    "raw_payload": {},
-                }
+                    reason="site_error",
+                    raw_payload={},
+                ).to_record()
 
         if workers == 1 or len(suppliers) < 2:
-            payloads = [quote_one(supplier) for supplier in suppliers]
+            # Progress is reported here as well as in the pool below: a job run
+            # with `quote_max_workers: 1`, or against a single supplier, used to
+            # leave `done` at 0 for its whole duration, so `refresh_status` could
+            # say "running, 0 of 17" for twenty minutes and then "finished".
+            payloads = []
+            for supplier in suppliers:
+                payloads.append(quote_one(supplier))
+                if job_id is not None:
+                    self.db.progress_refresh_job(job_id, len(payloads))
         else:
             # Each quote is a browser launch of 10-30s, so a sequential run
             # scaled linearly with the supplier count. Several run at once, but

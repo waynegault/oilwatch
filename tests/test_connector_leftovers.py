@@ -60,9 +60,17 @@ class HighlandFuelsTests(unittest.TestCase):
         _, request = self._quote(response=FakeHttpResponse(OFFERS_XML), supplier=supplier)
         self.assertIn("<Product>999</Product>", request.call_args.kwargs["content"])
 
-    def test_a_transport_error_needs_a_manual_quote(self) -> None:
+    def test_a_transport_error_is_reported_as_an_error(self) -> None:
+        """A request that raised is not a supplier with no price to give.
+
+        ``site_error`` means the attempt itself fell over, and the consumers
+        split on the status: filing this as ``manual_action_required`` put a
+        dead connection under ``no_quote_suppliers`` — "often doing exactly what
+        it does" — where the one instruction is not to look at it.
+        """
         result, _ = self._quote(error=httpx.ConnectError("no route"))
-        self.assertEqual(result.status, "manual_action_required")
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "site_error")
         self.assertIn("HTTP error", result.notes)
 
     def test_a_response_without_an_offer_needs_a_manual_quote(self) -> None:

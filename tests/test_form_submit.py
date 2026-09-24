@@ -27,10 +27,17 @@ class _Element:
 
 
 class _Driver:
-    """Minimal stand-in: element lookup plus the two calls made on the driver."""
+    """Minimal stand-in: element lookup plus the two calls made on the driver.
+
+    It models the one page transition that matters: the enquiry form's fields are
+    on the page before the submit and gone after it, which is how a real page
+    shows the submission was accepted. Without that, an accepted form and one the
+    site quietly refused look identical from here.
+    """
 
     def __init__(self, elements: list[_Element]) -> None:
         self._elements = elements
+        self._submitted = False
         self.urls: list[str] = []
         self.scripts: list[str] = []
 
@@ -43,6 +50,8 @@ class _Driver:
 
     def execute_script(self, script: str, *args) -> None:
         self.scripts.append(script)
+        if any(element.get_attribute("type") == "submit" for element in args):
+            self._submitted = True
 
     def find_element(self, _by, selector: str):
         wanted = self._name_from(selector)
@@ -52,6 +61,8 @@ class _Driver:
         raise LookupError(wanted)
 
     def find_elements(self, _by, selector: str) -> list[_Element]:
+        if self._submitted:
+            return []
         wanted = self._name_from(selector)
         return [e for e in self._elements if e.get_attribute("name") == wanted]
 

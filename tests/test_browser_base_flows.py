@@ -100,13 +100,26 @@ def _fake_playwright(playwright):
 
 class SetupAndInterceptionTests(unittest.TestCase):
     def test_setup_wires_the_context_and_captures_the_page(self) -> None:
-        connector, page, context, playwright = _wired()
+        connector, page, _, playwright = _wired()
         with _fake_playwright(playwright):
             returned = asyncio.run(connector._setup_browser(headless=True))
 
         self.assertIs(returned, page)
         self.assertIs(connector._page, page)
-        self.assertIsNotNone(context.route_handler)
+
+    def test_interception_is_off_unless_a_connector_asks_for_it(self) -> None:
+        """Every request used to be routed back through Python for nobody.
+
+        ``discover_api`` has no production caller — `oilwatch api-discover` uses
+        ``oilwatch.api_discovery`` — so leaving this on cost a round-trip per
+        request on every quote for a capture nothing read. ValueOils already had
+        to opt out to stop its SSL handshake stalling.
+        """
+        connector, _, context, playwright = _wired()
+        with _fake_playwright(playwright):
+            asyncio.run(connector._setup_browser())
+
+        self.assertIsNone(context.route_handler, "no handler is registered by default")
 
     def test_close_releases_the_context_and_playwright(self) -> None:
         connector, _, context, playwright = _wired()
@@ -123,8 +136,9 @@ class SetupAndInterceptionTests(unittest.TestCase):
         self.assertTrue(playwright.stopped)
         self.assertIsNone(connector._page)
 
-    def test_interception_records_api_traffic(self) -> None:
+    def test_interception_records_api_traffic_when_a_connector_opts_in(self) -> None:
         connector, _, context, playwright = _wired()
+        connector._intercept_requests = True
         with _fake_playwright(playwright):
             asyncio.run(connector._setup_browser())
 

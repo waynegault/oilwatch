@@ -91,7 +91,13 @@ class HighlandFuelsConnector(BaseConnector):
             response.raise_for_status()
         except httpx.HTTPError as exc:
             log.warning("Highland Fuels quote request failed: %s", exc)
-            return self._manual(supplier, quantity_liters, f"HTTP error: {exc}", "site_error")
+            return self._manual(
+                supplier,
+                quantity_liters,
+                f"HTTP error: {exc}",
+                "site_error",
+                status="error",
+            )
 
         parsed = self.parse_offers_response(response.text)
         if parsed is None:
@@ -159,13 +165,26 @@ class HighlandFuelsConnector(BaseConnector):
         return round(price_per_liter, 4), round(total, 2)
 
     def _manual(
-        self, supplier: dict[str, Any], quantity_liters: int, notes: str, reason: str
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        notes: str,
+        reason: str,
+        *,
+        status: str = "manual_action_required",
     ) -> QuoteResult:
         """A quote this connector cannot give, with the reason it cannot.
 
         ``reason`` is required rather than defaulted: both callers below know
         which case they are in, and a default would be this function guessing on
         their behalf — the one thing an unclassified row already fails to do.
+
+        ``status`` is ``manual_action_required`` for the response that answered
+        without an offer, and ``error`` for the request that raised, because
+        ``reason="site_error"`` means the attempt fell over. A consumer branches
+        on the status, so filing a transport failure as "no price to give" sends
+        the reader to the wrong next step: ``service`` lists the first as a
+        supplier doing what it does and only the second as a fault to look at.
         """
         # The phone on the record is contact data, not a route this app offers:
         # it never rings a supplier, so the note names an address or a page.
@@ -175,7 +194,7 @@ class HighlandFuelsConnector(BaseConnector):
             supplier_name=supplier["name"],
             observed_at=self.now(),
             quantity_liters=quantity_liters,
-            status="manual_action_required",
+            status=status,
             reason=reason,
             source="highland_fuels",
             notes=f"{notes} Contact: {contact}" if contact else notes,

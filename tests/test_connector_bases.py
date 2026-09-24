@@ -24,7 +24,6 @@ class StubSyncConnector(SyncBrowserConnector):
     source = "stub"
     price_description = "Stub page"
     no_price_note = "No price on the stub page."
-    order_notes = "Order via the stub."
 
     def __init__(self, price: float | None) -> None:
         self._price = price
@@ -53,13 +52,21 @@ class SyncBrowserConnectorTests(unittest.TestCase):
         self.assertEqual(result.status, "manual_action_required")
         self.assertIn("No price on the stub page.", result.notes)
 
-    def test_a_collect_error_becomes_a_manual_quote(self) -> None:
+    def test_a_collect_error_becomes_an_error_quote(self) -> None:
+        """A driver that threw is an ``error``, not a supplier with nothing to say.
+
+        The row carried ``reason="site_error"`` beside a status of
+        ``manual_action_required``, which contradict: the reason says the attempt
+        raised, and the status files it among the suppliers that answered with no
+        price — the opposite reading for anyone branching on it.
+        """
         class Boom(StubSyncConnector):
             def collect_price(self, *args: Any, **kwargs: Any):
                 raise RuntimeError("boom")
 
         result = Boom(None).quote(SUPPLIER, 1000, {})
-        self.assertEqual(result.status, "manual_action_required")
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "site_error")
         self.assertIn("Browser automation error: boom", result.notes)
 
     def test_sync_page_yields_a_page_and_closes_the_browser(self) -> None:

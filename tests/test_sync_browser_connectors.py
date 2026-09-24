@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import unittest
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -204,11 +205,19 @@ class FuelsoftConnectorTests(unittest.TestCase):
         self.assertAlmostEqual(price_per_liter, 1.1466, places=4)
         self.assertIn(("goto", self.QUOTE_URL), page.calls)
 
-    def test_navigation_failure_falls_back_to_manual(self) -> None:
+    def test_navigation_failure_is_reported_as_an_error(self) -> None:
+        """A browser that would not launch is a fault, not a supplier's silence.
+
+        The row used to read ``manual_action_required`` with ``reason`` of
+        ``site_error``, which contradict each other: the reason says the attempt
+        raised, and the status put it in the bucket of suppliers that have
+        nothing to give.
+        """
         page = FakePage(fail_goto=True)
         with _patcher(page):
             result = FuelsoftConnector().quote(self._supplier(), 1000, {})
-        self.assertEqual(result.status, "manual_action_required")
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "site_error")
         self.assertIn("Browser automation error", result.notes)
 
     def test_response_without_a_price_falls_back_to_manual(self) -> None:
@@ -246,12 +255,54 @@ class RixBrowserConnectorTests(unittest.TestCase):
         assert price_per_liter is not None
         self.assertAlmostEqual(price_per_liter, 1.2742, places=4)
 
-    def test_navigation_failure_falls_back_to_manual(self) -> None:
+    def test_navigation_failure_is_reported_as_an_error(self) -> None:
         page = FakePage(fail_goto=True)
         with _patcher(page):
             result = RixBrowserConnector().quote(SUPPLIER, 1000, {})
-        self.assertEqual(result.status, "manual_action_required")
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "site_error")
         self.assertIn("Browser automation error", result.notes)
+
+    def test_the_form_is_given_the_owners_phone_not_a_drama_number(self) -> None:
+        """Rix will not quote without a phone, and the ask is in the owner's name.
+
+        ``context.get("phone")`` is always empty — ``QuoteService`` builds that
+        context from the postcode and the home label — so the fallback fired on
+        every run and Rix was handed an Ofcom drama number it cannot call back,
+        while the branch that was supposed to prevent that read as live.
+        """
+        page = FakePage(text=self.RIX_RESULTS, url="https://fuelquote.rix.co.uk/your-quote/123")
+        contact = SimpleNamespace(phone="01224 654321", email="owner@example.test")
+        with (
+            _patcher(page),
+            patch(
+                "oilwatch.connectors.suppliers.rix_browser.load_contact",
+                return_value=contact,
+            ),
+        ):
+            RixBrowserConnector().quote(SUPPLIER, 1000, {})
+
+        self.assertIn(("fill", "input[name='phoneNumber']", "01224 654321"), page.calls)
+
+    def test_a_blank_phone_is_never_submitted(self) -> None:
+        """No number on record still means *a* number goes in the field.
+
+        The site refuses the form without one, so an empty contact must fall back
+        rather than send an empty string and leave the quote unrequested.
+        """
+        page = FakePage(text=self.RIX_RESULTS, url="https://fuelquote.rix.co.uk/your-quote/123")
+        contact = SimpleNamespace(phone="", email="")
+        with (
+            _patcher(page),
+            patch(
+                "oilwatch.connectors.suppliers.rix_browser.load_contact",
+                return_value=contact,
+            ),
+        ):
+            RixBrowserConnector().quote(SUPPLIER, 1000, {})
+
+        self.assertIn(("fill", "input[name='phoneNumber']", "07700 900123"), page.calls)
+        self.assertNotIn(("fill", "input[name='phoneNumber']", ""), page.calls)
 
 
 API_URL = "https://oilweb.example/JOil/fuelsoftapi/Quotes/deliveryschedules/quote/1"

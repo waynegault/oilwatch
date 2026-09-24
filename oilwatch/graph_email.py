@@ -224,20 +224,6 @@ class GraphEmailMonitor:
             "Prefer": 'IdType="ImmutableId"',
         }
 
-    def fetch_unseen(self, token: dict[str, Any]) -> list[dict[str, Any]]:
-        response = httpx.get(
-            f"{GRAPH_ENDPOINT}/me/mailFolders/inbox/messages",
-            headers=self._headers(token),
-            params={
-                "$filter": "isRead eq false",
-                "$top": "50",
-                "$select": "id,from,subject,body,bodyPreview,receivedDateTime",
-            },
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        return response.json().get("value", [])
-
     def fetch_candidates(self, token: dict[str, Any]) -> list[dict[str, Any]]:
         """Messages worth scanning: read or unread, live or already deleted.
 

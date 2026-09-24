@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 
-from oilwatch.cli_handlers import HANDLERS
+from oilwatch.cli_handlers import HANDLERS, CliError
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import configure_logging
 from oilwatch.service import OilWatchApp
@@ -136,7 +136,15 @@ def main() -> None:
     configure_logging()
     args = build_parser().parse_args()
     app = OilWatchApp()
-    HANDLERS[args.command](app, args)
+    try:
+        HANDLERS[args.command](app, args)
+    except CliError as failure:
+        # Printed exactly as the handler used to print it, so the message a
+        # person reads is unchanged; the difference is the status, which is what
+        # a script or an agent driving the CLI can see. These paths used to
+        # return normally and exit 0 — indistinguishable from success.
+        print(str(failure))
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

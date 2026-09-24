@@ -15,6 +15,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from oilwatch.cli import HANDLERS, build_parser, main
 
+#: The identity a `submit-requests` run is made in, passed explicitly rather than
+#: left to the parser's `contact.json` defaults. `submit-requests` now refuses an
+#: incomplete contact — a form filled with a blank name is an enquiry nobody can
+#: answer — so without this a machine with no contact.json would turn a
+#: pass-through test into a failure about identity.
+TEST_NAME = "A Person"
+TEST_EMAIL = "owner@example.test"
+TEST_POSTCODE = "AB21 0YA"
+IDENTITY_FLAGS = ["--name", TEST_NAME, "--email", TEST_EMAIL, "--postcode", TEST_POSTCODE]
+
 COMMANDS = [
     ["init"],
     ["discover"],
@@ -34,7 +44,7 @@ COMMANDS = [
     ["api-discover", "--url", "https://example.co.uk"],
     ["register"],
     ["login", "scottish_fuels"],
-    ["submit-requests", "--suppliers", "gleaner_oils,oilfast"],
+    ["submit-requests", "--suppliers", "gleaner_oils,oilfast", *IDENTITY_FLAGS],
     ["import-spreadsheet", "--path", "P:/Oil Prices.xls"],
     ["record-purchase", "Scottish Fuels", "--price-per-liter", "1.0894"],
 ]
@@ -72,6 +82,10 @@ class DispatchTests(unittest.TestCase):
     def _run(self, argv: list[str]):
         app = MagicMock()
         app.suppliers.return_value = []
+        # The service reports a sweep's failure as data, and the handler reads
+        # that: a bare MagicMock would answer `result.get("error")` with a truthy
+        # mock and read as a failed sweep.
+        app.monitor_email.return_value = {"recorded": []}
         out = io.StringIO()
         with (
             patch("oilwatch.cli.OilWatchApp", return_value=app),
@@ -146,10 +160,12 @@ class DispatchTests(unittest.TestCase):
             patch("oilwatch.cli.OilWatchApp"),
             patch.object(sys, "argv", ["oilwatch", "api-discover"]),
             contextlib.redirect_stdout(out),
+            self.assertRaises(SystemExit) as raised,
         ):
             main()
 
         self.assertIn("Error", out.getvalue())
+        self.assertEqual(raised.exception.code, 1, "a command that could not run is a failure")
 
     def test_login_rejects_a_supplier_it_has_no_url_for(self) -> None:
         out = io.StringIO()
@@ -157,11 +173,13 @@ class DispatchTests(unittest.TestCase):
             patch("oilwatch.browser_auth.BrowserAuth") as auth_cls,
             patch.object(sys, "argv", ["oilwatch", "login", "unknown_supplier"]),
             contextlib.redirect_stdout(out),
+            self.assertRaises(SystemExit) as raised,
         ):
             main()
 
         auth_cls.assert_not_called()
         self.assertIn("Error", out.getvalue())
+        self.assertEqual(raised.exception.code, 1)
 
     def test_login_uses_the_suppliers_own_url_and_always_closes(self) -> None:
         auth = MagicMock()
@@ -182,15 +200,57 @@ class DispatchTests(unittest.TestCase):
         with (
             patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
             patch("oilwatch.form_submit.submit_all", new=submit),
-            patch.object(sys, "argv", ["oilwatch", "submit-requests", "--suppliers", "gleaner_oils, oilfast"]),
+            patch.object(
+                sys,
+                "argv",
+                ["oilwatch", "submit-requests", "--suppliers", "gleaner_oils, oilfast", *IDENTITY_FLAGS],
+            ),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             main()
 
         self.assertEqual(submit.call_args.args[1], ["gleaner_oils", "oilfast"])
-        self.assertEqual(submit.call_args.kwargs["postcode"], self._expected_postcode())
+        self.assertEqual(submit.call_args.kwargs["postcode"], TEST_POSTCODE)
         auth.launch.assert_called_once_with(headless=True)
         auth.close.assert_called_once()
+
+    def test_submit_requests_refuses_an_incomplete_contact(self) -> None:
+        """An enquiry needs a name, an email and a postcode to be answerable.
+
+        None of the three has a literal default in source — they come from
+        contact.json or the OILWATCH_* variables — so an install with neither
+        used to fill six suppliers' forms with blanks and file the results as
+        requests still owed a reply.
+        """
+        auth = MagicMock()
+        out = io.StringIO()
+        with (
+            patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "oilwatch",
+                    "submit-requests",
+                    "--suppliers",
+                    "gleaner_oils",
+                    "--name",
+                    "",
+                    "--email",
+                    "",
+                    "--postcode",
+                    "",
+                ],
+            ),
+            contextlib.redirect_stdout(out),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            main()
+
+        auth.launch.assert_not_called()
+        self.assertEqual(raised.exception.code, 1)
+        # And it names which of the three is missing, so the fix is obvious.
+        self.assertIn("name, email, postcode", out.getvalue())
 
     def test_submit_requests_defaults_to_the_supplier_register(self) -> None:
         """No --suppliers falls back to the register, not to a literal in the CLI.
@@ -213,7 +273,7 @@ class DispatchTests(unittest.TestCase):
             patch("oilwatch.config.load_supplier_registry", return_value=registry),
             patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
             patch("oilwatch.form_submit.submit_all", new=submit),
-            patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests", *IDENTITY_FLAGS]),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             main()
@@ -246,7 +306,7 @@ class DispatchTests(unittest.TestCase):
             patch("oilwatch.config.load_supplier_registry", return_value=registry),
             patch("oilwatch.graph_email.GraphEmailMonitor", return_value=monitor),
             patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
-            patch.object(sys, "argv", ["oilwatch", "submit-requests", "--by-email"]),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests", "--by-email", *IDENTITY_FLAGS]),
             contextlib.redirect_stdout(out),
         ):
             main()
@@ -269,19 +329,15 @@ class DispatchTests(unittest.TestCase):
                 return_value={"suppliers": [], "excluded_domains": []},
             ),
             patch("oilwatch.browser_auth.BrowserAuth", return_value=auth),
-            patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests", *IDENTITY_FLAGS]),
             contextlib.redirect_stdout(out),
+            self.assertRaises(SystemExit) as raised,
         ):
             main()
 
         auth.launch.assert_not_called()
         self.assertIn("Error", out.getvalue())
-
-    @staticmethod
-    def _expected_postcode() -> str:
-        from oilwatch.identity import load_contact
-
-        return load_contact().postcode
+        self.assertEqual(raised.exception.code, 1)
 
     def test_a_submitted_form_is_recorded_as_a_request_owed_an_answer(self) -> None:
         """A form is answered later, by a person, so the ask has to be written down.
@@ -318,7 +374,7 @@ class DispatchTests(unittest.TestCase):
             patch("oilwatch.config.load_supplier_registry", return_value=registry),
             patch("oilwatch.browser_auth.BrowserAuth"),
             patch("oilwatch.form_submit.submit_all", new=submit),
-            patch.object(sys, "argv", ["oilwatch", "submit-requests"]),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests", *IDENTITY_FLAGS]),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             main()
@@ -366,7 +422,7 @@ class DispatchTests(unittest.TestCase):
             patch("oilwatch.cli.OilWatchApp", return_value=app),
             patch("oilwatch.config.load_supplier_registry", return_value=registry),
             patch("oilwatch.graph_email.GraphEmailMonitor", return_value=monitor),
-            patch.object(sys, "argv", ["oilwatch", "submit-requests", "--by-email"]),
+            patch.object(sys, "argv", ["oilwatch", "submit-requests", "--by-email", *IDENTITY_FLAGS]),
             contextlib.redirect_stdout(io.StringIO()),
         ):
             main()

@@ -85,6 +85,10 @@ class QuoteTests(AppTestCase):
         # reason every raising path shares, and it is what a consumer branches on
         # instead of parsing prose.
         self.assertTrue(all(r["reason"] == "site_error" for r in results))
+        # And the same shape as every other row: this one used to be written as a
+        # plain dict without `valid_until`, so the row a consumer is likeliest to
+        # index over was the one whose keys differed.
+        self.assertTrue(all(r.get("valid_until") for r in results))
         notify.assert_called_once()
 
     def test_quote_all_quotes_suppliers_concurrently(self) -> None:
@@ -863,6 +867,36 @@ class RefreshJobTests(AppTestCase):
 
         self.assertEqual(status["state"], "finished")
         self.assertEqual(status["results"], [])
+
+    def test_a_sequential_sweep_still_reports_progress(self) -> None:
+        """``quote_max_workers: 1`` must not leave ``done`` standing at zero.
+
+        The counter was advanced only inside the pool branch, so a job without a
+        pool — the documented one-worker setting, or fewer than two suppliers —
+        reported "running, 0 of N" for its whole, slow duration and then jumped
+        straight to finished, which is the one thing the counter exists not to do.
+        """
+        self.app.db.init_schema()
+        for name in ("Alpha Fuels", "Beta Fuels"):
+            self.app.db.upsert_supplier(
+                {"name": name, "website": f"https://{name.split()[0].lower()}.example"}
+            )
+        job_id = self._job(total=2)
+        reported: list[int] = []
+        progress = self.app.db.progress_refresh_job
+
+        def record(_job_id: str, done: int) -> None:
+            reported.append(done)
+            progress(_job_id, done)
+
+        with (
+            patch.object(self.app.quotes, "quote_supplier", side_effect=_recording_quote(set())),
+            patch.object(self.app.db, "progress_refresh_job", side_effect=record),
+        ):
+            self.app.quote_all(max_workers=1, job_id=job_id)
+
+        self.assertEqual(reported, [1, 2], "each supplier must advance the counter")
+        self.assertEqual(self.app.refresh_job_status(job_id)["done"], 2)
 
     def test_a_job_that_raises_is_recorded_as_failed_and_still_raises(self) -> None:
         """The worker's exit code matters to whoever runs it by hand.

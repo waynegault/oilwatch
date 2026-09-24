@@ -162,9 +162,14 @@ class APIDiscoveryTool:
         Returns:
             Dict with discovered API endpoints
         """
-        await self._setup(headless=True)
-
         try:
+            # Inside the try: ``_setup`` starts the driver and launches Chromium
+            # before this method ever has a page, and every way it can fail —
+            # the driver, the launch, the context, the page — happens here. Run
+            # outside, that failure skipped ``_close`` entirely and left a
+            # Chromium subprocess and a dead driver behind it.
+            await self._setup(headless=True)
+
             # Navigate to page
             if self._page:
                 await self._page.goto(url, wait_until="domcontentloaded")

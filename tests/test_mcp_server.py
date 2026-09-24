@@ -242,6 +242,37 @@ class RefreshCooldownTests(unittest.TestCase):
         self.assertEqual(result["seconds_ago"], 42)
         self.assertIn("already running", result["note"])
 
+    def test_a_background_request_while_one_runs_starts_no_second_worker(self) -> None:
+        """The guard is not exempt for ``background``, and that is where it counts.
+
+        A client whose per-call budget is shorter than a sweep is the one told to
+        use ``background=True``, so it is also the one that retries — and a second
+        detached worker opens every browser again, which is the whole cost the
+        already-running check exists to prevent.
+        """
+        app = self._app(
+            recent=None,
+            sweep={
+                "in_progress": True,
+                "stale": False,
+                "started_at": "2026-09-18T09:00:00",
+                "started_by": "mcp",
+                "seconds_ago": 42,
+                "finished_at": None,
+            },
+        )
+        with (
+            patch("oilwatch.mcp_server.load_contact", return_value=Contact(postcode="ZZ9 9ZZ")),
+            patch("oilwatch.mcp_server._get_app", return_value=app),
+        ):
+            result = mcp_server.refresh_prices(background=True)
+
+        app.start_background_sweep.assert_not_called()
+        app.quote_all.assert_not_called()
+        self.assertTrue(result["in_progress"])
+        self.assertNotIn("job_id", result)
+        self.assertIn("already running", result["note"])
+
     def test_a_recent_sweep_is_not_repeated(self) -> None:
         app = self._app({"refreshed_at": "2026-09-18T09:00:00", "minutes_ago": 2.5})
         with (

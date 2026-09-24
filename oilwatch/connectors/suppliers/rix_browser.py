@@ -29,7 +29,6 @@ class RixBrowserConnector(SyncBrowserConnector):
     source = "rix_browser"
     price_description = "Rix quote tool"
     no_price_note = "Could not extract a price from the Rix results page."
-    order_notes = "Order via the Rix quote tool."
     #: collect_price returns the Standard option's inclusive total per litre.
     price_is_inclusive = True
 
@@ -42,9 +41,13 @@ class RixBrowserConnector(SyncBrowserConnector):
     ) -> tuple[float | None, dict[str, Any]]:
         postcode = context.get("postcode", "") or ""
         email = context.get("email", "") or load_contact().email
-        # Ofcom drama number, not a real one: Rix requires a phone before it
-        # will quote, and it is never used for anything but filling the form.
-        phone = context.get("phone", "") or "07700 900123"
+        # The owner's own number when one is configured, and an Ofcom drama
+        # number only as the last resort: Rix refuses to quote without a phone on
+        # the form, and AGENTS.md is explicit that a form asking for the owner's
+        # number gets it. The context never carried one — `QuoteService` builds it
+        # with the postcode and the home label — so this used to send the drama
+        # number every time, to a supplier who cannot call it back.
+        phone = context.get("phone", "") or load_contact().phone or "07700 900123"
 
         page.goto(self.quote_url, wait_until="domcontentloaded", timeout=60000)
         page.wait_for_timeout(4000)

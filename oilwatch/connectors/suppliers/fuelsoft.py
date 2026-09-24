@@ -48,7 +48,6 @@ class FuelsoftConnector(SyncBrowserConnector):
     source = "fuelsoft"
     price_description = "Fuelsoft quote form"
     no_price_note = "Could not extract a price from the quote response."
-    order_notes = "Order via the supplier's Fuelsoft portal."
     #: collect_price returns the standard option's inclusive total per litre.
     price_is_inclusive = True
 

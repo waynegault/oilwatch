@@ -535,12 +535,17 @@ class BoilerJuiceBrowserConnector(BrowserConnector):
             # Get page content
             content = await page.content()
             
-            # Look for price patterns
+            # Every pattern is anchored to a per-litre unit or to a two-word
+            # label. There used to be a bare `price.*?£?(\d+\.\d{2})` and a
+            # `total.*?…` beside it, and those match the *delivery total*: on
+            # `£1,195.70` the comma is simply skipped, `\d+` starts at "195", and
+            # the capture normalises to £1.957/L and is then lifted 5% — a wrong
+            # price in the database, which the register's own note says this
+            # connector must not produce ("the inclusive 'You Pay' option totals
+            # … are no longer matched"). No price beats a fabricated one.
             patterns = [
                 r'£?(\d+\.\d{2})\s*(?:per\s*)?litre',
                 r'£?(\d+\.\d{2})\s*p(?:ence)?/l',
-                r'price.*?£?(\d+\.\d{2})',
-                r'total.*?£?(\d+\.\d{2})',
                 r'(\d+)p\s*/\s*l',
                 r'unit\s*price.*?£?(\d+\.\d{2})',
             ]

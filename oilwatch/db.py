@@ -761,12 +761,20 @@ class Database:
         than merely matching the offer is what keeps old mail from undoing a
         newer statement, which matters because the sweep reads the inbox and the
         bin together, not in the order the messages arrived.
+
+        Nothing the newer message does not restate is erased, though. A re-send
+        that repeats the offer without naming an expiry parses to ``expires_at``
+        of ``None``, and ``None`` means "no expiry given" - i.e. never expires -
+        to :meth:`active_discounts`, so writing it through would turn a lapsed
+        code back into a live one and shade it into every comparison. The
+        deadline already on record is kept instead, and the same for the terms:
+        both are properties of the offer, not of the message that repeats it.
         """
         observed_at = record.get("observed_at") or utcnow_naive().isoformat()
         with closing(self.connect()) as conn, conn:
             existing = conn.execute(
                 """
-                SELECT id, observed_at FROM discounts
+                SELECT id, observed_at, expires_at, terms FROM discounts
                 WHERE supplier_id IS ? AND code IS ? AND amount_gbp = ?
                   AND min_litres IS ? AND max_litres IS ?
                 """,
@@ -787,8 +795,8 @@ class Database:
                         WHERE id = ?
                         """,
                         (
-                            record.get("expires_at"),
-                            record.get("terms", ""),
+                            record.get("expires_at") or existing["expires_at"],
+                            record.get("terms") or existing["terms"],
                             record.get("source", "email"),
                             observed_at,
                             existing["id"],

@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from oilwatch.connectors import get_connector_for_supplier
+from oilwatch.connectors import suppliers as supplier_registry
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -31,6 +32,38 @@ class ConnectorRoutingTests(unittest.TestCase):
             {"name": "Phone Only", "website": "https://unknown.example", "connector_type": "manual"}
         )
         self.assertEqual(type(connector).__name__, "ManualConnector")
+
+
+class ConnectorRegistryTests(unittest.TestCase):
+    """Every name in the routing tables must resolve to a class that exists.
+
+    ``_SUPPLIER_CONNECTORS`` maps a domain to connector *names* and ``_CONNECTORS``
+    maps those names to the modules holding them, so a typo in either — or a class
+    renamed without its entry — is an ``AttributeError`` raised inside a sweep, at
+    the one moment nobody can see it coming. Reading the names out of the tables
+    rather than restating them here is the point: a list copied into the test
+    would drift exactly as the tables do.
+    """
+
+    def test_every_routed_name_resolves_to_a_class(self) -> None:
+        for domain, (http_name, browser_name) in supplier_registry._SUPPLIER_CONNECTORS.items():
+            for name in (http_name, browser_name):
+                if name is None:
+                    continue
+                with self.subTest(domain=domain, connector=name):
+                    resolved = getattr(supplier_registry, name)
+                    self.assertIsInstance(resolved, type, f"{name} is not a connector class")
+
+    def test_every_mapped_domain_is_reachable_through_the_router(self) -> None:
+        """And the router actually takes them, which is what a caller does."""
+        for domain, (http_name, browser_name) in supplier_registry._SUPPLIER_CONNECTORS.items():
+            if not (http_name or browser_name):
+                continue
+            with self.subTest(domain=domain):
+                connector = get_connector_for_supplier(
+                    {"name": f"Site {domain}", "website": f"https://{domain}"}
+                )
+                self.assertIsNotNone(connector, f"{domain} routes to nothing")
 
 
 class ConnectorImportCostTests(unittest.TestCase):

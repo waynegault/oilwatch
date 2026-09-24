@@ -71,6 +71,21 @@ class ValueOilsConnectorTests(unittest.TestCase):
             result = ValueOilsConnector().quote(self.supplier, 1000, {})
         self.assertEqual(result.status, "manual_action_required")
 
+    def test_the_note_names_the_page_and_leaves_the_number_out(self) -> None:
+        """A note must not offer a phone route the app never takes.
+
+        The number stays on the record as contact data — the app asks by form or
+        by email and never rings a supplier — but this note carried one until it
+        was removed, so a reader was handed a way to ask that no tool here uses.
+        """
+        supplier = {**self.supplier, "phone": "03300 570 857", "email": "sales@valueoils.com"}
+        with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as Client:
+            Client.return_value.get.return_value = fake_response("<html>no price</html>")
+            result = ValueOilsConnector().quote(supplier, 1000, {})
+
+        self.assertNotIn("03300 570 857", result.notes)
+        self.assertIn("valueoils.com/regions/scotland/aberdeenshire/", result.notes)
+
     def test_a_transport_failure_is_reported_as_an_error(self) -> None:
         """A site that will not answer is an error, not a missing price."""
         with patch("oilwatch.connectors.suppliers.valueoils.httpx.Client") as Client:

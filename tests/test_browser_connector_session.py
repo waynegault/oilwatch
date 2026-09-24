@@ -114,6 +114,24 @@ class FallbackTests(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertIn("HTTP fallback failed", result.notes)
 
+    def test_homefuels_reads_a_decimal_pence_figure_whole(self) -> None:
+        """The fallback must not shave "112.87 pence per litre" down to 87p.
+
+        Its pence pattern stopped at the whole pence, so the leading digits were
+        simply skipped and the figure landed at 87p — a fifth of the real price —
+        where the HTTP connector's own pattern read the same page correctly. The
+        two are duplicates of one reading and must not disagree.
+        """
+        result = self._fallback(
+            HomeFuelsDirectBrowserConnector(), FakeAsyncClient("112.87 pence per litre")
+        )
+
+        self.assertEqual(result.status, "ok")
+        price_per_liter = result.price_per_liter
+        assert price_per_liter is not None
+        # 112.87p ex-VAT -> +5% VAT -> £1.1851/L (the broken reading gave £0.9135).
+        self.assertAlmostEqual(price_per_liter, 1.1851, places=4)
+
     def test_homefuels_reads_the_pence_average_from_the_fallback_page(self) -> None:
         result = self._fallback(HomeFuelsDirectBrowserConnector(), FakeAsyncClient("UK Average 138 pence"))
 

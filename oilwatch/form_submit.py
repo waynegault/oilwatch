@@ -238,13 +238,35 @@ def submit_request(
         # Wait for the submission to be accepted (the form is replaced or the
         # page navigates away) rather than a flat 8s. Bounded by the old value,
         # so it can only return sooner.
-        wait_until(
+        accepted = wait_until(
             lambda: not _fields_present(driver, fields),
             timeout_s=8.0,
             what="the enquiry form to be accepted",
         )
     except Exception as exc:  # noqa: BLE001 - a submit that raises is reported as an error result
         return {"supplier": supplier_key, "status": "error", "message": f"submit: {exc}"}
+
+    if not accepted:
+        # The click returned and the form is still sitting there, which is what a
+        # quietly-refused submit looks like: the site's own validation rejects it,
+        # or its handler swallows the event, and nothing navigates. Scottish
+        # Fuels' sign-in failed in exactly this shape (measured 2026-09-15: a
+        # click returning in 0.1s, no POST sent, no error raised), so "the click
+        # did not raise" is not "the form was submitted".
+        #
+        # It is also why this does not borrow the word "submitted": the status is
+        # what `_record_submitted_requests` filters on, and a request written
+        # down here comes back later as `awaiting_reply` — the tool claiming the
+        # owner asked a supplier he may never have reached.
+        return {
+            "supplier": supplier_key,
+            "status": "unconfirmed",
+            "message": (
+                f"The form at {form['url']} was filled and submitted, but the page "
+                "did not confirm it was accepted. Open that page to check, or "
+                "re-run to try again."
+            ),
+        }
 
     return {"supplier": supplier_key, "status": "submitted", "message": "Form submitted; awaiting email reply."}
 

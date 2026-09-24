@@ -68,7 +68,9 @@ read — the supplier is contactable instead) and **`error`** (the attempt itsel
 raised). `price_per_liter` and `total_price` are `null` for everything except
 `ok`. Do not confuse it with a supplier row's `status`
 (`active`/`inactive`/`manual_review`) or with the result of a form submission,
-which uses `submitted`, `pending` and so on.
+which uses `submitted` (the page acknowledged it and the ask is on record),
+`unconfirmed` (it did not, so nothing was written to `quote_requests` and it will
+not appear in `awaiting_reply`), `pending` and so on.
 
 ## When a price is missing, read its `reason`
 

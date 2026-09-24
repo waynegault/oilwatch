@@ -461,6 +461,46 @@ class DuplicateObservationTests(unittest.TestCase):
         self.assertEqual(active[0]["expires_at"], (now + timedelta(hours=48)).isoformat())
         self.assertEqual(active[0]["observed_at"], now.isoformat())
 
+    def test_a_resend_that_states_no_expiry_keeps_the_window_it_replaces(self) -> None:
+        """A vaguer re-send must not erase the deadline an earlier one gave.
+
+        A body with no expiry statement parses to ``expires_at`` of ``None``,
+        and ``active_discounts`` reads ``None`` as "no expiry given", i.e. never
+        expires - so writing it through would resurrect a lapsed code and shade
+        it into every comparison built on it, which is the same defect the
+        re-send refresh was added to fix, pointing the other way.
+        """
+        now = utcnow_naive()
+        offer = {
+            "supplier_id": self.supplier_id,
+            "code": "KJHA154306",
+            "amount_gbp": 12.0,
+            "min_litres": 1000,
+            "max_litres": 1999,
+        }
+        self.db.record_discount(
+            {
+                **offer,
+                "observed_at": now.isoformat(),
+                "expires_at": (now + timedelta(hours=48)).isoformat(),
+                "terms": "cannot be combined with other offers",
+            }
+        )
+        self.db.record_discount(
+            {
+                **offer,
+                "observed_at": (now + timedelta(hours=1)).isoformat(),
+                "expires_at": None,
+                "terms": "",
+            }
+        )
+
+        active = self.db.active_discounts()
+        self.assertEqual(len(active), 1)
+        self.assertEqual(active[0]["expires_at"], (now + timedelta(hours=48)).isoformat())
+        self.assertEqual(active[0]["terms"], "cannot be combined with other offers")
+        self.assertEqual(active[0]["observed_at"], (now + timedelta(hours=1)).isoformat())
+
 
 class QuoteRequestTests(unittest.TestCase):
     """A request stays owed until a price answers it, and only a price does."""

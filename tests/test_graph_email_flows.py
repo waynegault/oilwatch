@@ -335,14 +335,6 @@ class SweepTests(unittest.TestCase):
 
 
 class ClientTests(unittest.TestCase):
-    def test_fetch_unseen_returns_the_messages(self) -> None:
-        monitor = _monitor()
-        response = MagicMock()
-        response.json.return_value = {"value": [{"id": "1"}]}
-        with patch("oilwatch.graph_email.httpx.get", return_value=response) as get:
-            self.assertEqual(monitor.fetch_unseen({"access_token": "a"}), [{"id": "1"}])
-        self.assertIn("isRead eq false", get.call_args.kwargs["params"]["$filter"])
-
     def test_fetch_candidates_survives_an_unavailable_folder(self) -> None:
         monitor = _monitor()
         good = MagicMock()

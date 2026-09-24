@@ -27,15 +27,21 @@ class BrowserConnector(BaseConnector, ABC):
     Provides:
     - Automatic browser management
     - Login functionality with credential storage
-    - API request interception
+    - Optional API request interception (off by default; see `_intercept_requests`)
     - Screenshot capture for debugging
     """
     
-    #: Whether to route every request through Python for API discovery. Some
-    #: sites stall when their requests are re-fetched that way (ValueOils' SSL
-    #: handshake) even though a plain browser loads them, so a connector may
-    #: opt out and keep only its own explicit waits.
-    _intercept_requests: bool = True
+    #: Whether to route every request through Python, for API discovery.
+    #:
+    #: Off by default, because nothing in the app consumes the capture:
+    #: ``discover_api``'s only caller is its own test — ``oilwatch api-discover``
+    #: uses :mod:`oilwatch.api_discovery` — so a connector that leaves this on
+    #: pays a Python round-trip per request on every quote for a reader that does
+    #: not exist. ValueOils had to opt out for a stronger reason: its SSL
+    #: handshake stalls when its requests are re-fetched this way, even though a
+    #: plain browser loads them. A connector that wants the traffic for a
+    #: deliberate discovery run can still turn it on.
+    _intercept_requests: bool = False
 
     def __init__(self) -> None:
         self.supplier_key = ""

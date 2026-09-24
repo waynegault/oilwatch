@@ -17,11 +17,13 @@ table that was never copied.
 
 **Withheld, and verified withheld.** Tables that identify the owner or his mail
 are not copied at all (``sender_judgements``, ``processed_messages``, ``orders``,
-``sweeps``, ``refresh_jobs``), values that identify him are nulled on the rows
-that are kept (``discounts.code``, ``quote_requests.postcode``), and his own
-details — read from ``oilwatch.identity`` rather than hardcoded, so this cannot
-drift from what the connectors use — are replaced with ``<redacted-…>`` wherever
-they survive inside a kept note. The build then checks its own output: it scans
+``sweeps``, ``refresh_jobs``), values that identify him or his offers are left
+out of the copy so they read NULL on the rows that are kept (``WITHHELD_VALUES``
+names them, and ``check_the_withheld_list_agrees`` refuses a column that is named
+there and carried in ``KEPT_COLUMNS`` at once), and his own details — read from
+``oilwatch.identity`` rather than hardcoded, so this cannot drift from what the
+connectors use — are replaced with ``<redacted-…>`` wherever they survive inside
+a kept note. The build then checks its own output: it scans
 every text column *and* the file's bytes for each of those details and for
 samples drawn from the tables it dropped, and fails rather than writing a
 snapshot that still carries one.
@@ -132,6 +134,30 @@ WITHHELD_VALUES = {
 PASSWORD = re.compile(r"(?i)\b(password|passwd|pwd)\b\s*[:=]\s*(?!<redact)\S+")
 
 
+def check_the_withheld_list_agrees() -> None:
+    """Refuse to build if a column is listed as withheld *and* carried across.
+
+    The withholding is done by leaving a column out of ``KEPT_COLUMNS``, so
+    ``WITHHELD_VALUES`` is a statement of intent rather than something the copy
+    reads - which means the two lists can drift apart without anything failing.
+    Adding "postcode" or "code" back to ``KEPT_COLUMNS`` would copy the owner's
+    delivery postcode and every supplier's discount code straight through, and
+    the leftovers scan would not catch it: it knows the owner's own details and
+    a sample from the dropped tables, not a supplier's codes. So the two lists
+    are checked against each other before anything is written.
+    """
+    both = sorted(
+        f"{table}.{column}"
+        for table, column in WITHHELD_VALUES
+        if column in KEPT_COLUMNS.get(table, [])
+    )
+    if both:
+        raise SystemExit(
+            "these columns are withheld and kept at once, so the copy would carry "
+            "them verbatim: " + ", ".join(both)
+        )
+
+
 def redactions(contact: object, home_label: str) -> list[tuple[str, str]]:
     """The literal strings to replace, longest first, and what to put there.
 
@@ -164,6 +190,7 @@ def scrub(value: object, replacements: list[tuple[str, str]]) -> object:
 
 def build(source: Path, target: Path) -> dict[str, int]:
     """Write the snapshot, then prove it carries none of the withheld values."""
+    check_the_withheld_list_agrees()
     if not source.exists():
         raise SystemExit(f"no live database at {source}")
     if target.exists():
@@ -301,6 +328,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.check:
+        check_the_withheld_list_agrees()
         live = sqlite3.connect(f"file:{SOURCE}?mode=ro", uri=True)
         for table, columns in KEPT_COLUMNS.items():
             count = live.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]

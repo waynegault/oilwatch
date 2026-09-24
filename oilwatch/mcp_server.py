@@ -198,9 +198,12 @@ def refresh_prices(
     ``no_quote_page`` (no web quote exists; use the contact details),
     ``quote_by_request`` (a quote page exists but answers a person, so the
     supplier must be asked rather than scraped),
+    ``browser_required`` (this path cannot price the supplier and browser
+    automation can),
     ``login_not_confirmed`` (an authenticated portal did not sign in),
-    ``captcha``, or ``site_error`` — so a failure is reportable without reading
-    ``notes``. ``None`` means unclassified, not "no reason".
+    ``captcha``, ``no_price_found`` (the page answered and carried no price), or
+    ``site_error`` — so a failure is reportable without reading ``notes``.
+    ``None`` means unclassified, not "no reason".
 
     ``background=True`` starts the sweep as its own detached process and returns
     ``{job_id, state, started_at, total}`` at once, for a client whose per-call
@@ -218,35 +221,17 @@ def refresh_prices(
     ``started_by`` and ``seconds_ago``, because a running sweep's own rows appear
     only as each supplier finishes, so thirty seconds in it has left nothing for
     the cooldown to find. That is what stops a timed-out retry from opening every
-    browser a second time. ``force=True`` sweeps regardless.
+    browser a second time — and it covers ``background=True`` as well: that is
+    the form a client with a short per-call budget is told to use, so it is the
+    one such a client retries with, and a second detached worker would open every
+    browser again. ``force=True`` sweeps regardless.
     """
     app = _get_app()
 
-    if background:
-        started = app.start_background_sweep(
-            started_by="mcp", postcode=postcode or load_contact().postcode
-        )
-        return {
-            "cached": False,
-            "in_progress": True,
-            "job_id": started["job_id"],
-            "state": started["state"],
-            "started_at": started["started_at"],
-            "started_by": started["started_by"],
-            "total": started["total"],
-            "minutes": 1,
-            "note": (
-                "The sweep is running as its own process and will outlive this "
-                f"session. Poll refresh_status('{started['job_id']}') for progress "
-                "and results, or read current_prices for the prices on record."
-            ),
-        }
-
     if not force:
-        # A sweep already running is the more specific answer, and checked first:
-        # its own rows land only as each supplier finishes, so the cooldown below
-        # cannot see it yet — this is what stops a timed-out client's retry
-        # launching every browser a second time.
+        # A sweep already running is the more specific answer, and checked before
+        # either path below starts one: its own rows land only as each supplier
+        # finishes, so the cooldown cannot see it yet.
         running = app.sweep_state()
         if running["in_progress"]:
             return {
@@ -264,20 +249,43 @@ def refresh_prices(
                 ),
             }
 
-        recent = app.refresh_recently_done(REFRESH_COOLDOWN_MINUTES)
-        if recent is not None:
-            return {
-                "cached": True,
-                "cooldown_minutes": REFRESH_COOLDOWN_MINUTES,
-                "refreshed_at": recent["refreshed_at"],
-                "minutes_ago": recent["minutes_ago"],
-                "results": [],
-                "note": (
-                    "No sweep was started: one ran "
-                    f"{recent['minutes_ago']} minutes ago. Read current_prices for "
-                    "the prices on record, or pass force=true for a fresh sweep."
-                ),
-            }
+        if not background:
+            # The cooldown is deliberately not consulted for a background request:
+            # that form is a deliberate ask from a client that knows a sweep is
+            # slow, not the accidental repeat the cooldown exists to absorb.
+            recent = app.refresh_recently_done(REFRESH_COOLDOWN_MINUTES)
+            if recent is not None:
+                return {
+                    "cached": True,
+                    "cooldown_minutes": REFRESH_COOLDOWN_MINUTES,
+                    "refreshed_at": recent["refreshed_at"],
+                    "minutes_ago": recent["minutes_ago"],
+                    "results": [],
+                    "note": (
+                        "No sweep was started: one ran "
+                        f"{recent['minutes_ago']} minutes ago. Read current_prices for "
+                        "the prices on record, or pass force=true for a fresh sweep."
+                    ),
+                }
+
+    if background:
+        started = app.start_background_sweep(
+            started_by="mcp", postcode=postcode or load_contact().postcode
+        )
+        return {
+            "cached": False,
+            "in_progress": True,
+            "job_id": started["job_id"],
+            "state": started["state"],
+            "started_at": started["started_at"],
+            "started_by": started["started_by"],
+            "total": started["total"],
+            "note": (
+                "The sweep is running as its own process and will outlive this "
+                f"session. Poll refresh_status('{started['job_id']}') for progress "
+                "and results, or read current_prices for the prices on record."
+            ),
+        }
 
     results = app.quote_all(
         postcode=postcode or load_contact().postcode,

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,11 +18,13 @@ from playwright.async_api import Browser, Page, Playwright, async_playwright
 
 from oilwatch.connectors.protocols import PageLike
 from oilwatch.credentials import (
+    CredentialStoreUnreadable,
     generate_supplier_password,
     store_supplier_credentials,
 )
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
+from oilwatch.models import utcnow_naive
 
 log = get_logger("auto_register")
 
@@ -258,7 +259,10 @@ class AccountRegistrar:
             "password": password,
             "status": "pending",
             "message": "",
-            "timestamp": datetime.now().isoformat(),
+            # Naive UTC, like every other stamp in the project: this one used to
+            # be local time, an hour ahead of the UTC values it sits beside in
+            # the same JSON in summer.
+            "timestamp": utcnow_naive().isoformat(),
         }
 
         try:
@@ -285,16 +289,41 @@ class AccountRegistrar:
             # the credential is encrypted at rest (see oilwatch.credentials).
             # The generated password stays in the structured result for the
             # manual sign-in it exists to enable.
+            #
+            # Nor does it claim the credentials were stored: the store happens
+            # below, in the finally, and a sentence written before then can only
+            # be a guess about it. `credentials_stored` carries the answer.
             result["message"] = (
-                "Auto-registration encountered issues. Credentials stored; "
-                "sign in manually if the account was created."
+                "Auto-registration encountered issues. Sign in manually if the "
+                "account was created."
             )
         finally:
             # Whatever happened, the account may exist now, so the password is
             # kept for a manual sign-in, and the browser is closed on every path,
             # including the failure one.
-            store_supplier_credentials(form.key, password, form.name, email)
-            await self._close()
+            #
+            # Nested, not sequential: storing is a file write and a DPAPI call,
+            # and a throw from it would otherwise skip ``_close`` entirely —
+            # leaving this supplier's browser open and aborting the loop, so the
+            # suppliers after it are never attempted at all.
+            try:
+                store_supplier_credentials(form.key, password, form.name, email)
+                result["credentials_stored"] = True
+            except CredentialStoreUnreadable as exc:
+                # The store on disk could not be read, so nothing is written: the
+                # file may hold the other suppliers' accounts, and overwriting it
+                # would replace them with this one entry. Recorded on this
+                # supplier's own result rather than raised, so the rest of the run
+                # still happens — and so the run's own report cannot claim a
+                # password was saved when it was not. The password itself is in
+                # the result above, for the manual sign-in.
+                result["credentials_stored"] = False
+                result["message"] += (
+                    " The credentials were NOT stored - the credential file could "
+                    f"not be read, so nothing was written over it ({exc})."
+                )
+            finally:
+                await self._close()
 
         return result
 
@@ -359,8 +388,8 @@ class AccountRegistrar:
         if not text:
             # An empty banner says nothing either way. Calling it a review keeps
             # the owner's eye on it instead of leaving the status at pending.
-            return "manual_review", "The form reported an error with no message. Credentials stored."
-        return "manual_review", f"Form issue: {text[:100]}. Credentials stored."
+            return "manual_review", "The form reported an error with no message."
+        return "manual_review", f"Form issue: {text[:100]}."
 
     async def register_all_suppliers(
         self,

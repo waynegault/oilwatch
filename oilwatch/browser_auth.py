@@ -14,11 +14,16 @@ Approach (adapted from the user's Ancestry project):
 
 Usage:
     auth = BrowserAuth("scottish_fuels")
-    if not auth.has_session():
-        auth.interactive_login("https://quote.scottishfuels.co.uk/quote/")
-    driver = auth.launch()      # already signed in
+    auth.interactive_login("https://quote.scottishfuels.co.uk/quote/")  # once
+    driver = auth.launch()      # signed in, from the persisted profile
     ...                        # scrape
     auth.close()
+
+Signing in is a one-off, and nothing here can tell "signed in" from "signed out"
+without asking the site: the profile is created by the first run, so its
+existence says a browser has been here, not that the session is still good. The
+connector reports a lapsed session when the site redirects it to the sign-in
+page, which is the only honest signal.
 """
 
 from __future__ import annotations
@@ -186,9 +191,6 @@ class BrowserAuth:
 
     def cookies_path(self) -> Path:
         return self.profile_dir / "cookies.json"
-
-    def has_session(self) -> bool:
-        return self.cookies_path().exists()
 
     def interactive_login(self, url: str) -> None:
         """Open a visible browser and wait for the user to sign in manually.
@@ -574,18 +576,6 @@ class BrowserAuth:
         cookies = self.driver.get_cookies()
         path.write_text(json.dumps(cookies, indent=2), encoding="utf-8")
         return path
-
-    def load_cookies(self, path: Path | None = None) -> None:
-        path = path or self.cookies_path()
-        if not path.exists():
-            return
-        assert self.driver is not None
-        for cookie in json.loads(path.read_text(encoding="utf-8")):
-            try:
-                self.driver.add_cookie(cookie)
-            except Exception as exc:  # noqa: BLE001 - domain/path mismatch is normal
-                log.debug("skipped cookie that does not apply to this domain: %s", exc)
-                continue
 
     def close(self) -> None:
         if self.driver is not None:

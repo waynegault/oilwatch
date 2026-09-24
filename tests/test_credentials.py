@@ -15,6 +15,7 @@ from oilwatch.credentials import (
     ENVELOPE_FORMAT,
     ENVELOPE_KEY,
     CredentialManager,
+    CredentialStoreUnreadable,
     get_credential_manager,
     get_supplier_credentials,
     store_supplier_credentials,
@@ -83,12 +84,18 @@ class EncryptionAtRestTests(unittest.TestCase):
         self.assertEqual(creds["password"], "plain")
         self.assertFalse(manager.is_encrypted)
 
-    def test_resave_upgrades_a_legacy_file(self) -> None:
+    def test_a_legacy_file_is_rewritten_encrypted_on_the_next_save(self) -> None:
+        """Upgrading the format is a side effect of saving, not a command.
+
+        ``resave()`` existed only to do this, had no caller, and its advertised
+        upgrade already happens on any save — so this pins the upgrade itself,
+        through the path that actually runs.
+        """
         self.path.write_text(json.dumps({"credentials": {"valueoils": {"password": "plain"}}}), encoding="utf-8")
         manager = CredentialManager(self.path)
         self.assertFalse(manager.is_encrypted)
 
-        self.assertTrue(manager.resave())
+        manager.set_credentials("oilfast", "hunter3")
 
         reopened = CredentialManager(self.path)
         self.assertTrue(reopened.is_encrypted)
@@ -112,6 +119,16 @@ class EncryptionAtRestTests(unittest.TestCase):
         self.assertFalse(manager.is_encrypted)
         self.assertIn("plain", self.path.read_text(encoding="utf-8"))
 
+    def test_no_leftover_temp_file_beside_the_store(self) -> None:
+        """The write goes through a temp file, and the temp file must not stay.
+
+        Nothing should be left in ``config/`` for the next reader — or the next
+        ``git status`` — to trip over.
+        """
+        CredentialManager(self.path).set_credentials("valueoils", "hunter2")
+
+        self.assertEqual(sorted(p.name for p in self.path.parent.iterdir()), [self.path.name])
+
 
 class DpapiRoundTripTests(unittest.TestCase):
     @unittest.skipUnless(secretstore.available(), "DPAPI is Windows-only")
@@ -126,7 +143,14 @@ class DpapiRoundTripTests(unittest.TestCase):
 
 
 class LoadFailureTests(unittest.TestCase):
-    """A credentials file that cannot be read or parsed must not crash the CLI."""
+    """A credentials file that cannot be read or parsed must not crash the CLI.
+
+    Reporting instead of crashing is only half of it: the *other* half is not
+    writing over it. A file that reads as an empty store is one the quote path
+    answers by generating a fresh password, which is how a store that merely
+    got truncated turns into a supplier account whose password no longer
+    matches what is on disk.
+    """
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -143,15 +167,41 @@ class LoadFailureTests(unittest.TestCase):
         self.assertIn("could not read", error)
         self.assertEqual(manager.list_suppliers(), [])
 
-    def test_a_corrupt_file_is_treated_as_no_credentials(self) -> None:
-        for content in ("this is not json", '["not", "an", "object"]'):
+    def test_a_corrupt_file_is_reported_rather_than_read_as_empty(self) -> None:
+        for content, expected in (
+            ("this is not json", "could not parse"),
+            ('["not", "an", "object"]', "not a credentials store"),
+        ):
             with self.subTest(content=content):
                 self.path.write_text(content, encoding="utf-8")
 
                 manager = CredentialManager(self.path, encrypt=False)
 
+                # Readable as "nothing here" for every caller that only asks for
+                # a credential, so the CLI still runs...
                 self.assertEqual(manager.list_suppliers(), [])
                 self.assertIsNone(manager.get_credentials("valueoils"))
+                # ...and unmistakable for the one that decides whether to write.
+                error = manager.load_error
+                assert error is not None, "a corrupt store must say so"
+                self.assertIn(expected, error)
+
+    def test_a_store_that_could_not_be_read_is_never_written_over(self) -> None:
+        """The write is what turns a readable-in-principle file into a lost one.
+
+        The file may hold the other suppliers' accounts, and the entry this
+        process would write is a password generated seconds ago for one of them.
+        Refusing keeps the original bytes for whoever can repair them.
+        """
+        original = '{"credentials": {"valueoils": {"password": "hun'
+        self.path.write_text(original, encoding="utf-8")
+        manager = CredentialManager(self.path, encrypt=False)
+
+        with self.assertRaises(CredentialStoreUnreadable) as raised:
+            manager.set_credentials("valueoils", "a-freshly-generated-one")
+
+        self.assertIn("refusing to write", str(raised.exception))
+        self.assertEqual(self.path.read_text(encoding="utf-8"), original)
 
 
 class ManagerApiTests(unittest.TestCase):

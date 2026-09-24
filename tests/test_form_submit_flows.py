@@ -65,10 +65,18 @@ class FakeField:
 
 
 class FakeDriver:
-    def __init__(self, *, fields=None, submit_raises: bool = False, submit_missing: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fields=None,
+        submit_raises: bool = False,
+        submit_missing: bool = False,
+        form_still_present: bool = False,
+    ) -> None:
         self._fields = fields or {}
         self._submit_raises = submit_raises
         self._submit_missing = submit_missing
+        self._form_still_present = form_still_present
         self.urls: list[str] = []
         self.scripts: list[str] = []
         self.submit: FakeField | None = None
@@ -93,7 +101,10 @@ class FakeDriver:
         return self._fields[name]
 
     def find_elements(self, by, selector: str) -> list:
-        return []
+        # What the post-submit wait asks: the enquiry form's own fields, still on
+        # the page. Empty means the form was replaced or the page moved on, which
+        # is what an accepted submission looks like.
+        return [FakeField()] if self._form_still_present else []
 
 
 class SelectOptionTests(unittest.TestCase):
@@ -149,6 +160,10 @@ class SubmitRequestTests(unittest.TestCase):
         with (
             patch.dict(form_submit.SUPPLIER_FORMS, {"test_supplier": FORM}, clear=True),
             patch("oilwatch.form_submit.time.sleep"),
+            # The post-submit wait polls on the stdlib sleep, so a run that is
+            # never accepted would spend the whole 8s bound here. The bound is
+            # still tested — the loop keeps counting — it just does not sleep.
+            patch("oilwatch.waiting.time.sleep"),
         ):
             return submit_request(
                 driver,
@@ -189,6 +204,25 @@ class SubmitRequestTests(unittest.TestCase):
         result = self._submit(FakeDriver(fields=_fields(), submit_missing=True))
         self.assertEqual(result["status"], "error")
         self.assertIn("submit:", result["message"])
+
+    def test_a_submit_the_page_never_accepts_is_unconfirmed_not_submitted(self) -> None:
+        """A click that changes nothing is not a submission.
+
+        Scottish Fuels' sign-in failed exactly this way (measured 2026-09-15: the
+        click returned in 0.1s having sent no POST, and nothing navigated), so
+        "the click did not raise" is not "the form was submitted". The status
+        matters beyond the message: `_record_submitted_requests` writes the
+        `submitted` rows into `quote_requests`, which `awaiting_reply` then
+        reports — so calling this submitted would have the tool claim the owner
+        asked a supplier he never reached.
+        """
+        driver = FakeDriver(fields=_fields(), form_still_present=True)
+
+        result = self._submit(driver)
+
+        self.assertEqual(result["status"], "unconfirmed")
+        self.assertIn("did not confirm it was accepted", result["message"])
+        self.assertIn(FORM["url"], result["message"], "and points at the page to check")
 
     def test_submit_all_returns_one_result_per_supplier(self) -> None:
         driver = FakeDriver(fields=_fields())

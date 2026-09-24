@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from oilwatch.auto_register import AccountRegistrar
+from oilwatch.credentials import CredentialStoreUnreadable
 from tests.fake_async_page import FakeAsyncPage, FakeElement
 
 FLOWS = ["register_scottish_fuels", "register_valueoils", "register_homefuels_direct"]
@@ -137,6 +138,57 @@ class RegistrarFlowTests(unittest.TestCase):
 
                 self.assertEqual(result["status"], "manual_review")
                 self.assertIn("no message", result["message"])
+
+
+class UnreadableCredentialStoreTests(unittest.TestCase):
+    """A store that cannot be read is reported, never written over in silence.
+
+    The generated password is stored in a ``finally``, so a refusal there has two
+    duties beyond the refusal itself: close the browser anyway, and leave the
+    result saying the password was *not* saved — the flow's own messages are
+    written before the store is attempted and used to claim otherwise.
+    """
+
+    def setUp(self) -> None:
+        self.registrar = AccountRegistrar()
+        close = AsyncMock()
+        for patcher in (
+            patch.object(AccountRegistrar, "_close", new=close),
+            patch(
+                "oilwatch.auto_register.store_supplier_credentials",
+                side_effect=CredentialStoreUnreadable("could not parse the store"),
+            ),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.close = close
+
+    def _register(self, flow: str, page: FakeAsyncPage) -> dict:
+        with patch.object(AccountRegistrar, "_setup", new=AsyncMock(return_value=page)):
+            return asyncio.run(getattr(self.registrar, flow)(*ARGS))
+
+    def test_the_result_says_the_password_was_not_stored(self) -> None:
+        for flow in FLOWS:
+            with self.subTest(flow=flow):
+                result = self._register(flow, FakeAsyncPage(elements=[REGISTER_BUTTON]))
+
+                self.assertIs(result["credentials_stored"], False)
+                self.assertIn("NOT stored", result["message"])
+                # And the password is still there for the manual sign-in.
+                self.assertTrue(result["password"])
+
+    def test_the_browser_is_closed_even_though_the_store_refused(self) -> None:
+        self._register("register_valueoils", FakeAsyncPage(elements=[REGISTER_BUTTON]))
+
+        self.close.assert_awaited()
+
+    def test_a_stored_password_is_recorded_as_stored(self) -> None:
+        """The other side of the same field, so the report can be trusted."""
+        with patch("oilwatch.auto_register.store_supplier_credentials"):
+            result = self._register("register_valueoils", FakeAsyncPage(elements=[REGISTER_BUTTON]))
+
+        self.assertIs(result["credentials_stored"], True)
+        self.assertNotIn("NOT stored", result["message"])
 
 
 class CookieBannerTests(unittest.TestCase):

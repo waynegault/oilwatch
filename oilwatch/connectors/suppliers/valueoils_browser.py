@@ -53,7 +53,6 @@ class ValueOilsBrowserConnector(BrowserConnector):
         self.base_url = "https://www.valueoils.com"
         self.login_url = "https://www.valueoils.com/my-account/"
         self.quote_url = "https://www.valueoils.com/regions/scotland/aberdeenshire/"
-        self._requires_login = False
 
     async def login(self, page: PageLike, email: str, password: str) -> bool:
         """Optional sign-in; ValueOils quotes work signed-out (see the base)."""

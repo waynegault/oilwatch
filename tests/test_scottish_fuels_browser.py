@@ -330,7 +330,8 @@ class ScottishFuelsBrowserConnectorTests(unittest.TestCase):
 
         result = self._quote(driver)
 
-        self.assertEqual(result.status, "manual_action_required")
+        self.assertEqual(result.status, "error")
+        self.assertEqual(result.reason, "site_error")
         self.assertIn("Browser automation error", result.notes)
         self.auth.close.assert_called_once()
 

@@ -103,7 +103,14 @@ class ValueOilsConnector(BaseConnector):
                 # The page answered; the total was not in it.
                 reason="no_price_found",
                 source="valueoils_auto",
-                notes=f"Could not extract the Standard total. Call: 03300 570 857 or use Quick Quote at: {self.regional_url}",
+                # No number in the note, deliberately: the phone on the record
+                # is contact data and not a route this app offers, so the note
+                # names the page to act on instead. The browser connector's
+                # equivalent note was written the same way.
+                notes=(
+                    "Could not extract the Standard total; the regional Quick "
+                    f"Quote page is at {self.regional_url}"
+                ),
             )
 
         except httpx.HTTPError as e:

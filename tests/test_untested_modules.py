@@ -33,22 +33,32 @@ from oilwatch.cli import main
 # ── Shared fixtures ────────────────────────────────────────────────────
 
 
-def run_cli(argv: list[str], app: MagicMock | None = None) -> tuple[MagicMock, str]:
+def run_cli(argv: list[str], app: MagicMock | None = None) -> tuple[MagicMock, str, int]:
     """Dispatch ``argv`` through the real parser and dispatch table.
 
     Going through ``main()`` rather than calling a handler directly keeps the
     parser, the handler table and the handler itself in one piece, so a renamed
     flag or a mis-wired option fails here too.
+
+    Returns the app, the printed output, and the status ``main()`` gave the
+    shell — 0 for a command that finished, 1 for one that reported a failure.
+    Reading the status here is half the point: a handler that could not do its
+    job used to print the reason and return normally, so a script driving the
+    CLI saw success either way.
     """
     app = app if app is not None else MagicMock()
     out = io.StringIO()
+    status = 0
     with (
         patch("oilwatch.cli.OilWatchApp", return_value=app),
         patch.object(sys, "argv", ["oilwatch", *argv]),
         contextlib.redirect_stdout(out),
     ):
-        main()
-    return app, out.getvalue()
+        try:
+            main()
+        except SystemExit as exit_status:
+            status = int(exit_status.code or 0)
+    return app, out.getvalue(), status
 
 
 # ── api-discover ───────────────────────────────────────────────────────
@@ -65,7 +75,7 @@ class SupplierApiDiscoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "out.json"
             with patch("oilwatch.cli_handlers.discover_supplier_api", discover):
-                _, out = run_cli(
+                _, out, _status = run_cli(
                     ["api-discover", "--supplier-id", "7", "--output", str(target)], app
                 )
 
@@ -78,10 +88,11 @@ class SupplierApiDiscoveryTests(unittest.TestCase):
         discover = AsyncMock(return_value={})
 
         with patch("oilwatch.cli_handlers.discover_supplier_api", discover):
-            _, out = run_cli(["api-discover", "--supplier-id", "999"], app)
+            _, out, status = run_cli(["api-discover", "--supplier-id", "999"], app)
 
         self.assertIn("Error: Please provide --url or --supplier-id", out)
         discover.assert_not_called()
+        self.assertEqual(status, 1, "a command that could not run is a failure")
 
     def test_the_default_output_file_is_named_after_the_url(self) -> None:
         app = MagicMock()
@@ -106,6 +117,35 @@ class SupplierApiDiscoveryTests(unittest.TestCase):
             )
 
         self.assertEqual(discover.call_args.args[0], "https://example.co.uk")
+
+    def test_a_reserved_character_cannot_reach_the_output_filename(self) -> None:
+        """A URL may hold what a Windows filename may not.
+
+        Only ``https://`` and the slashes were replaced, so ``--url
+        http://x.co.uk`` and any query string kept their ``:`` and ``?``.
+        Windows refuses those at the write, which happens *after* the browser run
+        has been paid for — the owner sees a traceback where the results should
+        be.
+        """
+        cases = [
+            ("http://www.rix.co.uk", "api_discovery_www.rix.co.uk.json"),
+            (
+                "https://www.rix.co.uk/quote?product=1",
+                "api_discovery_www.rix.co.uk_quote_product_1.json",
+            ),
+        ]
+        for url, expected in cases:
+            with self.subTest(url=url):
+                app = MagicMock()
+                discover = AsyncMock(return_value={})
+                with patch("oilwatch.cli_handlers.discover_supplier_api", discover):
+                    run_cli(["api-discover", "--url", url], app)
+
+                name = discover.call_args.args[1]
+                self.assertEqual(name, expected)
+                self.assertEqual(
+                    sorted(set(name) & set(':?*"<>|')), [], f"{name} is not a legal filename"
+                )
 
 
 # ── register ───────────────────────────────────────────────────────────
@@ -134,7 +174,7 @@ class RegistrationSummaryTests(unittest.TestCase):
         app.settings.home.label = "Hatton of Fintry"
         register = AsyncMock(return_value=self.RESULTS)
         with patch("oilwatch.cli_handlers.register_all", register):
-            app, out = run_cli(argv, app)
+            app, out, _status = run_cli(argv, app)
         return app, out
 
     def test_every_supplier_is_reported_with_its_own_message(self) -> None:
@@ -175,31 +215,36 @@ class RegistrationSummaryTests(unittest.TestCase):
 class EmailLoginReportingTests(unittest.TestCase):
     """The owner reads this line to decide whether the monitor can run."""
 
-    def _run_login_email(self, result: dict) -> str:
+    def _run_login_email(self, result: dict) -> tuple[str, int]:
         monitor = MagicMock()
         monitor.interactive_login.return_value = result
         with patch("oilwatch.graph_email.GraphEmailMonitor", return_value=monitor):
-            _, out = run_cli(["login-email"])
-        return out
+            _, out, status = run_cli(["login-email"])
+        return out, status
 
     def test_a_cached_token_is_reported_as_such(self) -> None:
-        out = self._run_login_email({"access_token": "secret-token-value"})
+        out, status = self._run_login_email({"access_token": "secret-token-value"})
 
         self.assertIn("Email authentication successful", out)
         # The token is a credential; it must not be echoed to the terminal.
         self.assertNotIn("secret-token-value", out)
+        self.assertEqual(status, 0)
 
     def test_a_failure_reports_the_reason_and_never_claims_success(self) -> None:
-        out = self._run_login_email({"error_description": "consent declined by admin"})
+        out, status = self._run_login_email({"error_description": "consent declined by admin"})
 
         self.assertIn("consent declined by admin", out)
         self.assertNotIn("successful", out)
+        # And the shell sees it: a refused sign-in must not exit 0, or a script
+        # driving this cannot tell it from a cached token.
+        self.assertEqual(status, 1)
 
     def test_a_bare_error_code_is_still_reported(self) -> None:
-        out = self._run_login_email({"error": "authorization_pending"})
+        out, status = self._run_login_email({"error": "authorization_pending"})
 
         self.assertIn("authorization_pending", out)
         self.assertNotIn("successful", out)
+        self.assertEqual(status, 1)
 
 
 if __name__ == "__main__":
