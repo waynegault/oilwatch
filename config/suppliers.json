@@ -52,8 +52,9 @@
       "name": "ValueOils",
       "website": "https://www.valueoils.com/regions/scotland/aberdeenshire/",
       "status": "active",
+      "phone": "03300 570 857",
       "connector_type": "manual",
-      "notes": "Priced by the ValueOils HTTP connector from the regional page's server-rendered `Total You Pay` table, which is why the record's website *is* that page rather than the marketing root: `website` is what the connector reads when its config names no `quote_url`, and it is also the page a human enters the Quick Quote form on. Discovery found this row under the page title `Aberdeenshire Heating Oil & Gas Oil`, so until 2026-09-24 every report named a page instead of the supplier; the register is where the name comes from now. A future repoint of this URL must move this row, not add one - `upsert_supplier` keys on the website, and the name refusal beside it exists to stop the quote history splitting across a twin."
+      "notes": "Priced by the ValueOils HTTP connector from the regional page's server-rendered `Total You Pay` table, which is why the record's website *is* that page rather than the marketing root: `website` is what the connector reads when its config names no `quote_url`, and it is also the page a human enters the Quick Quote form on. Discovery found this row under the page title `Aberdeenshire Heating Oil & Gas Oil`, so until 2026-09-24 every report named a page instead of the supplier; the register is where the name comes from now. A future repoint of this URL must move this row, not add one - `upsert_supplier` keys on the website, and the name refusal beside it exists to stop the quote history splitting across a twin. Its `phone` is here because the scraped one is malformed (`006 03300 57 08 57`) and `upsert_supplier` only overwrites a contact field the register supplies - the register can correct a value, it cannot clear one - so this line is what fixes it on the next `init`. The number is the one the regional page prints beside its `tel:` link, checked 2026-09-24."
     },
     {
       "name": "HomeFuels Direct",
