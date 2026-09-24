@@ -13,11 +13,20 @@ __pycache__/
 *.sqlite
 *.sqlite3
 
+# Everything under data/ is a local artifact: the live database, the generated
+# explorer pages and charts, discovery output, registration results, and whatever
+# a command's stdout gets redirected into. Ignored as a *directory* rather than
+# file by file, because naming the files is how `data/ow-status.json` came to be
+# committed on 2026-09-24 — a status dump carrying the owner's postcode, his
+# purchase and the discount code he used, which is exactly the data the live
+# database is kept out of git for.
+data/*
+
 # ...except the sanitised price-history snapshot, which is committed on purpose.
-# The live database holds the owner's correspondence, his mailbox's message ids
-# and his postcode, so it stays local; this one is built from it by
-# tools/build_snapshot.py with those withheld, and exists so the price history is
-# versioned. Rebuild it with that tool rather than by copying the live file.
+# It is built from the live database by tools/build_snapshot.py with those values
+# withheld, so the price history is versioned. Rebuild it with that tool rather
+# than by copying the live file. (This has to come *after* `data/*`: the last
+# matching pattern wins.)
 !data/oilwatch-history.sqlite
 
 # Logs (generated; the scheduler and the scheduled email sweep write here)
@@ -41,16 +50,6 @@ config/supplier_credentials.json*
 config/email_credentials.json
 config/contact.json
 config/settings.json
-
-# API discovery results (large files)
-data/api_discovery/
-
-# Generated data explorer pages: a snapshot of the live database, rebuilt on
-# demand, so they are not committed (see *.png above for the same reasoning).
-data/*.html
-
-# Registration results
-data/registration_results.json
 
 # Test coverage
 htmlcov/
