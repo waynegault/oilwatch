@@ -13,6 +13,18 @@ verified counts and what this tool deliberately does not do.
 `chart`, `time_series_chart`. Costs minutes: `refresh_prices`. Reaches the
 network: `update_brent`.
 
+**How those tools are reached: a stdio child, spawned on demand.** A client starts
+`python -m oilwatch.mcp_server --stdio` when it first needs a tool and the child
+dies with the session, so nothing runs in between. The module's *default* transport
+is `streamable-http` instead (`MCP_HOST`, default `127.0.0.1`; `MCP_PORT`, default
+`8000`), for a client that dials a URL rather than spawning a process — worth
+knowing because a spawned child that misses its init budget can take a whole
+harness down with a child-cleanup rejection, while an HTTP server cannot: only a
+spawned child has an authority to lose. Where the harness and the install are on
+opposite sides of a VM boundary (an agent in WSL, the venv on Windows), `oil-mcp-up
+[minutes]` starts the HTTP server there and schedules its own stop, and `oil-mcp-down`
+stops it now; nothing is left running in between.
+
 **Through the CLI — twenty-two commands**, as `oilwatch <command>` or
 `python -m oilwatch.cli <command>`: `init`, `discover`, `suppliers`, `duplicates`,
 `quote`,

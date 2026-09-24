@@ -230,6 +230,16 @@ python -m oilwatch.cli schedule --postcode "AB21 0YA"
 python -m oilwatch.mcp_server
 ```
 
+An HTTP server has to be *running* for its tools to exist, so it is started by
+whoever needs it rather than at logon. On a machine whose client lives in WSL and
+whose install is on Windows, `oil-mcp-up` (and `oil-mcp-down`) do that: the first
+starts the server on the Windows host and schedules its own stop after a timeout
+you pass in minutes, so nothing is left running when the work is done. Prefer it
+when a spawned child's slow start is dangerous — a stdio child that misses its
+init budget can take a whole harness down with a child-cleanup rejection, an HTTP
+server cannot — and note that a URL transport fails *survivably* when the server
+is down: the tools are absent until something starts it.
+
 ### Utility Commands
 
 ```powershell
