@@ -160,6 +160,47 @@ CREATE TABLE IF NOT EXISTS sender_judgements (
 );
 """
 
+#: How close an email row has to be to a direct read of the same supplier to
+#: count as a copy of that read rather than an observation of its own.
+#:
+#: Four suppliers' quote tools email a copy of the quote they have just
+#: generated, so a mailbox sweep records a second row for one quote event: the
+#: 14:40 browser sweep of 2026-09-24 produced email rows for ValueOils, Rix,
+#: Connon Bros and Regency Oils, recorded by the 16:00 sweep but carrying the
+#: *email's* own timestamp (the sweep dates a row from the message, deliberately)
+#: and so landing seconds from the browser rows. A minute is the window because
+#: no supplier replies by hand that fast: a person cannot read an enquiry, price
+#: it and send it inside a minute, so anything inside it is a machine's copy.
+_EMAIL_COPY_WINDOW_SECONDS = 60
+
+#: Excludes an email row that copies a direct read of the same supplier moments
+#: earlier, so the row a report uses is the figure that supplier's own quote page
+#: produced for the enquiry rather than the copy of it. Both rows stay on record
+#: - this chooses between them, it does not discard one.
+#:
+#: It matters for exactly one supplier: three of the four copies carry the same
+#: price as the read they copy, but Rix's has been a constant 1.3057/L while the
+#: page reads 1.3267/L, so the copy would otherwise win "newest" and be reported
+#: as today's price. Suppliers reachable only by email - Turriff Fuels, Carnegie
+#: Fuels - have no direct read to be near, so they keep the email row.
+#:
+#: Interpolated, not bound, and safe that way: the only value is the module
+#: constant above, never anything a caller supplies. The cutoff *is* bound, for
+#: the reason given where it is used.
+_NOT_AN_EMAIL_COPY = f"""NOT (
+            source = 'email' AND EXISTS (
+                SELECT 1 FROM quotes AS direct
+                WHERE direct.supplier_id = quotes.supplier_id
+                  AND direct.status = 'ok'
+                  AND direct.source <> 'email'
+                  -- Both timestamp shapes this column holds parse here: the
+                  -- browser rows carry microseconds, the email rows come from a
+                  -- message Date header and are second-precision.
+                  AND (julianday(quotes.observed_at) - julianday(direct.observed_at)) * 86400.0
+                      BETWEEN 0 AND {_EMAIL_COPY_WINDOW_SECONDS}
+            )
+        )"""
+
 
 class Database:
     def __init__(self, path: Path) -> None:
@@ -626,7 +667,7 @@ class Database:
         )
         with closing(self.connect()) as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT q.*, s.name AS supplier_name, s.website, s.connector_config_json,
                        s.phone, s.email, s.kind
                 FROM quotes q
@@ -636,6 +677,7 @@ class Database:
                     FROM quotes
                     WHERE status = 'ok'
                       AND observed_at >= COALESCE(?, observed_at)
+                      AND {_NOT_AN_EMAIL_COPY}
                     GROUP BY supplier_id
                 ) latest
                 ON latest.supplier_id = q.supplier_id AND latest.max_observed_at = q.observed_at
@@ -658,7 +700,7 @@ class Database:
         cutoff = (utcnow_naive() - timedelta(days=max_age_days)).isoformat()
         with closing(self.connect()) as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT q.*, s.name AS supplier_name, s.website
                 FROM quotes q
                 JOIN suppliers s ON s.id = q.supplier_id
@@ -666,6 +708,7 @@ class Database:
                     SELECT supplier_id, MAX(observed_at) AS max_observed_at
                     FROM quotes
                     WHERE status = 'ok'
+                      AND {_NOT_AN_EMAIL_COPY}
                     GROUP BY supplier_id
                     HAVING MAX(observed_at) < ?
                 ) latest
@@ -716,7 +759,7 @@ class Database:
         cutoff = (utcnow_naive() - timedelta(days=max_age_days)).isoformat()
         with closing(self.connect()) as conn:
             rows = conn.execute(
-                """
+                f"""
                 SELECT s.name AS supplier_name, s.website,
                        ok.observed_at AS observed_at, ok.price_per_liter,
                        attempt.observed_at AS last_attempt_at,
@@ -732,7 +775,9 @@ class Database:
                   ON attempt.supplier_id = s.id AND attempt.observed_at = a.max_attempt
                 JOIN (
                     SELECT supplier_id, MAX(observed_at) AS max_ok
-                    FROM quotes WHERE status = 'ok' GROUP BY supplier_id
+                    FROM quotes WHERE status = 'ok'
+                      AND {_NOT_AN_EMAIL_COPY}
+                    GROUP BY supplier_id
                 ) o ON o.supplier_id = s.id
                 JOIN quotes ok
                   ON ok.supplier_id = s.id AND ok.observed_at = o.max_ok

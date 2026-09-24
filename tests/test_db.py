@@ -661,5 +661,146 @@ class SenderJudgementTests(unittest.TestCase):
         self.assertIsNone(self.db.sender_judgement(""))
 
 
+class EmailedCopyTests(unittest.TestCase):
+    """Which row a report uses when a supplier emails a copy of its own quote.
+
+    Four suppliers' quote tools email the quote they have just generated, so one
+    quote event leaves two rows: the direct read, and an email row dated from the
+    *message* that lands seconds from it. Three of the four carry the same price,
+    which is why this went unnoticed for a week — but Rix's copy has been a
+    constant 1.3057/L while its quote page reads 1.3267/L, and the copy was
+    winning "newest" and being reported as today's price.
+
+    The rule is that inside a minute the direct read is the price, because no
+    supplier prices an enquiry by hand that fast. Both rows stay stored: this
+    chooses between them, it does not throw one away.
+    """
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.temp_dir.name) / "test.sqlite")
+        self.db.init_schema()
+        self.supplier_id = self.db.upsert_supplier(
+            {
+                "name": "Rix",
+                "website": "https://rix.example.com",
+                "status": "active",
+                "connector_type": "manual",
+                "connector_config": {},
+            }
+        )
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _read(self, observed_at: str, price: float) -> dict:
+        """The row a browser quote writes: microsecond timestamp, real source."""
+        return {
+            "supplier_id": self.supplier_id,
+            "observed_at": observed_at,
+            "quantity_liters": 1000,
+            "status": "ok",
+            "price_per_liter": price,
+            "total_price": price * 1000,
+            "currency": "GBP",
+            "source": "rix_browser",
+            "notes": "",
+            "raw_payload": {},
+        }
+
+    def _copy_of(self, observed_at: str, price: float) -> dict:
+        """The row the mailbox sweep writes for the supplier's own copy."""
+        record = self._read(observed_at, price)
+        record["source"] = "email"
+        return record
+
+    def test_a_copy_seconds_behind_the_read_does_not_become_the_price(self) -> None:
+        """The Rix case, in the shape the live database actually holds it."""
+        self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))
+        self.db.record_quote(self._copy_of("2026-09-24T14:40:34", 1.3057))
+
+        latest = self.db.latest_quotes()
+
+        self.assertEqual(len(latest), 1)
+        self.assertEqual(latest[0]["source"], "rix_browser")
+        self.assertEqual(latest[0]["price_per_liter"], 1.3267)
+
+    def test_the_copy_is_kept_on_record(self) -> None:
+        """The rule picks between two rows; dropping one would lose the figure."""
+        self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))
+        self.db.record_quote(self._copy_of("2026-09-24T14:40:34", 1.3057))
+
+        sources = sorted(quote["source"] for quote in self.db.all_quotes())
+        self.assertEqual(sources, ["email", "rix_browser"])
+
+    def test_a_supplier_that_only_answers_by_email_keeps_its_row(self) -> None:
+        """Turriff Fuels and Carnegie Fuels have no direct read to be near."""
+        self.db.record_quote(self._copy_of("2026-09-24T14:40:34", 1.3057))
+
+        latest = self.db.latest_quotes()
+
+        self.assertEqual([quote["source"] for quote in latest], ["email"])
+        self.assertEqual(latest[0]["price_per_liter"], 1.3057)
+
+    def test_an_email_well_after_the_read_is_its_own_observation(self) -> None:
+        """A genuine reply must win, so the window cannot be generous.
+
+        Ten minutes is hours of a person's afternoon away from the read; the
+        minute exists because no one prices an enquiry by hand inside it.
+        """
+        self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))
+        self.db.record_quote(self._copy_of("2026-09-24T14:50:32", 1.2900))
+
+        latest = self.db.latest_quotes()
+
+        self.assertEqual(latest[0]["source"], "email")
+        self.assertEqual(latest[0]["price_per_liter"], 1.2900)
+
+    def test_the_stale_read_chooses_the_direct_read_too(self) -> None:
+        """``stale_quotes`` names a supplier's last known price, so it must agree.
+
+        If it picked the copy while ``latest_quotes`` picked the read, one
+        supplier would read as two different prices in a single report.
+        """
+        now = utcnow_naive()
+        read_at = now - timedelta(days=2)
+        self.db.record_quote(self._read(read_at.isoformat(), 1.3267))
+        self.db.record_quote(
+            self._copy_of((read_at + timedelta(seconds=2)).isoformat(), 1.3057)
+        )
+
+        stale = self.db.stale_quotes(max_age_days=1)
+
+        self.assertEqual([row["price_per_liter"] for row in stale], [1.3267])
+
+    def test_the_unrefreshed_read_chooses_the_direct_read_too(self) -> None:
+        """Same rule where the latest attempt failed and the price still stands."""
+        now = utcnow_naive()
+        read_at = now - timedelta(hours=2)
+        self.db.record_quote(self._read(read_at.isoformat(), 1.3267))
+        self.db.record_quote(
+            self._copy_of((read_at + timedelta(seconds=2)).isoformat(), 1.3057)
+        )
+        self.db.record_quote(
+            {
+                "supplier_id": self.supplier_id,
+                "observed_at": (now - timedelta(hours=1)).isoformat(),
+                "quantity_liters": 1000,
+                "status": "error",
+                "price_per_liter": None,
+                "total_price": None,
+                "currency": "GBP",
+                "source": "rix_browser",
+                "notes": "the attempt raised",
+                "raw_payload": {},
+                "reason": "site_error",
+            }
+        )
+
+        unrefreshed = self.db.not_refreshed_quotes(max_age_days=1)
+
+        self.assertEqual([row["price_per_liter"] for row in unrefreshed], [1.3267])
+
+
 if __name__ == "__main__":
     unittest.main()
