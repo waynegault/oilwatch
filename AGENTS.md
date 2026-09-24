@@ -23,7 +23,10 @@ harness down with a child-cleanup rejection, while an HTTP server cannot: only a
 spawned child has an authority to lose. Where the harness and the install are on
 opposite sides of a VM boundary (an agent in WSL, the venv on Windows), `oil-mcp-up
 [minutes]` starts the HTTP server there and schedules its own stop, and `oil-mcp-down`
-stops it now; nothing is left running in between.
+stops it now; nothing is left running in between. Both are version-controlled at the
+repo root (`oil-mcp-up.sh`, `oil-mcp-down.sh`) and installed by `install-wsl-helpers.sh`,
+run from inside WSL — never edit them on the Windows side, where they come back CRLF
+and the shebang stops executing.
 
 **Through the CLI — twenty-two commands**, as `oilwatch <command>` or
 `python -m oilwatch.cli <command>`: `init`, `discover`, `suppliers`, `duplicates`,

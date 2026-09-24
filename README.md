@@ -58,7 +58,7 @@ what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
 
 | What | Count |
 |------|-------|
-| Tests | 781, all passing offline |
+| Tests | 784, all passing offline |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
 | CLI commands | 22 |
 | Modules under `oilwatch/` | 55 Python files |
@@ -239,6 +239,22 @@ when a spawned child's slow start is dangerous — a stdio child that misses its
 init budget can take a whole harness down with a child-cleanup rejection, an HTTP
 server cannot — and note that a URL transport fails *survivably* when the server
 is down: the tools are absent until something starts it.
+
+Both launchers are version-controlled here and installed by `install-wsl-helpers.sh`,
+run from *inside* WSL:
+
+```bash
+cd "/mnt/c/Users/wayne/GitHub/Python/Projects/Oil Price Webscraper"
+./install-wsl-helpers.sh          # oil-mcp-up and oil-mcp-down into ~/.local/bin
+~/.local/bin/oil-mcp-up 30        # then, before the first oilwatch call
+~/.local/bin/oil-mcp-down         # or let the timeout do it
+```
+
+The installer is the only supported route on purpose: these files must reach WSL as
+LF-only, and a script written from the Windows side comes back with CRLF, whose shebang
+then fails to exec with an error that reads like a missing file. It strips the CRs on
+the way in, re-running it reports drift rather than silently reinstalling, and
+`tests/test_wsl_helpers.py` refuses to let the committed bytes rot.
 
 ### Utility Commands
 
@@ -609,6 +625,9 @@ Oil Price Webscraper/
 ├── AGENTS.md                    # The rules an agent needs - consumer contract
 ├── user-guide.md                # Day-to-day use, supplier reference, sign-in, agent brief
 ├── pyproject.toml               # Package configuration
+├── oil-mcp-up.sh                # WSL: start the MCP HTTP server on demand (see below)
+├── oil-mcp-down.sh              # WSL: stop it now
+├── install-wsl-helpers.sh       # WSL: install both into ~/.local/bin
 ├── docs/
 │   └── inspection.md            # Repeatable audit checklist for this repo
 ├── config/
@@ -663,7 +682,7 @@ Oil Price Webscraper/
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
 
-`python -m unittest discover -s tests -t .` — 781 tests, all offline.
+`python -m unittest discover -s tests -t .` — 784 tests, all offline.
 
 ### Run from the command line
 

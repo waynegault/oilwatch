@@ -14,3 +14,11 @@
 # an LF-only batch file (labels and goto), and oilwatch_env.bat is the shared
 # file both unattended launchers call.
 *.bat text eol=crlf
+
+# The WSL helper launchers are the other exception, and must stay LF. They are
+# shell scripts read by WSL out of a checkout made on Windows, and a CRLF
+# shebang is not a shebang - the installed file then fails to exec with an error
+# that reads like a missing file. Pinned here because `* text=auto` with this
+# repo's core.autocrlf=true would convert to CRLF on checkout for any type it
+# does not name, and the worktree copy is what install-wsl-helpers.sh installs.
+*.sh text eol=lf
