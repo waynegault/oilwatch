@@ -55,6 +55,13 @@ deliberately: `quote-all` and `refresh_prices` drive real browsers,
 - **A quote stands for at most one day** — a ceiling, not an average. A thin read,
   or one naming `excluded_suppliers`, is a stale snapshot rather than a scrape
   failure.
+- **An emailed copy of a quote is not a second price.** Several suppliers' tools
+  email the quote they have just generated, so a mailbox sweep stores a row dated
+  seconds from the direct read of that same quote. Where an email lands within a
+  minute of a read of the same supplier, the read is the price — no one prices an
+  enquiry by hand that fast. A supplier reachable only by email has no read to
+  compare against, so its row is unaffected, and the copy stays on record either
+  way: this chooses between two rows, it discards neither.
 - **Never loop `refresh_prices`.** It takes 1–3 minutes. If it times out, read
   `current_prices` and check `observed_at` instead of re-running, because a re-run
   launches browsers again. Its `refresh` block says whether a sweep is **still
