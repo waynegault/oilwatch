@@ -14,7 +14,8 @@ is gitignored while config/settings.example.json is shipped, so a setting added
 to only one of them goes unnoticed — it either reads its dataclass default here,
 or is absent from the file a new install copies. The launchers are guarded the
 same way: one value written into two scripts drifts, so the unattended log path
-is defined once and both scripts have to call the file that holds it.
+is defined once and every launcher has to call the file that holds it. A launcher
+added later joins the tuple below, so this guard covers it too.
 
 Deliberately not checked: counts in the narrative sections, which describe past
 states and were true when written, and prose that counts something fuzzy such as
@@ -42,7 +43,9 @@ AGENTS = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 LIVE_SETTINGS = ROOT / "config" / "settings.json"
 EXAMPLE_SETTINGS = ROOT / "config" / "settings.example.json"
 SHARED_ENV = ROOT / "oilwatch_env.bat"
-LAUNCHERS = ("start_scheduler.bat", "monitor_email.bat")
+#: Every batch file that runs OilWatch unattended. Two of them predate this guard;
+#: fetch_quotes.bat is the one-click refresh the desktop shortcut targets.
+LAUNCHERS = ("start_scheduler.bat", "monitor_email.bat", "fetch_quotes.bat")
 
 
 def _decorated_tools() -> int:
@@ -393,7 +396,7 @@ class SettingsExampleTests(unittest.TestCase):
 
 
 class LogPathSourceTests(unittest.TestCase):
-    """The unattended log path is defined once, in the file both launchers call.
+    """The unattended log path is defined once, in the file every launcher calls.
 
     It was a literal ``set`` in each launcher until 2026-09-13: two copies of one
     value, which is the drift the settings pair above is guarded against.

@@ -777,6 +777,35 @@ start data\oilwatch-market.png
 python -m oilwatch.cli submit-requests --by-email
 ```
 
+### One Click (about an hour, unattended)
+
+`fetch_quotes.bat` runs the whole round without you: a price refresh
+(`quote-all --browser`, so one visible browser window per supplier that needs
+one), then an hour's wait for the replies that only arrive by email, then the
+mailbox sweep, then the explorer page rebuilt and opened.
+
+```powershell
+fetch_quotes.bat          # wait 60 minutes for emailed quotes
+fetch_quotes.bat 30       # ...or 30
+```
+
+The fetch takes 1-3 minutes, and a supplier that fails does so on its own — the
+run carries on. The hour is the point of the wait: several suppliers' quote tools
+email a copy of the quote they have just generated, and the ones with no quote
+page answer by email or not at all. Closing the window stops the run and keeps
+the prices already fetched; `oilwatch monitor-email` reads the replies later.
+
+A desktop shortcut is the same launcher one double-click away. From the
+repository root:
+
+```powershell
+$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut(
+  "$([Environment]::GetFolderPath('Desktop'))\OilWatch quotes.lnk")
+$lnk.TargetPath = "$PWD\fetch_quotes.bat"
+$lnk.WorkingDirectory = "$PWD"
+$lnk.Save()
+```
+
 ---
 
 ## Data Explorer
