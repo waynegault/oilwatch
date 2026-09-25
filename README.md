@@ -784,19 +784,22 @@ python -m oilwatch.cli submit-requests --by-email
 
 `fetch_quotes.bat` runs the whole round without you: a price refresh
 (`quote-all --browser`, so one visible browser window per supplier that needs
-one), then an hour's wait for the replies that only arrive by email, then the
-mailbox sweep, then the explorer page rebuilt and opened.
+one), then the reply window worked through in ten-minute passes, then the
+explorer page rebuilt and opened.
 
 ```powershell
-fetch_quotes.bat          # wait 60 minutes for emailed quotes
-fetch_quotes.bat 30       # ...or 30
+fetch_quotes.bat          # a 60-minute reply window, in six passes
+fetch_quotes.bat 30       # ...or 30, which is three
 ```
 
-The fetch takes 1-3 minutes, and a supplier that fails does so on its own — the
-run carries on. The hour is the point of the wait: several suppliers' quote tools
-email a copy of the quote they have just generated, and the ones with no quote
-page answer by email or not at all. Closing the window stops the run and keeps
-the prices already fetched; `oilwatch monitor-email` reads the replies later.
+Each pass reads the mailbox — recording the replies that only arrive by email and
+clearing what it read — and rebuilds the page, so the copy opened at the end
+carries every reply that arrived. The fetch takes 1-3 minutes, and a supplier
+that fails does so on its own: the run carries on. The reply window is the point
+of the wait, because several suppliers' quote tools email a copy of the quote
+they have just generated, and the ones with no quote page answer by email or not
+at all. Closing the window stops the run and keeps what has been fetched and
+recorded; `oilwatch monitor-email` reads the replies later.
 
 A desktop shortcut is the same launcher one double-click away, wearing the icon
 `tools/make_icon.py` draws. From the repository root:
