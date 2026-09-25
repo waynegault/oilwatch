@@ -595,6 +595,68 @@ class QuoteRequestTests(unittest.TestCase):
         self._quote("manual_action_required")
         self.assertEqual(self._could_be_expected(), ["Gleaner Oils"])
 
+    def _read(self, observed_at: str, price: float, source: str = "browser") -> None:
+        self.db.record_quote(
+            {
+                "supplier_id": self.supplier_id,
+                "observed_at": observed_at,
+                "quantity_liters": 1000,
+                "status": "ok",
+                "price_per_liter": price,
+                "total_price": price * 1000,
+                "currency": "GBP",
+                "source": source,
+                "notes": "",
+                "raw_payload": {},
+            }
+        )
+
+    def test_the_latest_ask_is_the_one_reported_with_how_often_it_was_made(self) -> None:
+        """One row per supplier: the ask whose answer is still interesting."""
+        self.db.record_quote_request(self.supplier_id, "form", requested_at="2026-09-01T09:00:00")
+        self.db.record_quote_request(self.supplier_id, "email", requested_at="2026-09-20T09:00:00")
+
+        rows = self.db.quote_requests_by_supplier()
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["channel"], "email")
+        self.assertEqual(rows[0]["requested_at"], "2026-09-20T09:00:00")
+        self.assertEqual(rows[0]["asked"], 2)
+        self.assertIsNone(rows[0]["answered_at"])
+
+    def test_an_answered_ask_carries_the_price_that_answered_it(self) -> None:
+        self.db.record_quote_request(self.supplier_id, "form", requested_at="2026-09-20T09:00:00")
+
+        self._read("2026-09-20T11:00:00", 1.2070)
+
+        row = self.db.quote_requests_by_supplier()[0]
+        self.assertEqual(row["answered_at"], "2026-09-20T11:00:00")
+        self.assertEqual(row["price_per_liter"], 1.2070)
+
+    def test_a_price_from_before_the_ask_is_not_shown_as_its_result(self) -> None:
+        """The price beside an ask is the one that answered it, not the most
+        recent figure the supplier ever gave: a spreadsheet row from last year is
+        not a reply."""
+        self._read("2026-09-20T08:00:00", 1.2070)
+
+        self.db.record_quote_request(self.supplier_id, "form", requested_at="2026-09-20T09:00:00")
+
+        row = self.db.quote_requests_by_supplier()[0]
+        self.assertIsNone(row["answered_at"])
+        self.assertIsNone(row["price_per_liter"])
+
+    def test_the_price_beside_an_ask_prefers_the_read_to_an_emailed_copy(self) -> None:
+        """Both rows can carry the answering instant, which is the shape Rix's
+        copy leaves behind when it shares the read's timestamp."""
+        self.db.record_quote_request(self.supplier_id, "form", requested_at="2026-09-20T09:00:00")
+        self._read("2026-09-20T11:00:00", 1.3267)
+        self._read("2026-09-20T11:00:00", 1.3057, source="email")
+
+        row = self.db.quote_requests_by_supplier()[0]
+
+        self.assertEqual(row["price_per_liter"], 1.3267)
+        self.assertEqual(row["price_source"], "browser")
+
     def test_the_longest_owed_request_is_listed_first_with_its_supplier(self) -> None:
         """The oldest first, because that is the one to chase, and named because
         an id alone is not something a reader can act on."""

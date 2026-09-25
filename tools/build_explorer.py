@@ -218,7 +218,37 @@ def build_payload(app: OilWatchApp) -> dict:
     }
     snapshot = app.status()["market_snapshot"]
 
+    # Who has been asked for a price, and where each ask stands. `status` answers
+    # this for an agent as `awaiting_reply`; the page has to answer it for a
+    # reader, and "waiting" and "the ask came back with nothing" are different
+    # answers to give.
+    empty_ask = {
+        row.get("name") or row.get("supplier_name")
+        for row in (envelope["no_quote_suppliers"] or [])
+    }
+    enquiries = [
+        {
+            "name": row["supplier_name"],
+            "channel": row["channel"],
+            "requested_at": row["requested_at"],
+            "asked": row["asked"],
+            "note": row["note"],
+            "state": (
+                "answered"
+                if row["answered_at"]
+                else "empty"
+                if row["supplier_name"] in empty_ask
+                else "awaiting"
+            ),
+            "price_per_liter": row["price_per_liter"],
+            "price_at": row["price_at"],
+            "price_source": row["price_source"],
+        }
+        for row in app.db.quote_requests_by_supplier()
+    ]
+
     return {
+        "enquiries": enquiries,
         "meta": {
             "generated_at": utcnow_naive().isoformat(timespec="seconds"),
             "litres_per_barrel": LITRES_PER_BARREL,

@@ -623,6 +623,48 @@ class Database:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def quote_requests_by_supplier(self) -> list[dict[str, Any]]:
+        """The most recent ask of each supplier, with whatever has answered it.
+
+        ``outstanding_quote_requests`` answers "is a reply still owed?"; this
+        answers "what came of the ask?", which is what a reader of the page is
+        looking at. One row per supplier - the latest ask, because that is the
+        one whose answer is still interesting - with how many times it has been
+        asked and by which channel.
+
+        The price beside it is the one that answered the ask - the observation
+        ``record_quote`` named in ``answered_at`` when it closed the request - and
+        the read is preferred to an emailed copy that carries the same instant,
+        the way every report prefers it. A supplier whose last real price predates
+        the enquiry therefore shows no price beside it, rather than a stale figure
+        dressed up as the reply.
+        """
+        with closing(self.connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT s.name AS supplier_name, r.requested_at, r.channel, r.note,
+                       r.answered_at,
+                       (SELECT COUNT(*) FROM quote_requests x
+                         WHERE x.supplier_id = r.supplier_id) AS asked,
+                       q.price_per_liter, q.observed_at AS price_at,
+                       q.source AS price_source
+                  FROM quote_requests r
+                  JOIN suppliers s ON s.id = r.supplier_id
+                  JOIN (SELECT supplier_id, MAX(id) AS id
+                          FROM quote_requests GROUP BY supplier_id) latest
+                    ON latest.id = r.id
+                  LEFT JOIN quotes q ON q.id = (
+                          SELECT q2.id FROM quotes q2
+                           WHERE q2.supplier_id = r.supplier_id AND q2.status = 'ok'
+                             AND r.answered_at IS NOT NULL
+                             AND q2.observed_at = r.answered_at
+                           ORDER BY (q2.source = 'email')
+                           LIMIT 1)
+                 ORDER BY r.requested_at
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def create_refresh_job(
         self, job_id: str, started_at: str, started_by: str, total: int
     ) -> None:

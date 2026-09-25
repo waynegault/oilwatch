@@ -108,6 +108,12 @@
     </div>
   </div>
 
+  <h2>Asking for quotes</h2>
+  <p class="sub">Who has been asked for a price, how they were asked, and where the ask stands: a price answers it, and an attempt that came back with nothing leaves it owed.</p>
+  <div class="panel">
+    <div class="scroll"><table id="askTable"></table></div>
+  </div>
+
   <h2 id="chartHeading">Best value over time, against Brent</h2>
   <p class="sub" id="chartSub"></p>
   <div class="panel">
@@ -431,6 +437,35 @@ function renderBuys() {
     : '<tbody><tr><td class="muted">No purchase recorded yet. Recording is a deliberate CLI act: <code>oilwatch record-purchase</code>.</td></tr></tbody>';
 }
 
+function renderEnquiries() {
+  const askedBy = (channel) => channel === "email" ? "email" : (channel === "form" ? "form" : esc(channel));
+  const when = (s) => s ? esc(s.slice(0, 16).replace("T", " ")) : "—";
+  const waited = (s) => {
+    const days = Math.floor((Date.now() - Date.parse(s)) / 86400000);
+    return days >= 1 ? `${days} day(s)` : "under a day";
+  };
+  const rows = DATA.enquiries.map((e) => {
+    const result =
+      e.state === "answered"
+        ? `<span class="pill ok">answered</span> ${gbp(e.price_per_liter)} <span class="muted">${when(e.price_at)}${e.price_source === "email" ? " · by email" : ""}</span>`
+        : e.state === "empty"
+          ? `<span class="pill bad">nothing came back</span> <span class="muted">still owed</span>`
+          : `<span class="pill">waiting</span> <span class="muted">${waited(e.requested_at)}</span>`;
+    const supplier = DATA.suppliers.find((s) => s.name === e.name) || {};
+    return `<tr>
+      <td>${esc(e.name)}${e.asked > 1 ? ` <span class="muted">asked ${e.asked}&times;</span>` : ""}</td>
+      <td>${askedBy(e.channel)}</td>
+      <td>${when(e.requested_at)}</td>
+      <td>${result}</td>
+      <td>${e.note ? esc(e.note) : '<span class="muted">—</span>'}</td>
+      <td>${supplier.order_page ? `<a href="${esc(supplier.order_page)}" rel="noopener">order</a>` : (supplier.website ? `<a href="${esc(supplier.website)}" rel="noopener">site</a>` : "—")}</td>
+    </tr>`;
+  }).join("");
+  $("askTable").innerHTML = DATA.enquiries.length
+    ? `<thead><tr><th>Supplier</th><th>Asked by</th><th>Asked at</th><th>Result</th><th>Note</th><th>Link</th></tr></thead><tbody>${rows}</tbody>`
+    : '<tbody><tr><td class="muted">No enquiry on record. Asking is <code>oilwatch submit-requests</code> for the register\'s forms, or <code>submit-requests --by-email</code> for the suppliers that have no form.</td></tr></tbody>';
+}
+
 function renderLimits() {
   const items = [
     `<b>Headline prices, not discounted ones, on the history.</b> A discount code is single-use or dated, so applying today's code to a 2007 price would invent a comparison. The current window shows both.`,
@@ -438,6 +473,7 @@ function renderLimits() {
     `<b>The history is sparse before 2026.</b> ${META.days} days carry a price: roughly monthly check-ins recorded in the original workbook between 2007 and 2025, then the 2026 runs. The league table's totals are therefore dominated by whichever suppliers the workbook followed.`,
     `<b>Dates, not times, decide "cheapest".</b> A day with several quotes for one supplier compares its lowest; a supplier that did not quote that day does not win or lose it.`,
     `<b>No forecast, no interpolation.</b> A line joins only the days that carry a price; a flat stretch between two dated points is the absence of data, not evidence that the price held.`,
+    `<b>The asks are only the ones written down.</b> A supplier replies by hand, so an enquiry made and never recorded looks exactly like one never made — in the database as much as in an empty mailbox. ${DATA.enquiries.length} ask(s) are on record, and each row says whether a price has answered it since.`,
   ];
   $("limits").innerHTML = items.map((t) => `<li>${t}</li>`).join("");
 }
@@ -465,6 +501,7 @@ if (FX && FX.rate) {
 
 renderSummary();
 renderNow();
+renderEnquiries();
 renderChart();
 renderFacets();
 renderLeague();

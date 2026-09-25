@@ -58,7 +58,7 @@ what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
 
 | What | Count |
 |------|-------|
-| Tests | 812, all passing offline |
+| Tests | 816, all passing offline |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
 | CLI commands | 22 |
 | Modules under `oilwatch/` | 55 Python files |
@@ -690,7 +690,7 @@ Oil Price Webscraper/
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
 
-`python -m unittest discover -s tests -t .` — 812 tests, all offline.
+`python -m unittest discover -s tests -t .` — 816 tests, all offline.
 
 ### Run from the command line
 
@@ -818,8 +818,9 @@ $lnk.Save()
 ## Data Explorer
 
 `tools/build_explorer.py` renders everything the database knows — today's quotes,
-the historical league table, variance per supplier, the recorded purchases, and
-Brent rescaled to £ per litre — into a single self-contained page:
+which suppliers have been asked for a price and where each ask stands, the
+historical league table, variance per supplier, the recorded purchases, and Brent
+rescaled to £ per litre — into a single self-contained page:
 
 ```powershell
 python tools/build_explorer.py           # writes data/oilwatch-explorer.html
