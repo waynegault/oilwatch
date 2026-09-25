@@ -631,6 +631,8 @@ Oil Price Webscraper/
 ├── oil-mcp-up.sh                # WSL: start the MCP HTTP server on demand (see below)
 ├── oil-mcp-down.sh              # WSL: stop it now
 ├── install-wsl-helpers.sh       # WSL: install both into ~/.local/bin
+├── assets/
+│   └── oilwatch.ico             # The shortcut's icon, drawn by tools/make_icon.py
 ├── docs/
 │   ├── inspection.md            # Repeatable audit checklist for this repo
 │   └── schema.sql               # The database's structure, generated (see below)
@@ -675,6 +677,7 @@ Oil Price Webscraper/
 │   ├── build_explorer.py        # Builds the data explorer page (see below)
 │   ├── build_snapshot.py        # Builds the committed price-history snapshot
 │   ├── dump_schema.py           # Writes docs/schema.sql from the code
+│   ├── make_icon.py             # Draws assets/oilwatch.ico for the shortcut
 │   └── explorer_template.html   # Its template
 └── tests/
     └── test_app.py              # Unit tests
@@ -795,14 +798,15 @@ email a copy of the quote they have just generated, and the ones with no quote
 page answer by email or not at all. Closing the window stops the run and keeps
 the prices already fetched; `oilwatch monitor-email` reads the replies later.
 
-A desktop shortcut is the same launcher one double-click away. From the
-repository root:
+A desktop shortcut is the same launcher one double-click away, wearing the icon
+`tools/make_icon.py` draws. From the repository root:
 
 ```powershell
 $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut(
   "$([Environment]::GetFolderPath('Desktop'))\OilWatch quotes.lnk")
 $lnk.TargetPath = "$PWD\fetch_quotes.bat"
 $lnk.WorkingDirectory = "$PWD"
+$lnk.IconLocation = "$PWD\assets\oilwatch.ico,0"
 $lnk.Save()
 ```
 

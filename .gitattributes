@@ -22,3 +22,7 @@
 # repo's core.autocrlf=true would convert to CRLF on checkout for any type it
 # does not name, and the worktree copy is what install-wsl-helpers.sh installs.
 *.sh text eol=lf
+
+# The icon is binary and Windows reads its bytes as drawn, so it is named here
+# rather than left to `* text=auto` to judge.
+*.ico binary
