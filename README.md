@@ -58,7 +58,7 @@ what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
 
 | What | Count |
 |------|-------|
-| Tests | 816, all passing offline |
+| Tests | 821, all passing offline |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
 | CLI commands | 22 |
 | Modules under `oilwatch/` | 55 Python files |
@@ -118,6 +118,9 @@ you pass and searches from there, so substitute your own.
 ```powershell
 # Get quotes from ALL suppliers (automated + manual instructions)
 python -m oilwatch.cli quote-all --postcode "AB00 0AA"
+# ...and print a summary of the run: how many suppliers answered, how each price
+# was read, what the rest are waiting for, and the winner with the page it came
+# from. `--json` prints the raw records instead, for anything scripted.
 
 # Get quote from SINGLE supplier (by ID number)
 python -m oilwatch.cli quote 2 --postcode "AB00 0AA"  # ValueOils
@@ -191,6 +194,8 @@ python -m oilwatch.cli submit-requests --by-email
 
 # Read replies and record their prices (needs the one-time login below)
 python -m oilwatch.cli monitor-email
+# ...and report which suppliers replied and with what; `--json` prints the raw
+# sweep result.
 
 # One-time OAuth2 device-code sign-in for the mailbox grant
 python -m oilwatch.cli login-email
@@ -690,7 +695,7 @@ Oil Price Webscraper/
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
 
-`python -m unittest discover -s tests -t .` — 816 tests, all offline.
+`python -m unittest discover -s tests -t .` — 821 tests, all offline.
 
 ### Run from the command line
 
@@ -812,6 +817,10 @@ $lnk.WorkingDirectory = "$PWD"
 $lnk.IconLocation = "$PWD\assets\oilwatch.ico,0"
 $lnk.Save()
 ```
+
+Move the file into `%ProgramData%\Microsoft\Windows\Start Menu\Programs` to have it
+searchable from the Start menu rather than only visible on the Desktop; that is
+where this install's copy sits, named **Heating Oil Quotes**.
 
 ---
 

@@ -42,6 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
     quote_all.add_argument("--postcode")
     quote_all.add_argument("--browser", action="store_true", help="Use browser automation")
     quote_all.add_argument(
+        "--json", action="store_true", help="Print the raw quote records instead of a summary"
+    )
+    quote_all.add_argument(
         "--job-id",
         default=None,
         help=(
@@ -132,7 +135,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # Monitor email for supplier replies (Microsoft Graph / OAuth2)
-    subparsers.add_parser("monitor-email")
+    monitor_email = subparsers.add_parser("monitor-email")
+    monitor_email.add_argument(
+        "--json", action="store_true", help="Print the raw sweep result instead of a summary"
+    )
 
     # One-time OAuth2 device-code sign-in for the email monitor
     subparsers.add_parser("login-email")

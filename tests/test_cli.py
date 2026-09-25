@@ -469,5 +469,109 @@ class DispatchTests(unittest.TestCase):
         scheduler.return_value.run_forever.assert_called_once_with()
 
 
+class TerminalSummaryTests(unittest.TestCase):
+    """`quote-all` and `monitor-email` must say what happened, not dump records.
+
+    Both printed their records as JSON, which is the machine form: whoever
+    watched the one-click launcher got several hundred lines of it. The shape of
+    the run is what a terminal is for, and `--json` keeps the raw form for
+    anything scripted.
+    """
+
+    def _run(self, argv: list[str], app: MagicMock) -> str:
+        captured = io.StringIO()
+        with (
+            patch("oilwatch.cli.OilWatchApp", return_value=app),
+            patch.object(sys, "argv", ["oilwatch", *argv]),
+            contextlib.redirect_stdout(captured),
+        ):
+            main()
+        return captured.getvalue()
+
+    def _records(self) -> list[dict[str, object]]:
+        return [
+            {
+                "supplier_name": "ValueOils",
+                "status": "ok",
+                "price_per_liter": 1.2096,
+                "quantity_liters": 1000,
+                "source": "valueoils_browser",
+                "reason": None,
+                "raw_payload": {"quote_url": "https://www.valueoils.com/"},
+            },
+            {
+                "supplier_name": "Fueltool",
+                "status": "ok",
+                "price_per_liter": 1.1751,
+                "quantity_liters": 1000,
+                "source": "fueltool",
+                "reason": None,
+                "raw_payload": {"url": "https://www.fueltool.co.uk/", "kind": "uk_average"},
+            },
+            {
+                "supplier_name": "Carnegie Fuels",
+                "status": "manual_action_required",
+                "price_per_liter": None,
+                "quantity_liters": 1000,
+                "source": "manual",
+                "reason": "no_quote_page",
+                "raw_payload": {},
+            },
+        ]
+
+    def test_quote_all_says_what_it_fetched_rather_than_printing_records(self) -> None:
+        app = MagicMock()
+        app.quote_all.return_value = self._records()
+
+        output = self._run(["quote-all"], app)
+
+        self.assertIn("Fetched from 3 suppliers: 2 gave a price, 1 did not", output)
+        self.assertIn("1 read with a browser", output)
+        self.assertIn("ask by email", output)
+        self.assertNotIn("{", output)
+        self.assertNotIn('"status"', output)
+
+    def test_the_benchmark_is_named_as_one_and_never_wins(self) -> None:
+        """Fueltool's UK average is the cheaper figure here, and is still not a
+        supplier: presenting it as the cheapest is the mistake that matters."""
+        app = MagicMock()
+        app.quote_all.return_value = self._records()
+
+        output = self._run(["quote-all"], app)
+
+        self.assertIn("a benchmark, not a supplier: Fueltool", output)
+        self.assertIn("cheapest: ValueOils", output)
+        self.assertNotIn("Fueltool", output.split("cheapest: ")[1].splitlines()[0])
+
+    def test_json_is_still_available_for_anything_scripted(self) -> None:
+        app = MagicMock()
+        app.quote_all.return_value = self._records()
+
+        output = self._run(["quote-all", "--json"], app)
+
+        self.assertIn('"status": "ok"', output)
+
+    def test_monitor_email_says_which_supplier_replied_and_with_what(self) -> None:
+        app = MagicMock()
+        app.monitor_email.return_value = {
+            "recorded": [{"supplier_name": "Rix", "price_per_liter": 1.3057}]
+        }
+
+        output = self._run(["monitor-email"], app)
+
+        self.assertIn("Mailbox: 1 reply recorded", output)
+        self.assertIn("Rix: £1.3057/L", output)
+        self.assertNotIn("{", output)
+
+    def test_a_sweep_that_found_nothing_says_so_rather_than_an_empty_list(self) -> None:
+        app = MagicMock()
+        app.monitor_email.return_value = {"recorded": []}
+
+        output = self._run(["monitor-email"], app)
+
+        self.assertIn("no supplier replies to record", output)
+        self.assertNotIn("[]", output)
+
+
 if __name__ == "__main__":
     unittest.main()

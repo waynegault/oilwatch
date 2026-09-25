@@ -37,6 +37,117 @@ def _print(data: object) -> None:
     print(json.dumps(data, indent=2, default=str))
 
 
+#: What each gap `reason` means to a person rather than to code. The same set the
+#: explorer page glosses; `AGENTS.md` is what keeps the two in step.
+_REASON_WORDS = {
+    "no_quote_page": "no quote page at all: ask by email",
+    "quote_by_request": "answer a request rather than a page",
+    "browser_required": "need a browser to price",
+    "no_price_found": "page carried no price",
+    "site_error": "the attempt failed",
+    "login_not_confirmed": "need a sign-in",
+    "captcha": "stopped by a bot check",
+    "outside_window": "outside the freshness window",
+    "unclassified": "unclassified, from before the reasons were filled in",
+}
+
+
+def _quote_all_summary(records: list[dict[str, Any]]) -> str:
+    """A run of `quote-all`, in the terms a person reads it in.
+
+    The records are the machine form and ``--json`` still prints them. A terminal
+    wants the shape of the run instead - how many suppliers answered, how each
+    price was read, what the rest are waiting for - and the winner with the page
+    it came from, because a price in a console with no way to act on it is half
+    an answer.
+    """
+    def source_of(record: dict[str, Any]) -> str:
+        return str(record.get("source") or "")
+
+    def is_benchmark(record: dict[str, Any]) -> bool:
+        return (record.get("raw_payload") or {}).get("kind") == "uk_average"
+
+    priced = [r for r in records if r.get("status") == "ok" and r.get("price_per_liter")]
+    suppliers_priced = [r for r in priced if not is_benchmark(r)]
+    benchmarks = [r for r in priced if is_benchmark(r)]
+    by_browser = [r for r in suppliers_priced if "browser" in source_of(r)]
+    by_email = [r for r in suppliers_priced if source_of(r) == "email"]
+    read_directly = [r for r in suppliers_priced if r not in by_browser and r not in by_email]
+    silent = [r for r in records if r.get("status") != "ok"]
+    failed = [r for r in silent if r.get("status") == "error"]
+
+    how = []
+    if by_browser:
+        how.append(f"{len(by_browser)} read with a browser")
+    if read_directly:
+        how.append(f"{len(read_directly)} read directly, from an API or a price page")
+    if by_email:
+        how.append(f"{len(by_email)} from an email reply")
+
+    lines = [
+        f"Fetched from {len(records)} suppliers: {len(priced)} gave a price, "
+        f"{len(silent)} did not" + (f", {len(failed)} failed" if failed else "")
+    ]
+    if how:
+        lines.append("  " + "; ".join(how))
+    for record in benchmarks:
+        lines.append(
+            f"  a benchmark, not a supplier: {record.get('supplier_name')} "
+            f"£{record['price_per_liter']:.4f}/L (UK average)"
+        )
+
+    reasons: dict[str, int] = {}
+    for record in silent:
+        if record.get("status") == "error":
+            continue
+        key = str(record.get("reason") or "unclassified")
+        reasons[key] = reasons.get(key, 0) + 1
+    for key, count in sorted(reasons.items(), key=lambda pair: (-pair[1], pair[0])):
+        lines.append(f"  {count} {_REASON_WORDS.get(key, key)}")
+
+    if failed:
+        lines.append("  failed: " + ", ".join(str(r.get("supplier_name")) for r in failed))
+
+    winner = min(suppliers_priced, key=lambda r: r["price_per_liter"], default=None)
+    if winner is not None:
+        payload = winner.get("raw_payload") or {}
+        where = (
+            payload.get("results_url")
+            or payload.get("result_url")
+            or payload.get("quote_url")
+            or payload.get("url")
+            or payload.get("order_page")
+        )
+        quantity = winner.get("quantity_liters") or 1000
+        lines.append(
+            f"  cheapest: {winner.get('supplier_name')} "
+            f"£{winner['price_per_liter']:.4f}/L inc VAT for {quantity} L"
+        )
+        if where:
+            lines.append(f"    {where}")
+    return "\n".join(lines)
+
+
+def _monitor_email_summary(result: dict[str, Any]) -> str:
+    """What a mailbox sweep recorded, in the terms a person reads it in.
+
+    The log lines beside it already say how many messages went past and how many
+    came from senders the register does not chase; the question this answers is
+    "did any supplier reply, and with what?".
+    """
+    if result.get("error"):
+        return f"Mailbox: the sweep failed: {result['error']}"
+    recorded = result.get("recorded") or []
+    if not recorded:
+        return "Mailbox: no supplier replies to record this time"
+    lines = [f"Mailbox: {len(recorded)} {'reply' if len(recorded) == 1 else 'replies'} recorded"]
+    for record in recorded:
+        price = record.get("price_per_liter")
+        what = f"£{price:.4f}/L" if price else str(record.get("status") or "no price")
+        lines.append(f"  {record.get('supplier_name') or record.get('supplier_id')}: {what}")
+    return "\n".join(lines)
+
+
 def _require_a_contact(args: argparse.Namespace) -> Contact:
     """The delivery identity an enquiry is made in, refused when it is not usable.
 
@@ -109,7 +220,11 @@ def _cmd_quote_all(app: OilWatchApp, args: argparse.Namespace) -> None:
         # asked, so this only has to exit non-zero if the sweep raised.
         _print(app.run_refresh_job(job_id, postcode=args.postcode))
         return
-    _print(app.quote_all(postcode=args.postcode, prefer_browser=args.browser, started_by="cli"))
+    records = app.quote_all(postcode=args.postcode, prefer_browser=args.browser, started_by="cli")
+    if getattr(args, "json", False):
+        _print(records)
+        return
+    print(_quote_all_summary(records))
 
 
 def _cmd_cheapest(app: OilWatchApp, args: argparse.Namespace) -> None:
@@ -429,7 +544,11 @@ def _cmd_monitor_email(app: OilWatchApp, args: argparse.Namespace) -> None:
     # newly added table was simply missing on an existing database) and turns
     # a transient failure into a message instead of a traceback.
     result = app.monitor_email()
-    _print(result)
+    if getattr(args, "json", False):
+        _print(result)
+    elif not result.get("error"):
+        # An error is raised rather than printed twice: CliError below says it.
+        print(_monitor_email_summary(result))
     if result.get("error"):
         # The service reports a failure as data so the scheduler's job cannot
         # die on it; at the terminal that same failure must not look like a
