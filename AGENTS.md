@@ -54,7 +54,8 @@ deliberately: `quote-all` and `refresh_prices` drive real browsers,
   `oilwatch quote-all --browser`.
 - **A quote stands for at most one day** — a ceiling, not an average. A thin read,
   or one naming `excluded_suppliers`, is a stale snapshot rather than a scrape
-  failure.
+  failure — and each excluded row carries `reason: outside_window`, so a supplier
+  the window dropped cannot be read as one that was disqualified.
 - **An emailed copy of a quote is not a second price.** Several suppliers' tools
   email the quote they have just generated, so a mailbox sweep stores a row dated
   seconds from the direct read of that same quote. Where an email lands within a

@@ -21,7 +21,7 @@ from oilwatch.db import Database
 from oilwatch.discovery import DiscoveryService
 from oilwatch.geo import GeoService
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import QuoteResult, utcnow_naive
+from oilwatch.models import EXCLUDED_REASON, QuoteResult, utcnow_naive
 from oilwatch.quotes import QuoteService
 from oilwatch.supplier_integrity import SupplierIdentityConflict
 
@@ -313,13 +313,16 @@ class OilWatchApp:
 
         Quotes last about a day, so the window is deliberately tight; naming the
         suppliers it holds back keeps a thin snapshot legible as "not re-quoted
-        yet" rather than looking like a scrape that failed.
+        yet" rather than looking like a scrape that failed. Each row says so in a
+        ``reason``, because a list a reader has to act on should not leave them
+        working out whether a name in it was dropped or disqualified.
         """
         return [
             {
                 "name": row["supplier_name"],
                 "last_quote_at": row["observed_at"],
                 "last_price_per_liter": row["price_per_liter"],
+                "reason": EXCLUDED_REASON,
             }
             for row in self.db.stale_quotes(max_age_days=self.settings.max_quote_age_days)
         ]

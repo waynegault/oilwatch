@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from oilwatch.config import CHECKOUT_ROOT
-from oilwatch.models import utcnow_naive
+from oilwatch.models import EXCLUDED_REASON, utcnow_naive
 from oilwatch.service import OilWatchApp
 
 
@@ -250,6 +250,8 @@ class OilWatchAppTests(unittest.TestCase):
         # with the last price it gave, so a thin market is explicable.
         self.assertEqual([row["name"] for row in snapshot["excluded_suppliers"]], ["Stale"])
         self.assertEqual(snapshot["excluded_suppliers"][0]["last_quote_at"], "2007-01-26")
+        # And it says which list it is on, so "held back" is not read as "disqualified".
+        self.assertEqual(snapshot["excluded_suppliers"][0]["reason"], EXCLUDED_REASON)
 
         # ``status`` builds its own snapshot, so it must carry the same field.
         status_snapshot = self.app.status()["market_snapshot"]

@@ -48,6 +48,14 @@ QUOTE_REASONS = (
     "site_error",  # the attempt raised: timeout, HTTP error, or a parse failure
 )
 
+#: Why a supplier is named in ``excluded_suppliers`` rather than in ``quotes``: its
+#: newest price is older than the age window, so it is not being compared. One value,
+#: and a named one rather than the row's silence, because that list is one a reader
+#: has to act on — "not re-quoted yet" means refresh, and a row with no reason reads
+#: as a supplier that was disqualified. Distinct from ``QUOTE_REASONS`` above: those
+#: explain a row that has *no* price, and these rows have a price, just an old one.
+EXCLUDED_REASON = "outside_window"
+
 
 @dataclass(slots=True)
 class SupplierCandidate:

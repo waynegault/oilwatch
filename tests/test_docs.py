@@ -30,7 +30,7 @@ import unittest
 from pathlib import Path
 
 from oilwatch.logging_setup import LOG_FILE_ENV
-from oilwatch.models import QUOTE_REASONS, QUOTE_STATUSES
+from oilwatch.models import EXCLUDED_REASON, QUOTE_REASONS, QUOTE_STATUSES
 
 ROOT = Path(__file__).resolve().parents[1]
 #: The one document the counts are stated in, and so the one they are read from.
@@ -220,6 +220,21 @@ class ReferenceTests(unittest.TestCase):
             missing = sorted(value for value in QUOTE_REASONS if value not in document)
             with self.subTest(document=name, vocabulary="reason"):
                 self.assertEqual(missing, [], f"{name} does not name these reasons: {missing}")
+
+    def test_the_excluded_suppliers_reason_is_documented(self) -> None:
+        """A supplier the window drops says why, so the docs have to name the value.
+
+        ``excluded_suppliers`` is a list a reader acts on — "not re-quoted yet" means
+        refresh — and a row naming only a supplier leaves open whether it was dropped
+        or disqualified. One value, so one word to look for in each document.
+        """
+        for document, name in ((README, "README.md"), (AGENTS, "AGENTS.md")):
+            with self.subTest(document=name, vocabulary="excluded reason"):
+                self.assertIn(
+                    EXCLUDED_REASON,
+                    document,
+                    f"{name} does not name the excluded-suppliers reason {EXCLUDED_REASON!r}",
+                )
 
 
 #: Settings objects whose keys are schema. Every other object in the file is
