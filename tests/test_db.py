@@ -725,6 +725,32 @@ class EmailedCopyTests(unittest.TestCase):
 
         self.assertTrue(self.db.copies_a_recent_read(self._copy_of("2026-09-24T14:40:34", 1.3057)))
 
+    def test_a_copy_whose_message_date_truncates_before_the_read_is_recognised(self) -> None:
+        """A Date header has whole seconds; a browser read carries microseconds.
+
+        So the copy of a read can be dated a fraction *before* it - on 2026-09-25
+        Rix's landed at 09:57:45 against a read at 09:57:45.810361, 0.81s earlier -
+        and a window that only looked forwards let it through as a second row for
+        one quote event.
+        """
+        self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))
+
+        self.assertTrue(self.db.copies_a_recent_read(self._copy_of("2026-09-24T14:40:32", 1.3057)))
+
+    def test_the_window_reaches_either_side_of_the_read(self) -> None:
+        """The reads ask the same question, so the two windows must not drift.
+
+        This pins the shared window rather than a regression: a copy dated before
+        the read is already the older row, so the read wins "newest" whether or
+        not the copy is excluded by ``_NOT_AN_EMAIL_COPY``.
+        """
+        self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))
+        self.db.record_quote(self._copy_of("2026-09-24T14:40:32", 1.3057))
+
+        latest = self.db.latest_quotes()
+
+        self.assertEqual([row["price_per_liter"] for row in latest], [1.3267])
+
     def test_an_email_well_after_the_read_is_not_a_copy(self) -> None:
         """A genuine reply must still be stored, so the window stays a minute."""
         self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))

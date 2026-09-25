@@ -183,9 +183,15 @@ CREATE INDEX IF NOT EXISTS idx_quotes_supplier_observed_at ON quotes (supplier_i
 _EMAIL_COPY_WINDOW_SECONDS = 60
 
 #: Excludes an email row that copies a direct read of the same supplier moments
-#: earlier, so the row a report uses is the figure that supplier's own quote page
-#: produced for the enquiry rather than the copy of it. Both rows stay on record
-#: - this chooses between them, it does not discard one.
+#: either side of it, so the row a report uses is the figure that supplier's own
+#: quote page produced for the enquiry rather than the copy of it. Both rows stay
+#: on record - this chooses between them, it does not discard one.
+#:
+#: Either side, and not only after: a browser read carries microseconds while an
+#: emailed row is dated from a message Date header, which has whole seconds, so
+#: the copy of one enquiry can land a fraction of a second *before* the read it
+#: copies. On 2026-09-25 that is how Rix's copy (09:57:45) got past a window that
+#: only looked forwards from the read at 09:57:45.810361.
 #:
 #: It matters for exactly one supplier: three of the four copies carry the same
 #: price as the read they copy, but Rix's has been a constant 1.3057/L while the
@@ -205,8 +211,8 @@ _NOT_AN_EMAIL_COPY = f"""NOT (
                   -- Both timestamp shapes this column holds parse here: the
                   -- browser rows carry microseconds, the email rows come from a
                   -- message Date header and are second-precision.
-                  AND (julianday(quotes.observed_at) - julianday(direct.observed_at)) * 86400.0
-                      BETWEEN 0 AND {_EMAIL_COPY_WINDOW_SECONDS}
+                  AND ABS((julianday(quotes.observed_at) - julianday(direct.observed_at)) * 86400.0)
+                      <= {_EMAIL_COPY_WINDOW_SECONDS}
             )
         )"""
 
@@ -417,9 +423,11 @@ class Database:
 
         The window is the one the reads use, and for the same reason: nobody
         prices an enquiry by hand inside a minute, so anything within that of a
-        read is a machine's copy rather than a second answer. A non-email record
-        is never a copy, and neither is an email with no read near it — a supplier
-        that only answers by email has no read to copy.
+        read is a machine's copy rather than a second answer. It reaches either
+        side of the read, because a Date header has whole seconds and so dates a
+        copy a fraction before the microsecond-stamped read it copies. A
+        non-email record is never a copy, and neither is an email with no read
+        near it — a supplier that only answers by email has no read to copy.
         """
         if record.get("source") != "email":
             return False
@@ -428,7 +436,7 @@ class Database:
                 """
                 SELECT 1 FROM quotes
                 WHERE supplier_id IS ? AND status = 'ok' AND source <> 'email'
-                  AND (julianday(?) - julianday(observed_at)) * 86400.0 BETWEEN 0 AND ?
+                  AND ABS((julianday(?) - julianday(observed_at)) * 86400.0) <= ?
                 """,
                 (
                     record["supplier_id"],
