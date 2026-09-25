@@ -714,6 +714,34 @@ class EmailedCopyTests(unittest.TestCase):
         record["source"] = "email"
         return record
 
+    def test_a_copy_seconds_behind_a_read_is_recognised_at_the_door(self) -> None:
+        """The sweep asks before storing, so one quote event leaves one row.
+
+        The reads already knew how to choose between these two rows; asking the
+        same question before writing means there is nothing to choose between, and
+        nothing to clean up later.
+        """
+        self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))
+
+        self.assertTrue(self.db.copies_a_recent_read(self._copy_of("2026-09-24T14:40:34", 1.3057)))
+
+    def test_an_email_well_after_the_read_is_not_a_copy(self) -> None:
+        """A genuine reply must still be stored, so the window stays a minute."""
+        self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))
+
+        self.assertFalse(
+            self.db.copies_a_recent_read(self._copy_of("2026-09-24T14:50:32", 1.2900))
+        )
+
+    def test_a_read_is_never_a_copy_of_a_read(self) -> None:
+        self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))
+
+        self.assertFalse(self.db.copies_a_recent_read(self._read("2026-09-24T14:40:34", 1.3267)))
+
+    def test_a_supplier_with_no_read_near_it_is_not_a_copy(self) -> None:
+        """Turriff Fuels and Carnegie Fuels only answer by email: nothing to copy."""
+        self.assertFalse(self.db.copies_a_recent_read(self._copy_of("2026-09-24T14:40:34", 1.207)))
+
     def test_a_copy_seconds_behind_the_read_does_not_become_the_price(self) -> None:
         """The Rix case, in the shape the live database actually holds it."""
         self.db.record_quote(self._read("2026-09-24T14:40:32.626682", 1.3267))

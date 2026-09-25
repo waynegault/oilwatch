@@ -476,8 +476,19 @@ class GraphEmailMonitor:
                 }
                 # A reply that was already mined can arrive here again when its
                 # id changed on a folder move; the same observation is not a
-                # second quote, and must not be reported as one either.
-                if not app.db.quote_already_recorded(record):
+                # second quote, and must not be reported as one either. Neither
+                # is a copy of a quote we have *just* read: the supplier's own
+                # tool mails one, which would leave two rows for a single quote
+                # event for the reads to choose between. One event, one row - the
+                # reads still carry the rule for the rows already on record.
+                if app.db.copies_a_recent_read(record):
+                    log.info(
+                        "the quote from %s (%s) copies the read just made; "
+                        "not stored as a second observation",
+                        supplier["name"],
+                        domain,
+                    )
+                elif not app.db.quote_already_recorded(record):
                     app.db.record_quote(record)
                     recorded.append(record)
                     log.info(

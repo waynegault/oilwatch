@@ -51,9 +51,10 @@ def _message(message_id="m1", sender="sales@oilfast.co.uk", body=None, parent=IN
 
 
 class FakeDb:
-    def __init__(self, *, processed=(), already_recorded=False):
+    def __init__(self, *, processed=(), already_recorded=False, copies_a_recent_read=False):
         self._processed = set(processed)
         self._already_recorded = already_recorded
+        self._copies_a_recent_read = copies_a_recent_read
         self.schema_inits = 0
         self.quotes: list[dict] = []
         self.discounts: list[dict] = []
@@ -83,6 +84,15 @@ class FakeDb:
 
     def quote_already_recorded(self, record: dict) -> bool:
         return self._already_recorded
+
+    def copies_a_recent_read(self, record: dict) -> bool:
+        """Asked before a quote is stored, so the sweep can drop a supplier's copy.
+
+        Declared by the test, like ``already_recorded`` above: the window rule
+        itself is exercised against the real database in ``test_db.py``, and what
+        this has to do is answer the question the real one answers.
+        """
+        return self._copies_a_recent_read
 
     def record_quote(self, record: dict) -> None:
         self.quotes.append(record)
@@ -277,6 +287,25 @@ class SweepTests(unittest.TestCase):
         self._run(db, [_message(parent="deleted-items")])
         self.assertEqual(db.marked, ["m1"])
         self.delete_mock.assert_not_called()
+
+    def test_a_copy_of_a_read_we_just_made_is_not_stored_as_a_second_quote(self) -> None:
+        """One quote event, one row — and the copy is still consumed.
+
+        ValueOils, Rix, Connon Bros and Regency Oils email the quote their tool has
+        just generated, dated from the message, so it lands seconds from the read of
+        the same quote. Storing it left two rows for one event, which the reads then
+        had to choose between; not storing it is what fixes the duplication
+        rather than the symptom. The message is marked and deleted like any other it
+        processes, so it cannot come back on the next sweep.
+        """
+        db = FakeDb(copies_a_recent_read=True)
+
+        recorded = self._run(db, [_message()])
+
+        self.assertEqual(recorded, [])
+        self.assertEqual(db.quotes, [])
+        self.assertEqual(db.marked, ["m1"])
+        self.delete_mock.assert_called_once_with({"access_token": "a"}, "m1")
 
     def test_a_processed_message_is_skipped(self) -> None:
         db = FakeDb(processed=["m1"])

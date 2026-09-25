@@ -58,7 +58,7 @@ what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
 
 | What | Count |
 |------|-------|
-| Tests | 804, all passing offline |
+| Tests | 809, all passing offline |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
 | CLI commands | 22 |
 | Modules under `oilwatch/` | 55 Python files |
@@ -291,8 +291,8 @@ Recording a purchase is a deliberate CLI act by the owner
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `list_suppliers` | Suppliers on record | None |
-| `current_prices` | Latest price per supplier (£/L inc. VAT), as an envelope that explains an empty market: `quotes` plus `as_of`, `window_days`, `excluded_suppliers`, `never_quoted`, `not_refreshed_suppliers`, `no_quote_suppliers` (last ask gave no price) and `failed_suppliers` (last ask raised), and `refresh` (whether a sweep is running now). Every row — including the ones *not* in `quotes`, which are the ones a reader has to ask — carries `kind`, `order_channel`, a `contact` of `{phone, email, url}`, and `order_page`/`valid_until` when recorded | None |
-| `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`), the winner's `kind` / `order_channel` / `contact` / `order_page`, the `window_days` compared, and any `excluded_suppliers` the age window dropped | None |
+| `current_prices` | Latest price per supplier (£/L inc. VAT), as an envelope that explains an empty market: `quotes` plus `as_of`, `window_days`, `excluded_suppliers` (each row carrying `reason: outside_window` — it has a price, just an older one than `window_days` allows), `never_quoted`, `not_refreshed_suppliers`, `no_quote_suppliers` (last ask gave no price) and `failed_suppliers` (last ask raised), and `refresh` (whether a sweep is running now). Every row — including the ones *not* in `quotes`, which are the ones a reader has to ask — carries `kind`, `order_channel`, a `contact` of `{phone, email, url}`, and `order_page`/`valid_until` when recorded | None |
+| `cheapest` | Cheapest supplier + market average and variance, including how long that offer stands (`valid_until`), the winner's `kind` / `order_channel` / `contact` / `order_page`, the `window_days` compared, and any `excluded_suppliers` the age window dropped (each with `reason: outside_window`) | None |
 | `purchases` | Purchases already recorded, newest first, with totals and discount codes | None |
 | `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase, the same `no_quote_suppliers` / `failed_suppliers` split, `awaiting_reply` (requests still owed a price, oldest first — a form or an email is answered later by a person, so writing the ask down is the only way to tell a supplier thinking from one never asked), and `refresh` (whether a sweep is running now) | None |
 | `chart` | Market summary chart; returns a file path | None |
@@ -687,7 +687,7 @@ Oil Price Webscraper/
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
 
-`python -m unittest discover -s tests -t .` — 804 tests, all offline.
+`python -m unittest discover -s tests -t .` — 809 tests, all offline.
 
 ### Run from the command line
 

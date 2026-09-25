@@ -405,6 +405,39 @@ class Database:
             ).fetchone()
         return row is not None
 
+    def copies_a_recent_read(self, record: dict[str, Any]) -> bool:
+        """True when this emailed observation copies a direct read of the supplier.
+
+        Four suppliers' tools email the quote they have just generated, and the
+        sweep dates a row from the message, so that copy arrives seconds from the
+        read it copies. Storing it would leave two rows for one quote event —
+        which is what the reads then have to choose between
+        (``_NOT_AN_EMAIL_COPY``); not storing it keeps the table honest instead,
+        and this is the same rule asked one step earlier, at the door.
+
+        The window is the one the reads use, and for the same reason: nobody
+        prices an enquiry by hand inside a minute, so anything within that of a
+        read is a machine's copy rather than a second answer. A non-email record
+        is never a copy, and neither is an email with no read near it — a supplier
+        that only answers by email has no read to copy.
+        """
+        if record.get("source") != "email":
+            return False
+        with closing(self.connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT 1 FROM quotes
+                WHERE supplier_id IS ? AND status = 'ok' AND source <> 'email'
+                  AND (julianday(?) - julianday(observed_at)) * 86400.0 BETWEEN 0 AND ?
+                """,
+                (
+                    record["supplier_id"],
+                    record["observed_at"],
+                    _EMAIL_COPY_WINDOW_SECONDS,
+                ),
+            ).fetchone()
+        return row is not None
+
     def record_order(self, record: dict[str, Any]) -> int:
         with closing(self.connect()) as conn, conn:
             cursor = conn.execute(
