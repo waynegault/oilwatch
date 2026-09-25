@@ -21,6 +21,7 @@ import statistics
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -96,6 +97,37 @@ def rank_for_display(rows: list[dict]) -> list[dict]:
         return (1 if row.get("kind") == "benchmark" else 0, float(price))
 
     return sorted(rows, key=key)
+
+
+def _without_phone(rows: list[dict]) -> list[dict]:
+    """The same rows with any phone removed from their contact block.
+
+    The service puts ``contact: {phone, email, url}`` on the rows these lists are
+    built from, and a number in a page whose column says "where to ask" is a
+    route rather than a field - the reason the suppliers list above carries no
+    phone either. The number stays where it belongs: the register, the database
+    column and `status`. The address is kept, because asking by email is a route
+    the app does take.
+    """
+    return [_strip_phone(row) for row in rows or []]
+
+
+def _strip_phone(value: Any) -> Any:
+    """Any payload value, with every ``contact.phone`` inside it blanked.
+
+    Blanked rather than deleted: the key is part of the shape the page and the
+    service share, and a reader of the file should see that a phone was
+    deliberately not carried rather than wonder whether one exists.
+    """
+    if isinstance(value, dict):
+        copy = {key: _strip_phone(child) for key, child in value.items()}
+        contact = copy.get("contact")
+        if isinstance(contact, dict) and contact.get("phone"):
+            copy["contact"] = {**contact, "phone": None}
+        return copy
+    if isinstance(value, list):
+        return [_strip_phone(child) for child in value]
+    return value
 
 
 def build_payload(app: OilWatchApp) -> dict:
@@ -210,13 +242,13 @@ def build_payload(app: OilWatchApp) -> dict:
                 for row in envelope["quotes"]
             ]
         ),
-        "no_quote_suppliers": envelope["no_quote_suppliers"],
-        "failed_suppliers": envelope["failed_suppliers"],
-        "excluded_suppliers": envelope["excluded_suppliers"],
-        "not_refreshed_suppliers": envelope["not_refreshed_suppliers"],
-        "never_quoted": envelope["never_quoted"],
+        "no_quote_suppliers": _without_phone(envelope["no_quote_suppliers"]),
+        "failed_suppliers": _without_phone(envelope["failed_suppliers"]),
+        "excluded_suppliers": _without_phone(envelope["excluded_suppliers"]),
+        "not_refreshed_suppliers": _without_phone(envelope["not_refreshed_suppliers"]),
+        "never_quoted": _without_phone(envelope["never_quoted"]),
     }
-    snapshot = app.status()["market_snapshot"]
+    snapshot = _strip_phone(app.status()["market_snapshot"])
 
     # Who has been asked for a price, and where each ask stands. `status` answers
     # this for an agent as `awaiting_reply`; the page has to answer it for a
@@ -266,7 +298,10 @@ def build_payload(app: OilWatchApp) -> dict:
                 "website": row["website"],
                 "order_page": row.get("connector_config", {}).get("order_page"),
                 "connector_type": row["connector_type"],
-                "phone": row.get("phone"),
+                # No phone. The register, the `contact.phone` field and
+                # raw_payload keep a number as data, but a page whose column says
+                # "where to ask" is offering a route, and the app asks by form or
+                # by email only - the decision of 2026-09-22.
                 "email": row.get("email"),
                 "status": row.get("status"),
             }

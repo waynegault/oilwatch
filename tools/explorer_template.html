@@ -225,16 +225,30 @@ function renderNow() {
     ["Priced earlier, latest attempt failed", CURRENT.not_refreshed_suppliers, "gap"],
   ];
   const byName = Object.fromEntries(DATA.suppliers.map((s) => [s.name, s]));
+  // What came of the ask, where one was made. The page has to be able to say
+  // "we asked Gleaner by form on 22 September and nothing came back", because a
+  // row that only says "gave no quote" reads as a supplier nobody approached.
+  const asked = Object.fromEntries(DATA.enquiries.map((e) => [e.name, e]));
+  const askText = (e) => {
+    if (!e) return '<span class="muted">never asked</span>';
+    const how = e.channel === "email" ? "by email" : (e.channel === "form" ? "by form" : esc(e.channel));
+    const outcome = e.state === "answered"
+      ? `answered ${gbp(e.price_per_liter)}`
+      : (e.state === "empty" ? "nothing came back" : "still waiting");
+    return `${how}, ${esc(e.requested_at.slice(0, 10))} — ${outcome}`;
+  };
   const body = groups.flatMap(([why, list, cls]) => (list || []).map((r) => {
     const detail = r.reason || r.last_attempt_status || (r.last_quote_at ? "last " + String(r.last_quote_at).slice(0, 10) : "");
     const named = r.name || r.supplier_name;
     const s = byName[named] || {};
     const href = s.order_page || s.website;
     const link = href ? `<a href="${esc(href)}" rel="noopener">${s.order_page ? "order page" : "website"}</a>` : '<span class="muted">none recorded</span>';
-    const contact = [s.phone, s.email].filter(Boolean).join(" · ");
-    return `<tr><td>${esc(named)}</td><td><span class="pill ${cls}">${esc(why)}</span></td><td>${esc(detail)}</td><td class="num">${r.last_price_per_liter != null ? gbp(r.last_price_per_liter) : (r.price_per_liter != null ? gbp(r.price_per_liter) : "—")}</td><td>${link}${contact ? `<br><span class="muted">${esc(contact)}</span>` : ""}</td></tr>`;
+    // The address, never the number: asking is by form or by email, and a
+    // number printed beside "where to ask" is a route the app does not take.
+    const contact = s.email ? esc(s.email) : "";
+    return `<tr><td>${esc(named)}</td><td><span class="pill ${cls}">${esc(why)}</span></td><td>${askText(asked[named])}</td><td>${esc(detail)}</td><td class="num">${r.last_price_per_liter != null ? gbp(r.last_price_per_liter) : (r.price_per_liter != null ? gbp(r.price_per_liter) : "—")}</td><td>${link}${contact ? `<br><span class="muted">${contact}</span>` : ""}</td></tr>`;
   }));
-  $("gapTable").innerHTML = `<thead><tr><th>Supplier</th><th>Why</th><th>Reason recorded</th><th class="num">Last price</th><th>Where to ask</th></tr></thead><tbody>${body.join("") || '<tr><td colspan="5" class="muted">every supplier is in the comparison</td></tr>'}</tbody>`;
+  $("gapTable").innerHTML = `<thead><tr><th>Supplier</th><th>Why</th><th>Asked</th><th>Reason recorded</th><th class="num">Last price</th><th>Where to ask</th></tr></thead><tbody>${body.join("") || '<tr><td colspan="6" class="muted">every supplier is in the comparison</td></tr>'}</tbody>`;
 
   const disc = DATA.discounts || [];
   $("discTable").innerHTML = disc.length

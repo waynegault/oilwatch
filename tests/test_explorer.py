@@ -15,8 +15,11 @@ is why this file loads the tool by path rather than importing it as a package.
 from __future__ import annotations
 
 import importlib.util
+import json
 import unittest
 from pathlib import Path
+
+from tests.app_fixture import AppTestCase
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -45,6 +48,40 @@ def quote(name: str, price: float, *, effective: float | None = None, kind: str 
 
 def names(rows: list[dict]) -> list[str]:
     return [row["name"] for row in rows]
+
+
+class PayloadContactTests(AppTestCase):
+    """The page must not offer a phone route, though the database keeps the number.
+
+    The 2026-09-22 decision: a number stays data in the register, the DB column,
+    `contact.phone` and raw_payload, while anything the app *prints* as a way to
+    make contact is a route a reading agent may take. The explorer page has a
+    "where to ask" column, so a number there is that kind of output. Every number
+    in the register was reaching it until 2026-09-25 - carried by the embedded
+    payload rather than the markup, which is why this asserts on the payload and
+    not on the page's text.
+    """
+
+    def test_a_stored_phone_does_not_reach_the_pages_payload(self) -> None:
+        self._init()
+        self.app.db.upsert_supplier(
+            {
+                "name": "A Supplier",
+                "website": "https://a-supplier.example/",
+                "phone": "01224 000000",
+                "email": "quotes@a-supplier.example",
+                "status": "active",
+                "connector_type": "manual",
+                "connector_config": {},
+            }
+        )
+
+        payload = build_explorer.build_payload(self.app)
+
+        self.assertNotIn("01224 000000", json.dumps(payload, default=str))
+        row = next(r for r in payload["suppliers"] if r["name"] == "A Supplier")
+        self.assertNotIn("phone", row)
+        self.assertEqual(row["email"], "quotes@a-supplier.example")
 
 
 class RankForDisplayTests(unittest.TestCase):
