@@ -74,6 +74,13 @@ class Settings:
     #: the threshold its probability is held to. Cached per sender — and each
     #: verdict records the newest mail it accounted for, so a below-threshold
     #: sender is judged again for later mail rather than deciding its alert.
+    #:
+    #: A conservative default rather than a fitted one: no labelled sender set
+    #: exists to fit it against, and the senders whose mail this decides are the
+    #: ones already recognised. It is measurable anyway, because the sweep has
+    #: stored a verdict per sender it judged and the supplier register labels the
+    #: named ones — `python tools/fuel_mail_calibration.py` reports whether the
+    #: threshold separates them, and says so when nothing sits near it.
     fuel_mail_min_probability: float = 0.8
     scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
 

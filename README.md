@@ -58,7 +58,7 @@ what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
 
 | What | Count |
 |------|-------|
-| Tests | 822, all passing offline |
+| Tests | 837, all passing offline |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
 | CLI commands | 22 |
 | Modules under `oilwatch/` | 55 Python files |
@@ -542,7 +542,7 @@ rather than copying:
 | `quote_quantity_liters` | The order size every quote is for |
 | `quote_max_workers` | How many suppliers are quoted at once; `1` restores the strictly sequential run |
 | `max_quote_age_days` | The freshness window. Code default 30; this install sets 1, because a quote stands at most a day |
-| `fuel_mail_min_probability` | How likely an unknown sender's mail must read as a fuel quote before the sweep names that sender |
+| `fuel_mail_min_probability` | How likely an unknown sender's mail must read as a fuel quote before the sweep names that sender. A conservative default rather than a fitted one — `tools/fuel_mail_calibration.py` measures it against the senders the register labels |
 | `scheduler.email_monitor_start_hour` / `_end_hour` / `_interval_hours` | The inbox sweep's window (inclusive) and the step through it, as a weekday cron. A window that runs backwards or a step of zero is refused by name rather than failing inside `range()` |
 | `login_urls` | Where `oilwatch login <supplier>` signs in, per supplier key |
 | `microsoft_client_id` | The Entra app (client) id for the mailbox grant — public, not a secret |
@@ -682,6 +682,7 @@ Oil Price Webscraper/
 │   ├── build_explorer.py        # Builds the data explorer page (see below)
 │   ├── build_snapshot.py        # Builds the committed price-history snapshot
 │   ├── dump_schema.py           # Writes docs/schema.sql from the code
+│   ├── fuel_mail_calibration.py # Scores the fuel-mail threshold against the register
 │   ├── make_icon.py             # Draws assets/oilwatch.ico for the shortcut
 │   └── explorer_template.html   # Its template
 └── tests/
@@ -695,7 +696,7 @@ Oil Price Webscraper/
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
 
-`python -m unittest discover -s tests -t .` — 822 tests, all offline.
+`python -m unittest discover -s tests -t .` — 837 tests, all offline.
 
 ### Run from the command line
 
@@ -894,6 +895,34 @@ deleted row in the file's free pages; it then checks its own output, scanning
 every text column *and* the file's bytes for those details and for samples from
 the tables it dropped, and deletes the file rather than leave a snapshot that
 still carries one. `snapshot_meta` inside the file records what was withheld.
+
+## Fuel-mail threshold
+
+`extract_ppl` is tried first on an unrecognised sender because it is free and
+exact; when it finds no price, `oilwatch/quote_judge.py` asks a model whether the
+message reads like a fuel quote and names the domain only when that answer is at
+least `fuel_mail_min_probability`. The threshold is a conservative default and
+nothing had measured it — there is no labelled sender set in the repository.
+
+`tools/fuel_mail_calibration.py` measures what can be measured, with no key and no
+network call, by joining the verdicts the sweep has already stored against the
+senders the tracked register labels. A register supplier sells heating oil, so its
+mail is what the judgement must not miss; a domain in `excluded_domains` is one it
+must never name. Those two sets are the labelled half, and the stored
+probabilities are the other:
+
+```powershell
+python tools/fuel_mail_calibration.py           # report the separation
+python tools/fuel_mail_calibration.py --check   # exit non-zero on a contradiction
+```
+
+Measured 2026-09-29: 156 verdicts, every one between 0.01 and 0.05, none within
+0.2 of the threshold. So the threshold is **unconstrained** by this install's data
+rather than validated by it, and the tool says exactly that rather than printing a
+pass — an unexercised threshold is not a checked one. It prints only domains the
+register already carries: everything else in `sender_judgements` is the owner's
+correspondence, which is the half `build_snapshot.py` exists to keep out of this
+repository.
 
 ## Support & Documentation
 

@@ -159,16 +159,22 @@ and the domain is named only when that answer is at least
 `fuel_mail_min_probability` in `config/settings.json` (default `0.8`). Naming
 every unknown sender once put eighty of the owner's correspondents on a single
 line of a file on disk — a financial ombudsman case, NHS Scotland, his bank —
-and that is the fault the threshold exists to prevent. Verdicts are cached per
-sender domain, each recording the newest mail it accounts for, so an unrecognised
-sender costs one request rather than one per message — and a below-threshold
-verdict is not permanent: it speaks only for the mail it was asked about, and mail
-arriving from that sender later is judged afresh. Without that, a sender's
-newsletter would answer for its quote, which is the case the judgement exists to
-catch. A domain that *is* named keeps its name without asking again, since the
-answer is already stored and already acted on. Mail whose `From` will not parse
-has no domain to name and nowhere to keep a verdict, so it is not judged at all —
-it is still counted, but there is nothing the alert could ask you to add.
+and that is the fault the threshold exists to prevent. That `0.8` is a
+conservative default and not a fitted value, which you can check rather than
+assume: `python tools/fuel_mail_calibration.py` joins the verdicts already stored
+against the senders `config/suppliers.json` labels — a supplier's domain must be
+named, an `excluded_domains` entry must not — and reports whether the threshold
+separates them, or that nothing sits near it, which is what it says on this
+install. Verdicts are cached per sender domain, each recording the newest mail it
+accounts for, so an unrecognised sender costs one request rather than one per
+message — and a below-threshold verdict is not permanent: it speaks only for the
+mail it was asked about, and mail arriving from that sender later is judged
+afresh. Without that, a sender's newsletter would answer for its quote, which is
+the case the judgement exists to catch. A domain that *is* named keeps its name
+without asking again, since the answer is already stored and already acted on.
+Mail whose `From` will not parse has no domain to name and nowhere to keep a
+verdict, so it is not judged at all — it is still counted, but there is nothing
+the alert could ask you to add.
 
 The email sweep is a *separate* mechanism from price refresh and **is**
 scheduled — a supplier answers when it chooses, so polling is the only way to

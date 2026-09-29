@@ -37,16 +37,22 @@ def _must_not_be_called(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"no request should have been made, got {request.url}")
 
 
-def _answer(probability: object) -> httpx.Response:
+def _answer(probability: object, *, model: str | None = None) -> httpx.Response:
     """A well-formed 200. It carries a request because raise_for_status needs one.
 
     A bare httpx.Response raises RuntimeError from raise_for_status, which the
     fail-soft path would turn into a silent None - the tests came back green and
     meaningless until this was attached.
+
+    ``model`` adds the versioned id the service reports it answered under, which
+    is what the alias in ``MODEL`` can be re-pointed behind.
     """
+    body: dict = {"answers": {quote_judge.QUESTION_ID: {"noul": probability}}}
+    if model is not None:
+        body["model"] = model
     return httpx.Response(
         200,
-        json={"answers": {quote_judge.QUESTION_ID: {"noul": probability}}},
+        json=body,
         request=httpx.Request("POST", quote_judge.API_URL),
     )
 
@@ -227,6 +233,62 @@ class AnswerTests(_KeyedTestCase):
                 self.assertLogs("oilwatch.quote_judge", level="WARNING"),
             ):
                 self.assertIsNone(self._judged(response))
+
+    def test_only_a_json_number_is_a_probability(self) -> None:
+        """The types ``float()`` would quietly accept, which must not be verdicts.
+
+        ``float("0.9")`` is 0.9 and ``float(True)`` is 1.0, so a reader that casts
+        the field reads a reshaped response as a confident judgement - above the
+        threshold in the ``True`` case, which is the one direction this alert must
+        never fail in. The contract is a JSON number, so anything else is a
+        response this module does not understand.
+        """
+        for value in ("0.9", "1", True, False, None, [0.9], {"noul": 0.9}):
+            with (
+                self.subTest(value=value),
+                self.assertLogs("oilwatch.quote_judge", level="WARNING") as logged,
+            ):
+                self.assertIsNone(self._judged(_answer(value)))
+            self.assertIn("not a probability", "\n".join(logged.output))
+
+    def test_the_two_failures_are_told_apart_in_the_log(self) -> None:
+        """Not answered and answered-wrongly return the same None, and must not read the same.
+
+        One is weather; the other is a contract that moved. The return value
+        cannot distinguish them, so the log line is the entire difference, and it
+        is the only thing that would surface a reshaped response before the alert
+        quietly retires.
+        """
+        with self.assertLogs("oilwatch.quote_judge", level="WARNING") as answered:
+            self.assertIsNone(self._judged(_answer("0.9")))
+        answered_text = "\n".join(answered.output)
+        self.assertIn("answered with", answered_text)
+        self.assertNotIn("could not be made", answered_text)
+
+        with self.assertLogs("oilwatch.quote_judge", level="WARNING") as unanswered:
+            self.assertIsNone(self._judged(httpx.Response(503, text="upstream")))
+        unanswered_text = "\n".join(unanswered.output)
+        self.assertIn("could not be made", unanswered_text)
+        self.assertNotIn("answered with", unanswered_text)
+
+    def test_the_version_that_answered_is_logged_when_the_response_names_one(self) -> None:
+        """An alias is not a version, so the version it resolved to is the trace.
+
+        ``MODEL`` is ``jev-latest``; a re-pointed alias would change every
+        judgement behind an unchanged request, and this line is what makes that
+        visible rather than silent.
+        """
+        with self.assertLogs("oilwatch.quote_judge", level="INFO") as logged:
+            self.assertEqual(self._judged(_answer(0.9, model="jev-1.13.0")), 0.9)
+
+        self.assertIn("jev-1.13.0", "\n".join(logged.output))
+
+    def test_a_response_naming_no_version_still_judges(self) -> None:
+        """The version is a bonus, not a requirement - the probability is the contract."""
+        with self.assertLogs("oilwatch.quote_judge", level="INFO") as logged:
+            self.assertEqual(self._judged(_answer(0.9)), 0.9)
+
+        self.assertNotIn("(model ", "\n".join(logged.output))
 
 
 if __name__ == "__main__":

@@ -19,6 +19,14 @@ malformed response returns ``None`` and the caller keeps the behaviour it had. A
 judgement that cannot be made must never break the sweep, and ``None`` means "not
 judged" rather than "not fuel" — the two must not be confused.
 
+Fail-soft is not the same as fail-blind, though, and the two failures are told
+apart in the log even though they return the same thing: *not answered* (no key,
+no route, a timeout) is a request that did not get through, while *answered with
+something that is not a probability* is a contract that moved. The second is the
+one worth waking up for, and it is the reason the reader below is strict about the
+TYPE and not only the value: ``float()`` accepts ``"0.9"`` and ``true`` (as 1.0),
+so a reshaped response would otherwise be read as a confident verdict.
+
 **One judgement per sender per batch of mail.** Unrecognised mail is deliberately
 left in the mailbox rather than deleted, so the same messages are re-read every
 hour; asking per message would spend a request on each of them, every sweep,
@@ -33,6 +41,7 @@ module was written to catch.
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 import httpx
@@ -45,9 +54,13 @@ log = get_logger("quote_judge")
 #: which one.
 API_URL = "https://api.typesafe.ai/v1/systemone"
 
-#: The alias the TypeSafe docs use and the SDK default. The response reports the
-#: versioned id that actually answered (``jev-1.13.0``), so a change behind the
-#: alias is visible in the log rather than silent.
+#: The alias the TypeSafe docs use and the SDK default. An alias is not a version:
+#: it can be re-pointed at a new one without a line changing here, and because the
+#: threshold below is applied to whatever probability that version returns, a bump
+#: would move every judgement while the record stayed identical. So each judgement
+#: logs the versioned id the response names (``jev-1.13.0``) — see
+#: :func:`_resolved_model` for why that id is looked for rather than read from a
+#: pinned field.
 MODEL = "jev-latest"
 
 #: The key is read from the process environment, then from the Windows user
@@ -93,6 +106,12 @@ CRITERIA = {
     ),
 }
 
+#: A versioned identifier — a name, a hyphen, then a digit (``jev-1.13.0``). Used
+#: to *find* the id the service answered under, never to validate it: the point is
+#: that a re-pointed alias shows up in the log, not that the service uses a
+#: particular spelling.
+_MODEL_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_.]*-[0-9][A-Za-z0-9_.\-]*$")
+
 
 def _key_from_windows_environment() -> str | None:
     """The key as held in the Windows user environment, or ``None``.
@@ -127,6 +146,64 @@ def _api_key() -> str | None:
     return key or _key_from_windows_environment()
 
 
+class _MalformedAnswer(Exception):
+    """The service answered, but not with a probability.
+
+    Separate from every other failure because it means something different: the
+    request got through and the answer is not the shape this module was written
+    against, which is a contract that moved rather than a judgement that could
+    not be made.
+    """
+
+
+def _resolved_model(payload: object) -> str | None:
+    """The versioned model id the response names, or ``None`` when it names none.
+
+    Looked for rather than read from a named field, deliberately: nothing in this
+    repository records the response's schema, and inventing a field name would
+    turn a guess into a silent ``None``. What matters here is only that a re-pointed
+    alias is *visible*, so any string shaped like a versioned id in the body or in
+    this question's answer is reported; the alias itself is the risk, not the key.
+    """
+    if not isinstance(payload, dict):
+        return None
+    candidates: list[object] = list(payload.values())
+    answers = payload.get("answers")
+    if isinstance(answers, dict):
+        question = answers.get(QUESTION_ID)
+        if isinstance(question, dict):
+            candidates.extend(question.values())
+    for value in candidates:
+        if isinstance(value, str) and _MODEL_ID.match(value.strip()):
+            return value.strip()
+    return None
+
+
+def _read_answer(payload: object) -> float:
+    """The probability in a response body, or :class:`_MalformedAnswer`.
+
+    Strict about the type as well as the value. ``noul`` is a JSON number and the
+    four shapes below are the whole contract; ``float()`` on the raw field would
+    instead accept ``"0.9"`` and ``True`` — a reshaped response read as a
+    confident verdict, which is the one error this module exists to avoid.
+    """
+    if not isinstance(payload, dict):
+        raise _MalformedAnswer(f"a {type(payload).__name__} body in place of an object")
+    answers = payload.get("answers")
+    if not isinstance(answers, dict):
+        raise _MalformedAnswer("no answers object")
+    answer = answers.get(QUESTION_ID)
+    if not isinstance(answer, dict) or "noul" not in answer:
+        raise _MalformedAnswer(f"no noul for the {QUESTION_ID!r} question")
+    value = answer["noul"]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise _MalformedAnswer(f"{value!r} ({type(value).__name__}) in place of a number")
+    probability = float(value)
+    if not 0.0 <= probability <= 1.0:
+        raise _MalformedAnswer(f"{probability!r}, outside 0..1")
+    return probability
+
+
 def fuel_mail_probability(
     text: str,
     *,
@@ -137,7 +214,9 @@ def fuel_mail_probability(
 
     ``None`` means "no judgement available" — never "not fuel mail". A caller
     must keep its old behaviour in that case rather than read it as a verdict,
-    which is why the failure paths all return the same thing.
+    which is why the failure paths all return the same thing: the log tells the
+    two apart (nothing answered, or answered with something that is not a
+    probability), and the return value deliberately does not.
 
     ``client`` lets a caller supply its own ``httpx.Client``; without one, a
     single request is made and closed.
@@ -149,7 +228,7 @@ def fuel_mail_probability(
         log.debug("%s is not set; the fuel-mail judgement is unavailable", ENV_VAR)
         return None
 
-    payload = {
+    request = {
         "state": text[:STATE_CHARS],
         "model": MODEL,
         "questions": {
@@ -161,23 +240,40 @@ def fuel_mail_probability(
         },
     }
     headers = {"Authorization": f"Bearer {key}"}
+    body: object
     try:
         if client is not None:
-            response = client.post(API_URL, json=payload, headers=headers, timeout=timeout)
+            response = client.post(API_URL, json=request, headers=headers, timeout=timeout)
         else:
-            response = httpx.post(API_URL, json=payload, headers=headers, timeout=timeout)
+            response = httpx.post(API_URL, json=request, headers=headers, timeout=timeout)
         response.raise_for_status()
-        answer = float(response.json()["answers"][QUESTION_ID]["noul"])
+        body = response.json()
+        answer = _read_answer(body)
+    except _MalformedAnswer as exc:
+        # The service answered; it just did not answer with a probability. Named
+        # apart from the branch below because it is the shape worth acting on: a
+        # request that did not get through is weather, a contract that moved is
+        # work. Both are still "no judgement" to the caller.
+        log.warning(
+            "the fuel-mail judgement answered with %s, which is not a probability; "
+            "read as no judgement",
+            exc,
+        )
+        return None
     except Exception as exc:  # noqa: BLE001 - any failure is simply "no judgement"
-        # Including a KeyError or a TypeError from a reshaped response: the
-        # contract with the caller is a probability or None, and a response this
-        # module does not understand is not a probability.
+        # The request that did not get through: no route, a refused status, a
+        # timeout, or a body that is not JSON at all. A body that IS JSON but is
+        # not the answer's shape is the branch above, deliberately - the two read
+        # the same to the caller and must not read the same in the log.
         log.warning(
             "the fuel-mail judgement could not be made (%s); the price parser stands alone",
             exc,
         )
         return None
-    if not 0.0 <= answer <= 1.0:
-        log.warning("the fuel-mail judgement returned %r, outside 0..1; ignored", answer)
-        return None
+    resolved = _resolved_model(body)
+    log.info(
+        "the fuel-mail judgement answered %.4f%s",
+        answer,
+        f" (model {resolved})" if resolved else "",
+    )
     return answer
