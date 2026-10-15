@@ -63,12 +63,10 @@ def load_client_id() -> str:
     """
     client_id = os.environ.get("MICROSOFT_CLIENT_ID")
     if not client_id:
-        try:
-            from oilwatch.config import load_settings
+        from oilwatch.config import CHECKOUT_ROOT, load_settings
 
+        if (CHECKOUT_ROOT / "config" / "settings.json").exists():
             client_id = load_settings().microsoft_client_id
-        except Exception:  # noqa: BLE001 - a missing settings file is not the problem here
-            client_id = ""
     if not client_id:
         raise RuntimeError(
             "Set the MICROSOFT_CLIENT_ID environment variable (the Entra app "

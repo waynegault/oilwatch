@@ -7,8 +7,10 @@ messages: which ones get recorded, which are skipped, and which are deleted.
 from __future__ import annotations
 
 import json
+import tempfile
 import types
 import unittest
+from pathlib import Path
 from typing import cast
 from unittest.mock import MagicMock, patch
 
@@ -134,19 +136,43 @@ class ClientIdTests(unittest.TestCase):
             self.assertEqual(load_client_id(), "env-id")
 
     def test_settings_are_the_fallback(self) -> None:
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch("oilwatch.config.load_settings", return_value=types.SimpleNamespace(microsoft_client_id="cfg")),
-        ):
-            self.assertEqual(load_client_id(), "cfg")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = root / "config" / "settings.json"
+            settings.parent.mkdir()
+            settings.touch()
+            with (
+                patch.dict("os.environ", {}, clear=True),
+                patch("oilwatch.config.CHECKOUT_ROOT", root),
+                patch(
+                    "oilwatch.config.load_settings",
+                    return_value=types.SimpleNamespace(microsoft_client_id="cfg"),
+                ),
+            ):
+                self.assertEqual(load_client_id(), "cfg")
 
     def test_missing_everywhere_is_an_error(self) -> None:
         with (
+            tempfile.TemporaryDirectory() as tmp,
             patch.dict("os.environ", {}, clear=True),
-            patch("oilwatch.config.load_settings", side_effect=OSError("no settings")),
+            patch("oilwatch.config.CHECKOUT_ROOT", Path(tmp)),
             self.assertRaises(RuntimeError),
         ):
             load_client_id()
+
+    def test_invalid_settings_are_not_hidden_by_the_missing_value_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = root / "config" / "settings.json"
+            settings.parent.mkdir()
+            settings.touch()
+            with (
+                patch.dict("os.environ", {}, clear=True),
+                patch("oilwatch.config.CHECKOUT_ROOT", root),
+                patch("oilwatch.config.load_settings", side_effect=ValueError("invalid settings")),
+                self.assertRaisesRegex(ValueError, "invalid settings"),
+            ):
+                load_client_id()
 
 
 class RefreshTokenCacheTests(unittest.TestCase):
