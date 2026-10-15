@@ -45,4 +45,4 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 | Findings register | `b3e2661` | Initial evidence and prioritized audit queue |
 | LLM authorization | `e8d8f66` | Use the configured bearer credential in the classifier request |
 | Strict Pydantic boundaries | `4839def` | Validate settings, supplier register, candidates, and quote results; make service fixtures provide a valid synthetic register |
-| Detached-worker integrity | Pending | Use the checkout virtualenv, retain worker stderr, mark launch failures, and reject malformed observation timestamps |
+| Detached-worker integrity | `3ebb736` | Use the checkout virtualenv, retain worker stderr, mark launch failures, and reject malformed observation timestamps |
