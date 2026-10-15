@@ -939,11 +939,20 @@ class MessageReceivedTests(unittest.TestCase):
         )
 
     def test_an_unusable_date_falls_back_to_now(self) -> None:
-        """Which is what the price-recording path always did."""
-        before = utcnow_naive()
+        """The legacy fallback remains, but it must not conceal bad timestamps."""
+        for message in (
+            {"receivedDateTime": "not a date"},
+            {"receivedDateTime": 42},
+            {},
+        ):
+            with self.subTest(message=message), self.assertLogs(
+                "oilwatch.graph_email", level="WARNING"
+            ) as captured:
+                before = utcnow_naive()
+                received = message_received(message)
 
-        self.assertGreaterEqual(message_received({"receivedDateTime": "not a date"}), before)
-        self.assertGreaterEqual(message_received({}), before)
+            self.assertGreaterEqual(received, before)
+            self.assertIn("using current UTC time", captured.output[0])
 
 
 if __name__ == "__main__":

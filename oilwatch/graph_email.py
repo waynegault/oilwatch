@@ -20,7 +20,6 @@ Requires a Microsoft Entra app registration:
 from __future__ import annotations
 
 import base64
-import contextlib
 import json
 import os
 import re
@@ -102,15 +101,28 @@ def message_received(message: dict[str, Any]) -> datetime:
     has returned so far is "...Z", which is why nobody noticed.
 
     A message with no usable date falls back to now, which is what the
-    price-recording path always did.
+    price-recording path always did, but logs the condition because that date
+    determines whether an old quote can appear current.
     """
-    raw = message.get("receivedDateTime") or ""
-    if raw:
-        with contextlib.suppress(ValueError):
+    raw = message.get("receivedDateTime")
+    if isinstance(raw, str) and raw:
+        try:
             parsed = datetime.fromisoformat(raw)
+        except ValueError as exc:
+            log.warning(
+                "mail message has invalid receivedDateTime %r (%s); using current UTC time",
+                raw,
+                exc,
+            )
+        else:
             if parsed.tzinfo is not None:
                 parsed = parsed.astimezone(UTC).replace(tzinfo=None)
             return parsed
+    else:
+        log.warning(
+            "mail message has no usable receivedDateTime (type %s); using current UTC time",
+            type(raw).__name__,
+        )
     return utcnow_naive()
 
 
