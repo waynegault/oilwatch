@@ -46,4 +46,4 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 | LLM authorization | `e8d8f66` | Use the configured bearer credential in the classifier request |
 | Strict Pydantic boundaries | `4839def` | Validate settings, supplier register, candidates, and quote results; make service fixtures provide a valid synthetic register |
 | Detached-worker integrity | `3ebb736` | Use the checkout virtualenv, retain worker stderr, mark launch failures, and reject malformed observation timestamps |
-| Hermetic and synthetic test data | Pending | Consolidate app fixtures; replace identifying data and stale timestamps; isolate CLI and browser tests |
+| Hermetic and synthetic test data | `b1f9f23` | Consolidate app fixtures; replace identifying data and stale timestamps; isolate CLI and browser tests |
