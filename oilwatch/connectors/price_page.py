@@ -7,11 +7,13 @@ import httpx
 
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.http import build_client
-from oilwatch.models import QuoteReason, QuoteResult, QuoteStatus
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import apply_vat, inclusive_total, normalise_price_per_litre
 
 
 class PricePageConnector(BaseConnector):
+    source = "price_page"
+
     def __init__(self) -> None:
         # Shared client (see oilwatch/http.py): timeouts plus transport-level
         # retries. Keeps the honest OilWatch user agent rather than a browser's.
@@ -82,37 +84,6 @@ class PricePageConnector(BaseConnector):
             total_price=inclusive_total(price, quantity_liters),
             source="price_page",
             raw_payload={"quote_url": quote_url},
-        )
-
-    def _manual(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        notes: str,
-        reason: QuoteReason,
-        *,
-        status: QuoteStatus = "manual_action_required",
-    ) -> QuoteResult:
-        """A quote this connector cannot give, with the reason it cannot.
-
-        ``status`` is ``manual_action_required`` when the page itself decided —
-        it answered and had no price — and ``error`` when the attempt fell over,
-        which is what ``reason="site_error"`` says. A consumer branches on the
-        difference, so a dead site reported as "nothing to give" sends the reader
-        to the wrong next step.
-        """
-        # The phone on the record is contact data, not a route this app offers:
-        # it never rings a supplier, so the note names an address or a page.
-        contact = ", ".join(p for p in [supplier.get("email"), supplier.get("website")] if p)
-        return QuoteResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            observed_at=self.now(),
-            quantity_liters=quantity_liters,
-            status=status,
-            reason=reason,
-            source="price_page",
-            notes=f"{notes} Contact: {contact}" if contact else notes,
         )
 
     @staticmethod

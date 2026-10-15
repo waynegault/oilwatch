@@ -58,7 +58,10 @@ class SyncBrowserConnectorTests(unittest.TestCase):
     def test_no_price_falls_back_to_manual(self) -> None:
         result = StubSyncConnector(None).quote(SUPPLIER, 1000, {})
         self.assertEqual(result.status, "manual_action_required")
+        self.assertEqual(result.reason, "no_price_found")
+        self.assertEqual(result.source, "stub")
         self.assertIn("No price on the stub page.", result.notes)
+        self.assertIn("Contact: https://example.test", result.notes)
 
     def test_a_collect_error_becomes_an_error_quote(self) -> None:
         """A driver that threw is an ``error``, not a supplier with nothing to say.
@@ -139,6 +142,20 @@ class BrowserConnectorBaseTests(unittest.TestCase):
     def setUp(self) -> None:
         self.connector = StubBrowserConnector()
         self.creds = {"email": "owner@example.test", "password": "Secret!123"}
+
+    def test_login_is_required_when_a_browser_connector_is_instantiated(self) -> None:
+        class MissingLoginConnector(BrowserConnector):
+            async def get_quote_with_browser(
+                self,
+                supplier: dict[str, Any],
+                quantity_liters: int,
+                context: dict[str, Any],
+                page: Any,
+            ) -> QuoteResult:
+                raise AssertionError("not used")
+
+        with self.assertRaisesRegex(TypeError, "login"):
+            MissingLoginConnector()
 
     def test_registration_is_offered_when_a_register_link_exists(self) -> None:
         page = FakeAsyncPage(elements=[("Register", FakeElement())])

@@ -70,6 +70,7 @@ class BrowserConnector(BaseConnector, ABC):
         """
         raise NotImplementedError
     
+    @abstractmethod
     async def login(self, page: PageLike, email: str, password: str) -> bool:
         """
         Log in to the supplier website.

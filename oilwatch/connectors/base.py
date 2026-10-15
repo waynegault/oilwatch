@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from oilwatch.models import QuoteResult, utcnow_naive
+from oilwatch.models import QuoteReason, QuoteResult, QuoteStatus, utcnow_naive
 
 if TYPE_CHECKING:
     import httpx
@@ -15,6 +15,7 @@ class BaseConnector(ABC):
     #: Released by :meth:`close`; connectors that drive a browser or only
     #: assemble a manual quote leave it ``None``.
     client: httpx.Client | None = None
+    source: str
 
     @abstractmethod
     def quote(
@@ -28,6 +29,27 @@ class BaseConnector(ABC):
     @staticmethod
     def now() -> datetime:
         return utcnow_naive()
+
+    def _manual(
+        self,
+        supplier: dict[str, Any],
+        quantity_liters: int,
+        notes: str,
+        reason: QuoteReason,
+        *,
+        status: QuoteStatus = "manual_action_required",
+    ) -> QuoteResult:
+        contact = ", ".join(p for p in (supplier.get("email"), supplier.get("website")) if p)
+        return QuoteResult(
+            supplier_id=int(supplier["id"]),
+            supplier_name=supplier["name"],
+            observed_at=self.now(),
+            quantity_liters=quantity_liters,
+            status=status,
+            reason=reason,
+            source=self.source,
+            notes=f"{notes} Contact: {contact}" if contact else notes,
+        )
 
     def http_client(self) -> httpx.Client:
         """The HTTP client this connector owns.

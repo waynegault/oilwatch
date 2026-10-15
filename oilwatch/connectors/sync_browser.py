@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from oilwatch.connectors.base import BaseConnector
-from oilwatch.models import QuoteReason, QuoteResult, QuoteStatus
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import inclusive_price_and_total, inclusive_total
 
 
@@ -113,44 +113,4 @@ class SyncBrowserConnector(BaseConnector):
                 f"({basis_note}). Postcode: {postcode or 'not provided'}"
             ),
             raw_payload=raw_payload,
-        )
-
-    def _manual(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        notes: str,
-        reason: QuoteReason,
-        *,
-        status: QuoteStatus = "manual_action_required",
-    ) -> QuoteResult:
-        """A quote this connector cannot give, with the reason it cannot.
-
-        ``reason`` is required: both callers know which case they are in, and a
-        default here would be guessing where the row must not be a guess.
-
-        ``status`` is ``manual_action_required`` for everything the supplier
-        itself decided — no price on the page, a portal that wants a sign-in —
-        and ``error`` for the one case where the attempt fell over, which is what
-        ``reason="site_error"`` means. The two are kept apart because a consumer
-        branches on them: ``service`` splits the last ask per supplier into the
-        ones with no price to give ("often doing exactly what it does") and the
-        ones worth looking at, so a browser that would not launch reported as the
-        first reads as a supplier with nothing to say.
-        """
-        # The phone on the record is contact data, not a route this app offers:
-        # it never rings a supplier, so the note names an address or a page and
-        # leaves the number off.
-        contact = ", ".join(
-            p for p in [supplier.get("email"), supplier.get("website")] if p
-        )
-        return QuoteResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            observed_at=self.now(),
-            quantity_liters=quantity_liters,
-            status=status,
-            reason=reason,
-            source=self.source,
-            notes=f"{notes} Contact: {contact}" if contact else notes,
         )

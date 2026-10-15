@@ -44,13 +44,14 @@ from oilwatch.connectors.base import BaseConnector
 from oilwatch.http import build_client, request_with_retry
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import QuoteReason, QuoteResult, QuoteStatus
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import inclusive_total
 
 log = get_logger("connectors.highland_fuels")
 
 
 class HighlandFuelsConnector(BaseConnector):
+    source = "highland_fuels"
     quote_url = "https://iqo-highland.fuels.app/lib/getoffers.php"
     product_value = "043"  # DOMESTIC OIL
 
@@ -163,39 +164,3 @@ class HighlandFuelsConnector(BaseConnector):
             return None
         _, price_per_liter, total = next((o for o in offers if "standard" in o[0]), offers[0])
         return round(price_per_liter, 4), round(total, 2)
-
-    def _manual(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        notes: str,
-        reason: QuoteReason,
-        *,
-        status: QuoteStatus = "manual_action_required",
-    ) -> QuoteResult:
-        """A quote this connector cannot give, with the reason it cannot.
-
-        ``reason`` is required rather than defaulted: both callers below know
-        which case they are in, and a default would be this function guessing on
-        their behalf — the one thing an unclassified row already fails to do.
-
-        ``status`` is ``manual_action_required`` for the response that answered
-        without an offer, and ``error`` for the request that raised, because
-        ``reason="site_error"`` means the attempt fell over. A consumer branches
-        on the status, so filing a transport failure as "no price to give" sends
-        the reader to the wrong next step: ``service`` lists the first as a
-        supplier doing what it does and only the second as a fault to look at.
-        """
-        # The phone on the record is contact data, not a route this app offers:
-        # it never rings a supplier, so the note names an address or a page.
-        contact = ", ".join(p for p in [supplier.get("email"), supplier.get("website")] if p)
-        return QuoteResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            observed_at=self.now(),
-            quantity_liters=quantity_liters,
-            status=status,
-            reason=reason,
-            source="highland_fuels",
-            notes=f"{notes} Contact: {contact}" if contact else notes,
-        )

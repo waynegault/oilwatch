@@ -36,7 +36,7 @@ from oilwatch.connectors.base import BaseConnector
 from oilwatch.credentials import get_supplier_credentials
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import QuoteReason, QuoteResult, QuoteStatus
+from oilwatch.models import QuoteResult
 from oilwatch.pricing import inclusive_price_and_total, pence_to_pounds
 from oilwatch.waiting import wait_until
 
@@ -61,6 +61,7 @@ QUOTE_ROW_RE = re.compile(
 
 
 class ScottishFuelsBrowserConnector(BaseConnector):
+    source = "scottish_fuels_browser"
     quote_url = "https://quote.scottishfuels.co.uk/quote/"
     login_url = "https://quote.scottishfuels.co.uk/customer/account/login/"
     product_sku = "451"  # Premium Kerosene
@@ -444,38 +445,3 @@ class ScottishFuelsBrowserConnector(BaseConnector):
         from selenium.webdriver.common.by import By
 
         return driver.find_element(By.TAG_NAME, "body").text
-
-    def _manual(
-        self,
-        supplier: dict[str, Any],
-        quantity_liters: int,
-        notes: str,
-        reason: QuoteReason | None = None,
-        *,
-        status: QuoteStatus = "manual_action_required",
-    ) -> QuoteResult:
-        """A non-quote result, optionally classified.
-
-        ``reason`` stays optional because the callers here do not all know one:
-        an unrecognised case reports ``None`` — "unclassified" — rather than a
-        guess that a consumer would then branch on.
-
-        ``status`` is ``manual_action_required`` except for the run that raised,
-        where ``reason="site_error"`` says the attempt itself fell over and the
-        row has to read as one: the consumers split a supplier that gave no price
-        from one whose retrieval failed, and only the second is a fault to look
-        at.
-        """
-        # The phone on the record is contact data, not a route this app offers:
-        # it never rings a supplier, so the note names an address or a page.
-        contact = ", ".join(p for p in [supplier.get("email"), supplier.get("website")] if p)
-        return QuoteResult(
-            supplier_id=int(supplier["id"]),
-            supplier_name=supplier["name"],
-            observed_at=self.now(),
-            quantity_liters=quantity_liters,
-            status=status,
-            reason=reason,
-            source="scottish_fuels_browser",
-            notes=f"{notes} Contact: {contact}" if contact else notes,
-        )
