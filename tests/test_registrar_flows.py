@@ -16,7 +16,7 @@ from oilwatch.credentials import CredentialStoreUnreadable
 from tests.fake_async_page import FakeAsyncPage, FakeElement
 
 FLOWS = ["register_scottish_fuels", "register_valueoils", "register_homefuels_direct"]
-ARGS = ("Wayne", "owner@example.test", "01224 000000", "Hatton of Fintry", "AB00 0AA")
+ARGS = ("Test Person", "owner@example.test", "000 555 0100", "Test Village", "ZZ99 9ZZ")
 
 REGISTER_BUTTON = ('name="register"', FakeElement(tag="BUTTON"))
 
@@ -120,7 +120,7 @@ class RegistrarFlowTests(unittest.TestCase):
 
         self._register("register_scottish_fuels", page)
 
-        self.assertEqual(username.filled, ["wayne"])
+        self.assertEqual(username.filled, ["test"])
 
     def test_a_banner_with_no_text_asks_for_a_review(self) -> None:
         """A banner that renders empty says nothing either way.

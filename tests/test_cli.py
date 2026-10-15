@@ -80,6 +80,15 @@ class ParserTests(unittest.TestCase):
 
 
 class DispatchTests(unittest.TestCase):
+    def setUp(self) -> None:
+        app = MagicMock()
+        app.settings.login_urls = {
+            "scottish_fuels": "https://scottishfuels.example/login"
+        }
+        patcher = patch("oilwatch.cli.OilWatchApp", return_value=app)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _run(self, argv: list[str]):
         app = MagicMock()
         app.suppliers.return_value = []

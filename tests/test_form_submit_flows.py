@@ -168,7 +168,7 @@ class SubmitRequestTests(unittest.TestCase):
             return submit_request(
                 driver,
                 supplier,
-                name=kwargs.pop("name", "Wayne"),
+                name=kwargs.pop("name", "Test Person"),
                 email=kwargs.pop("email", "owner@example.test"),
                 postcode=kwargs.pop("postcode", "AB00 0AA"),
                 address=kwargs.pop("address", ""),
@@ -188,7 +188,7 @@ class SubmitRequestTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "submitted")
         self.assertEqual(driver.urls, [FORM["url"]])
-        self.assertEqual(fields["your-name"].sent, ["Wayne"])
+        self.assertEqual(fields["your-name"].sent, ["Test Person"])
         self.assertEqual(fields["your-email"].sent, ["owner@example.test"])
         self.assertEqual(fields["your-postcode"].sent, ["AB00 0AA"])
         self.assertEqual(fields["your-name"].cleared, 1)
@@ -233,7 +233,7 @@ class SubmitRequestTests(unittest.TestCase):
             results = submit_all(
                 driver,
                 ["test_supplier", "nobody"],
-                name="Wayne",
+                name="Test Person",
                 email="owner@example.test",
                 phone="",
                 postcode="AB00 0AA",

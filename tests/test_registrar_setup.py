@@ -76,7 +76,9 @@ class ResultTests(unittest.TestCase):
             patch("oilwatch.auto_register.store_supplier_credentials"),
         ):
             result = asyncio.run(
-                registrar.register_scottish_fuels("Wayne", "a@b.c", "01224", "Hatton", "AB00 0AA")
+                registrar.register_scottish_fuels(
+                    "Test Person", "a@b.c", "000 555 0100", "Test Village", "ZZ99 9ZZ"
+                )
             )
 
         self.assertEqual(result["status"], "registered")
@@ -84,7 +86,12 @@ class ResultTests(unittest.TestCase):
 
 class EntryPointTests(unittest.TestCase):
     def test_register_all_uses_the_configured_contact_as_defaults(self) -> None:
-        contact = types.SimpleNamespace(name="Wayne", email="owner@example.test", phone="01224", postcode="AB00 0AA")
+        contact = types.SimpleNamespace(
+            name="Test Person",
+            email="owner@example.test",
+            phone="000 555 0100",
+            postcode="ZZ99 9ZZ",
+        )
         registrar = MagicMock()
         registrar.register_all_suppliers = AsyncMock(return_value=[{"supplier": "ValueOils"}])
 
@@ -100,15 +107,17 @@ class EntryPointTests(unittest.TestCase):
             # The address is the caller's, not the contact's: the registration
             # forms ask for a name, an email and a password, so nothing supplies
             # one and the literal that used to sit here was doing no work.
-            "Wayne",
+            "Test Person",
             "owner@example.test",
-            "01224",
+            "000 555 0100",
             "",
-            "AB00 0AA",
+            "ZZ99 9ZZ",
         )
 
     def test_an_explicit_phone_is_kept_even_when_empty(self) -> None:
-        contact = types.SimpleNamespace(name="Wayne", email="a@b.c", phone="01224", postcode="AB00 0AA")
+        contact = types.SimpleNamespace(
+            name="Test Person", email="a@b.c", phone="000 555 0100", postcode="ZZ99 9ZZ"
+        )
         registrar = MagicMock()
         registrar.register_all_suppliers = AsyncMock(return_value=[])
 

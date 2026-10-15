@@ -164,17 +164,17 @@ class SubmitRequestTests(unittest.TestCase):
             result = submit_request(
                 driver,
                 "gleaner_oils",
-                name="Wayne",
+                name="Test Person",
                 email="owner@example.test",
                 phone="",  # optional: skipped rather than filled empty
                 postcode="AB00 0AA",
-                address="Hatton of Fintray",
+                address="Test Village",
                 quantity_liters=1000,
             )
 
         self.assertEqual(result["status"], "submitted")
         self.assertEqual(driver.urls, [form["url"]])
-        self.assertEqual(elements["name"].sent, ["Wayne"])
+        self.assertEqual(elements["name"].sent, ["Test Person"])
         self.assertEqual(elements["email"].sent, ["owner@example.test"])
         self.assertEqual(elements["postcode"].sent, ["AB00 0AA"])
         self.assertEqual(elements["amount"].sent, ["1000"])

@@ -171,7 +171,7 @@ class RegistrationSummaryTests(unittest.TestCase):
 
     def _run_register(self, argv: list[str]) -> tuple[MagicMock, str]:
         app = MagicMock()
-        app.settings.home.label = "Hatton of Fintry"
+        app.settings.home.label = "Test Home"
         register = AsyncMock(return_value=self.RESULTS)
         with patch("oilwatch.cli_handlers.register_all", register):
             app, out, _status = run_cli(argv, app)

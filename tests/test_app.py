@@ -8,34 +8,17 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from oilwatch.config import CHECKOUT_ROOT
 from oilwatch.models import EXCLUDED_REASON, utcnow_naive
 from oilwatch.service import OilWatchApp
+from tests.app_fixture import AppTestCase
 
 
-class OilWatchAppTests(unittest.TestCase):
+class OilWatchAppTests(AppTestCase):
+    overrides = None
+
     def setUp(self) -> None:
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp_dir.name)
-        (self.root / "config").mkdir(parents=True, exist_ok=True)
-        (self.root / "data").mkdir(parents=True, exist_ok=True)
-        settings = {
-            "database_path": "data/test.sqlite",
-            "chart_path": "data/test-chart.png",
-            "home": {"label": "Hatton of Fintray, Aberdeenshire, Scotland", "latitude": 57.251, "longitude": -2.242},
-            "radius_miles": 50,
-            "quote_quantity_liters": 1000,
-            "currency": "GBP",
-            "search_queries": [],
-            "excluded_domains": [],
-            "scheduler": {"discovery_interval_hours": 168, "quote_interval_hours": 24}
-        }
-        (self.root / "config" / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
-        self.app = OilWatchApp(self.root)
+        super().setUp()
         self.app.init()
-
-    def tearDown(self) -> None:
-        self.temp_dir.cleanup()
 
     def test_imports_the_supplier_register(self) -> None:
         overrides = {
@@ -258,27 +241,13 @@ class OilWatchAppTests(unittest.TestCase):
         self.assertEqual([row["name"] for row in status_snapshot["excluded_suppliers"]], ["Stale"])
 
 
-class QuoteFailureLoggingTests(unittest.TestCase):
+class QuoteFailureLoggingTests(AppTestCase):
     """A connector blowing up must be logged, not only stored in a quote's notes."""
 
+    overrides = None
+
     def setUp(self) -> None:
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp_dir.name)
-        (self.root / "config").mkdir(parents=True, exist_ok=True)
-        (self.root / "data").mkdir(parents=True, exist_ok=True)
-        settings = {
-            "database_path": "data/test.sqlite",
-            "chart_path": "data/test-chart.png",
-            "home": {"label": "Hatton of Fintray", "latitude": 57.251, "longitude": -2.242},
-            "radius_miles": 50,
-            "quote_quantity_liters": 1000,
-            "currency": "GBP",
-            "search_queries": [],
-            "excluded_domains": [],
-            "scheduler": {"discovery_interval_hours": 168, "quote_interval_hours": 24},
-        }
-        (self.root / "config" / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
-        self.app = OilWatchApp(self.root)
+        super().setUp()
         self.app.init()
         self.app.db.upsert_supplier(
             {
@@ -289,9 +258,6 @@ class QuoteFailureLoggingTests(unittest.TestCase):
                 "connector_config": {},
             }
         )
-
-    def tearDown(self) -> None:
-        self.temp_dir.cleanup()
 
     def test_failed_quote_is_logged_and_recorded_as_error(self) -> None:
         def boom(*_args, **_kwargs):
@@ -317,15 +283,35 @@ class DefaultRootTests(unittest.TestCase):
         same command run from another directory read a different install — or
         failed outright when that directory had no ``config/settings.json``.
         """
+        checkout = tempfile.TemporaryDirectory()
+        self.addCleanup(checkout.cleanup)
+        root = Path(checkout.name)
+        (root / "config").mkdir()
+        (root / "data").mkdir()
+        (root / "config" / "settings.json").write_text(
+            json.dumps(
+                {
+                    "database_path": "data/oilwatch.sqlite",
+                    "chart_path": "data/chart.png",
+                    "home": {"label": "Test Home"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "config" / "suppliers.json").write_text(
+            json.dumps({"suppliers": [], "excluded_domains": []}),
+            encoding="utf-8",
+        )
         decoy = tempfile.TemporaryDirectory()
         self.addCleanup(decoy.cleanup)
         previous = os.getcwd()
         self.addCleanup(os.chdir, previous)
         os.chdir(decoy.name)
 
-        app = OilWatchApp()
+        with patch("oilwatch.service.CHECKOUT_ROOT", root):
+            app = OilWatchApp()
 
-        self.assertEqual(app.root, CHECKOUT_ROOT)
+        self.assertEqual(app.root, root)
 
 
 if __name__ == "__main__":

@@ -29,10 +29,11 @@ class LoadContactTests(unittest.TestCase):
         payload: dict[str, object] = {
             "database_path": "data/oilwatch.sqlite",
             "chart_path": "data/oilwatch-market.png",
-            "home": {"label": "Home", "latitude": 57.2, "longitude": -2.2},
+            "home": {"label": "Test Home", "latitude": 55.0, "longitude": -3.0},
         }
         payload.update(extra)
         self._write("settings.json", payload)
+        self._write("suppliers.json", {"suppliers": [], "excluded_domains": []})
 
     def test_empty_when_nothing_configured(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
@@ -99,17 +100,22 @@ class LoadContactTests(unittest.TestCase):
 
 
 class NoHardcodedIdentityTests(unittest.TestCase):
-    def test_package_contains_no_personal_identity(self) -> None:
-        """Guard the leak from coming back: identity belongs in config, not code.
+    def test_package_and_fixtures_contain_no_personal_identity(self) -> None:
+        """Guard application code and test data; identity belongs in config.
 
         `waynegault@msn.com` and the owner's name used to be defaults across
-        ~10 modules, which published them with the repository.
+        ~10 modules, which published them with the repository. This guard keeps
+        those values as needles, so it excludes only its own source file.
         """
-        package = Path(__file__).resolve().parents[1] / "oilwatch"
+        repository = Path(__file__).resolve().parents[1]
+        package = repository / "oilwatch"
+        tests = repository / "tests"
+        identity_guard = Path(__file__).resolve()
         needles = ("waynegault@msn.com", "Wayne Gault")
         offenders = sorted(
-            str(path.relative_to(package.parent))
-            for path in package.rglob("*.py")
+            str(path.relative_to(repository))
+            for path in (*package.rglob("*.py"), *tests.rglob("*.py"))
+            if path.resolve() != identity_guard
             if any(needle in path.read_text(encoding="utf-8") for needle in needles)
         )
         self.assertEqual(offenders, [], f"hardcoded personal identity in: {offenders}")

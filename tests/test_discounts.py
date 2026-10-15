@@ -10,15 +10,15 @@ from oilwatch.discounts import (
     parse_discounts,
 )
 
-# The real ValueOils email, lightly trimmed.
+# Synthetic discount email exercising multiple order bands.
 VALUEOILS_EMAIL = """\
 Hi,
 It's been a while since your last order - and we'd love to have you back at ValueOils.com.
 To make your return easier, here's a special limited-time discount just for you if you
 order online within the next 48 hours:
-£10 OFF 500-999 litres - Code: UWCNI154305
-£12 OFF 1,000-1,999 litres - Code: KJHA154306
-£15 OFF 2,000+ litres - Code: THB154307
+£10 OFF 500-999 litres - Code: TESTCODE10
+£12 OFF 1,000-1,999 litres - Code: TESTCODE12
+£15 OFF 2,000+ litres - Code: TESTCODE15
 Use your code at checkout and enjoy fast, secure online ordering - anytime, anywhere.
 Act now - your exclusive discount expires in 48 hours.
 Best wishes,
@@ -34,7 +34,7 @@ class ParseValueOilsEmailTests(unittest.TestCase):
     def test_finds_all_three_offers(self) -> None:
         offers = parse_discounts(VALUEOILS_EMAIL, received_at=RECEIVED)
         self.assertEqual([offer.amount_gbp for offer in offers], [10.0, 12.0, 15.0])
-        self.assertEqual([offer.code for offer in offers], ["UWCNI154305", "KJHA154306", "THB154307"])
+        self.assertEqual([offer.code for offer in offers], ["TESTCODE10", "TESTCODE12", "TESTCODE15"])
 
     def test_reads_the_litre_bands(self) -> None:
         offers = parse_discounts(VALUEOILS_EMAIL, received_at=RECEIVED)
@@ -66,7 +66,7 @@ class BestOfferTests(unittest.TestCase):
         self.assertIsNotNone(chosen)
         assert chosen is not None  # narrowing for the type checker
         self.assertEqual(chosen.amount_gbp, 12.0)
-        self.assertEqual(chosen.code, "KJHA154306")
+        self.assertEqual(chosen.code, "TESTCODE12")
 
     def test_picks_the_top_band_for_a_large_order(self) -> None:
         chosen = best_discount_for(self.offers, 2500, now=RECEIVED)
@@ -209,47 +209,47 @@ class RobustnessTests(unittest.TestCase):
 
 
     def test_offers_collapsed_onto_one_line_are_all_found(self) -> None:
-        """The real email collapses to one line once its HTML is stripped.
+        """A message collapses to one line once its HTML is stripped.
 
         Taking only the first amount per line captured the £10 code and missed
         the £12 one — the only offer that applied to a 1,000L order.
         """
         collapsed = (
             "Hi, It's been a while since your last order. "
-            "£10 OFF 500-999 litres - Code: UWCNI154305 "
-            "£12 OFF 1,000-1,999 litres - Code: KJHA154306 "
-            "£15 OFF 2,000+ litres - Code: THB154307 Act now, expires in 48 hours."
+            "£10 OFF 500-999 litres - Code: TESTCODE10 "
+            "£12 OFF 1,000-1,999 litres - Code: TESTCODE12 "
+            "£15 OFF 2,000+ litres - Code: TESTCODE15 Act now, expires in 48 hours."
         )
         offers = parse_discounts(collapsed, received_at=RECEIVED)
 
         self.assertEqual([offer.amount_gbp for offer in offers], [10.0, 12.0, 15.0])
         self.assertEqual(
-            [offer.code for offer in offers], ["UWCNI154305", "KJHA154306", "THB154307"]
+            [offer.code for offer in offers], ["TESTCODE10", "TESTCODE12", "TESTCODE15"]
         )
 
     def test_a_collapsed_offer_does_not_borrow_the_next_band_or_code(self) -> None:
         """Each offer's search window stops at the following amount."""
-        collapsed = "£10 OFF 500-999 litres £12 OFF 1,000-1,999 litres - Code: KJHA154306"
+        collapsed = "£10 OFF 500-999 litres £12 OFF 1,000-1,999 litres - Code: TESTCODE12"
         offers = parse_discounts(collapsed, received_at=RECEIVED)
 
         self.assertEqual((offers[0].min_litres, offers[0].max_litres), (500, 999))
         self.assertIsNone(offers[0].code, "the following offer's code must not be borrowed")
         self.assertEqual((offers[1].min_litres, offers[1].max_litres), (1000, 1999))
-        self.assertEqual(offers[1].code, "KJHA154306")
+        self.assertEqual(offers[1].code, "TESTCODE12")
 
     def test_the_best_code_for_a_thousand_litres_is_the_twelve_pound_one(self) -> None:
         """The point of the fix: 1,000L is served by the £12 offer, not the £10."""
         collapsed = (
-            "£10 OFF 500-999 litres - Code: UWCNI154305 "
-            "£12 OFF 1,000-1,999 litres - Code: KJHA154306 "
-            "£15 OFF 2,000+ litres - Code: THB154307 expires in 48 hours"
+            "£10 OFF 500-999 litres - Code: TESTCODE10 "
+            "£12 OFF 1,000-1,999 litres - Code: TESTCODE12 "
+            "£15 OFF 2,000+ litres - Code: TESTCODE15 expires in 48 hours"
         )
         chosen = best_discount_for(parse_discounts(collapsed, received_at=RECEIVED), 1000, now=RECEIVED)
 
         self.assertIsNotNone(chosen)
         assert chosen is not None
         self.assertEqual(chosen.amount_gbp, 12.0)
-        self.assertEqual(chosen.code, "KJHA154306")
+        self.assertEqual(chosen.code, "TESTCODE12")
 
 
 if __name__ == "__main__":

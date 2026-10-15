@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
 from datetime import timedelta
@@ -8,14 +7,14 @@ from pathlib import Path
 
 from oilwatch.discounts import effective_price_per_litre, parse_discounts
 from oilwatch.models import utcnow_naive
-from oilwatch.service import OilWatchApp
+from tests.app_fixture import AppTestCase
 
 # Relative to "now", not a fixed date: the code below is described as expiring in
 # 48 hours, so pinning the received-at date made its window close two days after
 # it was written and the test start failing on its own.
 RECEIVED = utcnow_naive().replace(microsecond=0) - timedelta(hours=1)
 VALUEOILS_OFFERS = parse_discounts(
-    "£12 OFF 1,000-1,999 litres - Code: KJHA154306\nexpires in 48 hours", received_at=RECEIVED
+    "£12 OFF 1,000-1,999 litres - Code: TESTCODE12\nexpires in 48 hours", received_at=RECEIVED
 )
 
 
@@ -38,31 +37,15 @@ class EffectivePriceUnitTests(unittest.TestCase):
         self.assertEqual(effective_price_per_litre(1.10, 0, VALUEOILS_OFFERS[0]), 1.10)
 
 
-class ComparisonShowsEffectivePriceTests(unittest.TestCase):
+class ComparisonShowsEffectivePriceTests(AppTestCase):
     """The comparison must state what the order actually costs, VAT and all."""
 
-    def setUp(self) -> None:
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp_dir.name)
-        (self.root / "config").mkdir(parents=True, exist_ok=True)
-        (self.root / "data").mkdir(parents=True, exist_ok=True)
-        settings = {
-            "database_path": "data/test.sqlite",
-            "chart_path": "data/test-chart.png",
-            "home": {"label": "Hatton of Fintray", "latitude": 57.251, "longitude": -2.242},
-            "radius_miles": 50,
-            "quote_quantity_liters": 1000,
-            "currency": "GBP",
-            "search_queries": [],
-            "excluded_domains": [],
-            "scheduler": {"discovery_interval_hours": 168, "quote_interval_hours": 24},
-        }
-        (self.root / "config" / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
-        self.app = OilWatchApp(self.root)
-        self.app.init()
+    overrides = None
 
-    def tearDown(self) -> None:
-        self.temp_dir.cleanup()
+    def setUp(self) -> None:
+        super().setUp()
+        self.app.init()
+        self.observed_at = utcnow_naive().replace(microsecond=0)
 
     def _supplier(self, name: str) -> int:
         return self.app.db.upsert_supplier(
@@ -79,7 +62,7 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
         self.app.db.record_quote(
             {
                 "supplier_id": supplier_id,
-                "observed_at": "2026-09-10T12:00:00",
+                "observed_at": self.observed_at.isoformat(),
                 "quantity_liters": 1000,
                 "status": "ok",
                 "price_per_liter": price,
@@ -87,7 +70,7 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
                 "currency": "GBP",
                 "source": "test",
                 "notes": "",
-                "valid_until": "2026-09-11T12:00:00",
+                "valid_until": (self.observed_at + timedelta(hours=24)).isoformat(),
                 "raw_payload": {},
             }
         )
@@ -111,7 +94,7 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
         self.app.db.record_discount(
             {
                 "supplier_id": supplier_id,
-                "code": "KJHA154306",
+                "code": "TESTCODE12",
                 "amount_gbp": 12.0,
                 "min_litres": 1000,
                 "max_litres": 1999,
@@ -125,7 +108,7 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
         self.assertEqual(row["price_per_liter"], 1.1144, "headline price is still shown")
         self.assertEqual(row["effective_price_per_liter"], 1.1024)
         self.assertEqual(row["effective_total_price"], 1102.40)
-        self.assertEqual(row["discount"]["code"], "KJHA154306")
+        self.assertEqual(row["discount"]["code"], "TESTCODE12")
 
     def test_the_snapshot_winner_carries_the_effective_price(self) -> None:
         supplier_id = self._supplier("ValueOils")
@@ -133,7 +116,7 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
         self.app.db.record_discount(
             {
                 "supplier_id": supplier_id,
-                "code": "KJHA154306",
+                "code": "TESTCODE12",
                 "amount_gbp": 12.0,
                 "min_litres": 1000,
                 "max_litres": 1999,
@@ -146,7 +129,7 @@ class ComparisonShowsEffectivePriceTests(unittest.TestCase):
         cheapest = self.app.cheapest()["cheapest_supplier"]
         self.assertEqual(cheapest["price_per_liter"], 1.1144)
         self.assertEqual(cheapest["effective_price_per_liter"], 1.1024)
-        self.assertEqual(cheapest["discount"]["code"], "KJHA154306")
+        self.assertEqual(cheapest["discount"]["code"], "TESTCODE12")
 
     def test_without_any_code_the_effective_price_equals_the_headline(self) -> None:
         self._quote(self._supplier("Highland Fuels"), 1.1287)

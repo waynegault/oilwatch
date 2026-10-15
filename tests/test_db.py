@@ -396,7 +396,7 @@ class DuplicateObservationTests(unittest.TestCase):
     def test_an_identical_discount_is_not_stored_twice(self) -> None:
         offer = {
             "supplier_id": self.supplier_id,
-            "code": "UWCNI154305",
+            "code": "TESTCODE10",
             "amount_gbp": 10.0,
             "min_litres": 500,
             "max_litres": 999,
@@ -425,15 +425,15 @@ class DuplicateObservationTests(unittest.TestCase):
     def test_a_resend_of_the_same_offer_refreshes_its_window(self) -> None:
         """The deadline is most of what a code is worth, so a re-send must refresh it.
 
-        ValueOils re-sent all three of its codes on 2026-09-23 with a fresh 48
-        hours. The offers were identical, so the rows matched and the new window
+        The supplier re-sent the same offer with a fresh 48 hours. The offers
+        were identical, so the rows matched and the new window
         was dropped with them - leaving the codes expired in ``active_discounts``
         and out of every comparison built on it.
         """
         now = utcnow_naive()
         offer = {
             "supplier_id": self.supplier_id,
-            "code": "KJHA154306",
+            "code": "TESTCODE12",
             "amount_gbp": 12.0,
             "min_litres": 1000,
             "max_litres": 1999,
@@ -474,7 +474,7 @@ class DuplicateObservationTests(unittest.TestCase):
         now = utcnow_naive()
         offer = {
             "supplier_id": self.supplier_id,
-            "code": "KJHA154306",
+            "code": "TESTCODE12",
             "amount_gbp": 12.0,
             "min_litres": 1000,
             "max_litres": 1999,
@@ -511,7 +511,7 @@ class DuplicateObservationTests(unittest.TestCase):
         now = utcnow_naive()
         offer = {
             "supplier_id": self.supplier_id,
-            "code": "KJHA154306",
+            "code": "TESTCODE12",
             "amount_gbp": 12.0,
             "min_litres": 1000,
             "max_litres": 1999,

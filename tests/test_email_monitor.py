@@ -243,19 +243,15 @@ class BoilerJuiceQuoteTests(unittest.TestCase):
 
 
 class CarnegieFuelsReplyTests(unittest.TestCase):
-    """A real reply stating the price as '+ VAT' pence, with the original quoted.
+    """A reply stating the price as '+ VAT' pence, with a synthetic request quoted.
 
-    Carnegie is asked by email because its own site has no form and no published
-    price, so this reply is the only price it will ever produce — and on
-    2026-09-22 it landed from sales@carnegiefuels.co.uk, a domain the reply map
-    did not know, which left it counted as an unrecognised sender with its price
-    unread. The quoted request is part of the body here because that is what
-    Graph hands the sweep: the subject line and the signature carry numbers of
-    their own, and the parse has to survive them.
+    The quoted request is part of the body because that is what Graph hands the
+    sweep: the subject line and signature carry numbers of their own, and the
+    parser has to distinguish those from a price.
     """
 
     BODY = (
-        "Hello Wayne,\n\n"
+        "Hello Test Person,\n\n"
         "Hope you are well.\n\n"
         "The current price for 1000 litres is 114.95ppl + VAT and delivery would "
         "be by Thursday, if that was suitable for you.\n\n"
@@ -264,13 +260,13 @@ class CarnegieFuelsReplyTests(unittest.TestCase):
         "Carnegie Fuels Limited\n7 West Road\nBrechin Business Park\nBrechin\n"
         "DD9 6RJ\n\n01356 648648\nsales@carnegiefuels.co.uk\n\n"
         "-----Original Message-----\n"
-        "From: Wayne Gault <waynegault@msn.com>\n"
+        "From: Test Person <owner@example.test>\n"
         "Sent: 22 September 2026 14:19\n"
         "To: Info <info@carnegiefuels.co.uk>\n"
-        "Subject: oilwatch quote request - AB00 0AA - 1000L - 2026-09-22\n\n"
+        "Subject: oilwatch quote request - ZZ99 9ZZ - 1000L - 2026-09-22\n\n"
         "Please could you quote for 1000 litres of heating oil (kerosene) "
-        "delivered to Hatton of Fintray, Aberdeenshire, Scotland, AB00 0AA.\n\n"
-        "Name: Wayne Gault\nEmail: waynegault@msn.com\nPhone: 07720061019\n"
+        "delivered to Test Village, Example County, ZZ99 9ZZ.\n\n"
+        "Name: Test Person\nEmail: owner@example.test\nPhone: 000 555 0100\n"
     )
 
     def test_extracts_the_stated_price_and_uplifts_the_vat(self) -> None:
@@ -426,7 +422,7 @@ class GraphSweepRerunTests(unittest.TestCase):
         self.assertEqual(len(self.db.all_quotes()), 2)
 
     def test_a_repeat_discount_code_is_not_stored_twice(self) -> None:
-        body = "£10 OFF 500-999 litres - Code: UWCNI154305"
+        body = "£10 OFF 500-999 litres - Code: TESTCODE10"
         message = self._message("DDD", "inbox-id")
         message["body"] = {"contentType": "text", "content": body}
 
@@ -473,7 +469,7 @@ class GraphSweepRerunTests(unittest.TestCase):
         message = self._message("MMM", "inbox-id")
         message["body"] = {
             "contentType": "text",
-            "content": "£10 OFF 500-999 litres - Code: UWCNI154305",
+            "content": "£10 OFF 500-999 litres - Code: TESTCODE10",
         }
 
         with self.assertLogs("oilwatch.graph_email", level="INFO") as captured:

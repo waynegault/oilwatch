@@ -310,7 +310,7 @@ QUOTE_URL = "https://oilweb.example/OnlineQuote.aspx"
 
 # QuoteService always supplies the configured home label; the connector derives
 # the form's first address line from it rather than a literal in source.
-HOME_LABEL = "Hatton of Fintray, Aberdeenshire, Scotland"
+HOME_LABEL = "Test Home, Example County"
 
 
 class FuelsoftFormTests(unittest.TestCase):
@@ -348,7 +348,7 @@ class FuelsoftFormTests(unittest.TestCase):
 
         self.assertEqual(result.status, "ok")
         self.assertEqual(postcode.filled, ["AB00 0AA"])
-        self.assertEqual(address.filled, ["Hatton of Fintray"])
+        self.assertEqual(address.filled, ["Test Home"])
         self.assertEqual(email.filled, ["quote@example.test"])
         self.assertEqual(get_products.clicked, 1)
         self.assertEqual(get_quote.clicked, 1)
@@ -386,7 +386,7 @@ class FuelsoftFormTests(unittest.TestCase):
 
         result = self._quote(page)
 
-        self.assertEqual(later.filled, ["Hatton of Fintray"])  # the rest was still attempted
+        self.assertEqual(later.filled, ["Test Home"])  # the rest was still attempted
         self.assertEqual(result.status, "ok")
 
     def test_a_non_json_quote_response_degrades_to_a_manual_quote(self) -> None:

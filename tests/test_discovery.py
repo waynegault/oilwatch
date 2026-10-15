@@ -12,13 +12,13 @@ from oilwatch.models import SupplierCandidate
 
 
 class FakeGeo:
-    def __init__(self, coordinates: tuple[float, float] | None = (57.15, -2.09)) -> None:
+    def __init__(self, coordinates: tuple[float, float] | None = (55.0, -3.0)) -> None:
         self.coordinates = coordinates
         self.queries: list[str] = []
 
     def geocode(self, query: str):
         self.queries.append(query)
-        return (self.coordinates[0], self.coordinates[1], "Aberdeen") if self.coordinates else None
+        return (self.coordinates[0], self.coordinates[1], "Test Town") if self.coordinates else None
 
     def geocode_first(self, queries):
         for query in queries:
@@ -35,7 +35,7 @@ def _settings(**overrides: Any) -> Settings:
         "database_path": Path("data/oilwatch.sqlite"),
         "chart_path": Path("data/chart.png"),
         "time_series_chart_path": Path("data/ts.png"),
-        "home": HomeConfig(label="Hatton of Fintry, Aberdeenshire"),
+        "home": HomeConfig(label="Test Home, Example County"),
     }
     base.update(overrides)
     return Settings(**base)
@@ -133,12 +133,12 @@ class ExcludedDomainTests(unittest.TestCase):
 
 class HomeCoordinatesTests(unittest.TestCase):
     def test_uses_the_configured_coordinates(self) -> None:
-        service = _service(home=HomeConfig(label="Home", latitude=57.1, longitude=-2.1))
-        self.assertEqual(service.home_coordinates(), (57.1, -2.1))
+        service = _service(home=HomeConfig(label="Home", latitude=55.0, longitude=-3.0))
+        self.assertEqual(service.home_coordinates(), (55.0, -3.0))
 
     def test_geocodes_when_coordinates_are_missing(self) -> None:
-        service = _service(home=HomeConfig(label="Hatton of Fintry"))
-        self.assertEqual(service.home_coordinates(), (57.15, -2.09))
+        service = _service(home=HomeConfig(label="Test Home"))
+        self.assertEqual(service.home_coordinates(), (55.0, -3.0))
 
     def test_raises_when_the_home_cannot_be_geocoded(self) -> None:
         service = DiscoveryService(_settings(home=HomeConfig(label="Nowhere")), FakeGeo(coordinates=None))

@@ -24,7 +24,7 @@ SETTINGS: dict[str, Any] = {
     "database_path": "data/oilwatch.sqlite",
     "chart_path": "data/chart.png",
     "time_series_chart_path": "data/ts.ts.png",
-    "home": {"label": "Hatton of Fintry, Aberdeenshire", "latitude": 57.2, "longitude": -2.2},
+    "home": {"label": "Test Home", "latitude": 55.0, "longitude": -3.0},
     "quote_quantity_liters": 1000,
     "currency": "GBP",
     "max_quote_age_days": 30,
