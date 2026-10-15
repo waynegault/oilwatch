@@ -16,6 +16,8 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 | AUD-006 | P2 | The two largest package modules (`db.py`, 1,038 lines; `service.py`, 836 lines) warrant function-level review for cohesive boundaries. File size alone is not proof that splitting improves the design. | File inventory at audit start. | Investigating — split only where an existing responsibility boundary and tests support it; otherwise document why no extraction is warranted. |
 | AUD-007 | P1 | Five effective-price integration tests use a fixed 2026-09-10 quote even though the default comparison window is 30 days. The fixture ages out and those tests fail as time passes. | `tests/test_effective_price.py:22-24,84-102`; baseline run on 2026-10-15 had 5 errors from this cause. | Open — make observations relative to the test clock and assert the window contract. |
 | AUD-008 | P1 | The baseline unit suite is not hermetic: six CLI tests and the default-root test need the ignored local settings file; three sync-connector tests launch a real Playwright browser despite testing stub results. | `tests/test_cli.py` direct `main()` calls; `tests/test_app.py:259-291`; `tests/test_connector_bases.py:29-77`. Baseline: 837 tests, 3 failures, 12 errors, 6 skipped, 612.8 seconds; settings file and Playwright browser were absent. | Open — isolate the tests with synthetic config and mocked browser launch, then rerun. |
+| AUD-009 | P1 | The fuel-mail classifier reads its API key but sends a literal mask as the `Authorization` header. Any real request is unauthorized; the existing test asserted the broken mask rather than the bearer-token contract. | `oilwatch/quote_judge.py:242`; `tests/test_quote_judge.py` asserted the mask. | Fixed in this batch — the request now sends the configured bearer key and the mock verifies it. |
+| AUD-010 | P2 | The LLM-using mail-classification path has request-shape/failure tests and a threshold calibration utility, but no fixed, labeled benchmark suite that reports classification quality, latency, and cost across model changes. The current test suite cannot detect quality or performance regressions. | `oilwatch/quote_judge.py`, `tools/fuel_mail_calibration.py`, `tests/test_quote_judge.py`; no benchmark dataset or benchmark runner is present. | Deferred — requires an owner-reviewed, sanitized labeled corpus and a chosen metric; do not invent labels or call the external model from unit tests. |
 
 ## Audit coverage and exclusions
 
@@ -40,4 +42,5 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 
 | Batch | Commit | Scope |
 | --- | --- | --- |
-| Findings register | Pending | Initial evidence and prioritized audit queue |
+| Findings register | `b3e2661` | Initial evidence and prioritized audit queue |
+| LLM authorization | Pending | Use the configured bearer credential in the classifier request |
