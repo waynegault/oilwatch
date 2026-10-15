@@ -689,10 +689,11 @@ class OilWatchApp:
 
         Measured from the newest observation of *any* kind — "when did we last go
         and look?" — so a caller can refuse to scrape again without keeping any
-        state of its own. Returns         ``{refreshed_at, minutes_ago}``, or None when nothing is on record or
-        the sweep is older than ``minutes``. A malformed or timezone-aware
-        stored timestamp is an error: silently treating it as no recent sweep
-        can trigger another expensive browser run.
+        state of its own. Returns ``{refreshed_at, minutes_ago}``, or ``None``
+        when nothing is on record or the sweep is older than ``minutes``. A
+        malformed or timezone-aware stored timestamp is an error rather than
+        "no recent sweep": treating it as absent can start another expensive
+        browser run on the strength of a value nobody could read.
         """
         newest = self.db.newest_observation()
         if not newest:
