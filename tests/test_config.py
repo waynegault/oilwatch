@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from oilwatch.config import SupplierRegistry, load_settings, load_supplier_registry
@@ -179,12 +180,18 @@ class ConfigTests(unittest.TestCase):
                     load_supplier_registry(self.root)
 
     def test_discovery_candidates_validate_connector_config(self) -> None:
+        """A candidate's config arrives from a scrape, so it is validated on the way in.
+
+        Typed ``Any`` deliberately: what a scraper hands over is unvalidated, which
+        is the whole reason the model has to refuse it.
+        """
+        scraped: Any = {"unexpected": True}
         with self.assertRaises(ValueError):
             SupplierCandidate(
                 name="A",
                 website="https://a.example.com",
                 query="heating oil",
-                connector_config={"unexpected": True},
+                connector_config=scraped,
             )
 
     def test_a_register_that_is_not_an_object_is_refused(self) -> None:

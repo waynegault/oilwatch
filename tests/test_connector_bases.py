@@ -155,7 +155,10 @@ class BrowserConnectorBaseTests(unittest.TestCase):
                 raise AssertionError("not used")
 
         with self.assertRaisesRegex(TypeError, "login"):
-            MissingLoginConnector()
+            # The instantiation IS the assertion — an abstract ``login`` exists so
+            # that this refuses — hence the deliberate static-usage suppression,
+            # which has to sit on this line to reach the diagnostic.
+            MissingLoginConnector()  # type: ignore[abstract] - the raise is the test
 
     def test_registration_is_offered_when_a_register_link_exists(self) -> None:
         page = FakeAsyncPage(elements=[("Register", FakeElement())])
