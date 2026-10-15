@@ -11,7 +11,7 @@ here, so a count that goes stale fails the suite instead of quietly misinforming
 
 The same applies to a pair of files rather than a number: config/settings.json
 is gitignored while config/settings.example.json is shipped, so a setting added
-to only one of them goes unnoticed — it either reads its dataclass default here,
+to only one of them goes unnoticed — it either reads its model default here,
 or is absent from the file a new install copies. The launchers are guarded the
 same way: one value written into two scripts drifts, so the unattended log path
 is defined once and every launcher has to call the file that holds it. A launcher
@@ -259,90 +259,13 @@ def _settings_keys(document: object) -> set[str]:
     return keys
 
 
-def _dataclass_fields() -> dict[str, set[str]]:
-    """Every class in ``config.py``, by name, with its annotated fields."""
-    tree = ast.parse((ROOT / "oilwatch" / "config.py").read_text(encoding="utf-8"))
-    return {
-        node.name: {
-            statement.target.id
-            for statement in node.body
-            if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name)
-        }
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ClassDef)
-    }
-
-
 def _settings_document_keys() -> set[str]:
-    """What ``load_settings`` reads out of ``config/settings.json``, nested as ``a.b``.
+    """The settings schema, nested as ``a.b`` and excluding supplier policy."""
+    from oilwatch.config import HomeConfig, SchedulerConfig, Settings
 
-    Derived from the source rather than listed by hand, so a setting is covered
-    as soon as it is written. The document is the object ``_read_json`` hands
-    back: ``registry["excluded_domains"]`` reads a *different* object and is
-    deliberately not one of these. A key passed straight to a config dataclass
-    (``SchedulerConfig(**data.get("scheduler", {}))``) brings that dataclass's
-    fields with it, because one missing there silently takes the default - the
-    same hole one level down.
-    """
-    tree = ast.parse((ROOT / "oilwatch" / "config.py").read_text(encoding="utf-8"))
-    loader = next(
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "load_settings"
-    )
-    document = next(
-        (
-            target.id
-            for node in ast.walk(loader)
-            if isinstance(node, ast.Assign)
-            and isinstance(node.value, ast.Call)
-            and isinstance(node.value.func, ast.Name)
-            and node.value.func.id == "_read_json"
-            for target in node.targets
-            if isinstance(target, ast.Name)
-        ),
-        None,
-    )
-    assert document is not None, "load_settings no longer reads config/settings.json"
-
-    def key_of(node: ast.AST) -> str | None:
-        """The settings key a read names, for ``data[...]`` and ``data.get(...)``."""
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "get"
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == document
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and isinstance(node.args[0].value, str)
-        ):
-            return node.args[0].value
-        if (
-            isinstance(node, ast.Subscript)
-            and isinstance(node.value, ast.Name)
-            and node.value.id == document
-            and isinstance(node.slice, ast.Constant)
-            and isinstance(node.slice.value, str)
-        ):
-            return node.slice.value
-        return None
-
-    fields = _dataclass_fields()
-    keys: set[str] = set()
-    for node in ast.walk(loader):
-        key = key_of(node)
-        if key:
-            keys.add(key)
-        if isinstance(node, ast.Call):
-            for keyword in node.keywords:
-                if keyword.arg is not None:
-                    continue
-                spread = key_of(keyword.value)
-                if spread:
-                    keys.add(spread)
-                    callee = node.func.id if isinstance(node.func, ast.Name) else ""
-                    keys |= {f"{spread}.{name}" for name in fields.get(callee, set())}
+    keys = set(Settings.model_fields) - {"excluded_domains"}
+    keys |= {f"home.{name}" for name in HomeConfig.model_fields}
+    keys |= {f"scheduler.{name}" for name in SchedulerConfig.model_fields}
     return keys
 
 
@@ -374,7 +297,7 @@ class SettingsExampleTests(unittest.TestCase):
     SettingsDriftTests compares the example with the *live* settings, which asks
     a different question and - being skipped without settings.json - cannot be
     asked at all on a fresh clone. Neither guard sees a setting absent from
-    *both* files, and that is how fuel_mail_min_probability arrived: a dataclass
+    *both* files, and that is how fuel_mail_min_probability arrived: a model
     field with a default, read back with the same default, named in no file a
     user reads. Measured against the loader instead, the omission is a failure
     rather than a default.

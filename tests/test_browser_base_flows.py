@@ -83,6 +83,8 @@ class StubConnector(BrowserConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="ok",
+            price_per_liter=1.0,
+            total_price=float(quantity_liters),
             source="stub",
         )
 

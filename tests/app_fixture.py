@@ -4,8 +4,8 @@ test_service_flows and test_purchases each built their own: two copies of one
 idea, with differently-shaped settings dicts, so a new required setting would
 have to be added in both and a divergence would surface as an odd failure rather
 than an obvious one. Subclass :class:`AppTestCase` instead, and either set
-``overrides`` to the suppliers the config should import or clear it and insert
-them through the database.
+``overrides`` to the suppliers the config should import or pass an empty list
+and insert them through the database.
 """
 
 from __future__ import annotations
@@ -52,8 +52,8 @@ class AppTestCase(unittest.TestCase):
     """An ``OilWatchApp`` on a temporary root, with config written for it."""
 
     settings: dict[str, Any] = SETTINGS
-    #: ``None`` writes no register at all, for tests that insert suppliers
-    #: themselves and want no help.
+    #: ``None`` writes an empty register for tests that insert suppliers
+    #: themselves and want no preloaded suppliers.
     overrides: list[dict[str, Any]] | None = OVERRIDES
     excluded_domains: list[str] = EXCLUDED_DOMAINS
 
@@ -64,8 +64,7 @@ class AppTestCase(unittest.TestCase):
         (self.root / "config").mkdir(parents=True, exist_ok=True)
         (self.root / "data").mkdir(parents=True, exist_ok=True)
         self._write_settings()
-        if self.overrides is not None:
-            self._write_overrides()
+        self._write_overrides()
         self.app = OilWatchApp(self.root)
 
     def _write_settings(self) -> None:
@@ -75,7 +74,7 @@ class AppTestCase(unittest.TestCase):
 
     def _write_overrides(self) -> None:
         (self.root / "config" / "suppliers.json").write_text(
-            json.dumps({"suppliers": self.overrides, "excluded_domains": self.excluded_domains}),
+            json.dumps({"suppliers": self.overrides or [], "excluded_domains": self.excluded_domains}),
             encoding="utf-8",
         )
 

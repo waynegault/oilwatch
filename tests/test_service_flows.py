@@ -32,6 +32,7 @@ def _recording_quote(threads: set[str]):
             observed_at=utcnow_naive(),
             quantity_liters=quantity,
             status="manual_action_required",
+            reason="browser_required",
             source="manual",
         )
 
@@ -175,6 +176,7 @@ class QuoteTests(AppTestCase):
             observed_at=utcnow_naive(),
             quantity_liters=1000,
             status="manual_action_required",
+            reason="browser_required",
             source="manual",
         )
         with (

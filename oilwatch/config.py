@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 #: The checkout that holds ``config/`` and ``data/``. Derived from this file
 #: rather than the process working directory: the MCP server is spawned by
@@ -14,56 +23,63 @@ from typing import Any
 CHECKOUT_ROOT = Path(__file__).resolve().parents[1]
 
 
-@dataclass(slots=True)
-class HomeConfig:
+class _StrictConfigModel(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid", validate_assignment=True)
+
+
+class HomeConfig(_StrictConfigModel):
     label: str
     latitude: float | None = None
     longitude: float | None = None
 
+    @model_validator(mode="after")
+    def coordinates_are_complete(self) -> HomeConfig:
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude must be configured together")
+        return self
 
-@dataclass(slots=True)
-class SchedulerConfig:
-    discovery_interval_hours: int = 168
-    quote_interval_hours: int = 24
-    email_monitor_interval_hours: int = 24
+
+class SchedulerConfig(_StrictConfigModel):
+    discovery_interval_hours: int = Field(default=168, gt=0)
+    quote_interval_hours: int = Field(default=24, gt=0)
+    email_monitor_interval_hours: int = Field(default=24, gt=0)
     #: The supplier-email sweep only runs inside this local-time window. Heating
     #: oil suppliers are shut at weekends and overnight, so a sweep then can only
     #: find an inbox that the next in-window run reads anyway.
-    email_monitor_start_hour: int = 8
-    email_monitor_end_hour: int = 18
+    email_monitor_start_hour: int = Field(default=8, ge=0, le=23)
+    email_monitor_end_hour: int = Field(default=18, ge=0, le=23)
     email_monitor_days: str = "mon-fri"
 
 
-@dataclass(slots=True)
-class Settings:
+class Settings(_StrictConfigModel):
     database_path: Path
     chart_path: Path
     time_series_chart_path: Path
     home: HomeConfig
     #: Delivery postcode; identity falls back to this when contact.json has none.
     default_postcode: str = ""
-    radius_miles: int = 50
-    quote_quantity_liters: int = 1000
+    radius_miles: int = Field(default=50, gt=0)
+    quote_quantity_liters: int = Field(default=1000, gt=0)
     # How many suppliers `quote-all` quotes at once. Each browser quote launches
     # its own browser, so this caps the fan-out: there is no per-supplier rate
     # limiting, and a wide burst risks the bot heuristics the connectors already
     # work around. 1 restores the strictly sequential behaviour.
-    quote_max_workers: int = 4
+    quote_max_workers: int = Field(default=4, gt=0)
     # A supplier with no successful quote inside this window counts as having no
     # current price, so 2007-2025 spreadsheet history can't win the comparison.
-    max_quote_age_days: int = 30
+    max_quote_age_days: int = Field(default=30, gt=0)
     currency: str = "GBP"
-    search_queries: list[str] = field(default_factory=list)
+    search_queries: list[str] = Field(default_factory=list)
     #: Domains never to treat as a supplier. Read from the *supplier register*
     #: rather than settings.json: it is policy about suppliers, and it is
     #: version controlled, where settings.json is not (that file holds the
     #: owner's personal values and operational settings — address, postcode,
     #: credentials, the freshness window, the order quantity — but no supplier
     #: policy).
-    excluded_domains: list[str] = field(default_factory=list)
+    excluded_domains: list[str] = Field(default_factory=list)
     # Supplier keys the CLI signs in to, kept here rather than as literals in the
     # CLI.
-    login_urls: dict[str, str] = field(default_factory=dict)
+    login_urls: dict[str, str] = Field(default_factory=dict)
     # Public OAuth client id for the mailbox grant (not a secret — it already
     # appears in monitor_email.bat). Kept here so the CLI works without needing
     # that script purely to set one environment variable.
@@ -81,36 +97,73 @@ class Settings:
     #: stored a verdict per sender it judged and the supplier register labels the
     #: named ones — `python tools/fuel_mail_calibration.py` reports whether the
     #: threshold separates them, and says so when nothing sits near it.
-    fuel_mail_min_probability: float = 0.8
-    scheduler: SchedulerConfig = field(default_factory=SchedulerConfig)
+    fuel_mail_min_probability: float = Field(default=0.8, ge=0.0, le=1.0)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+
+    @field_validator(
+        "database_path", "chart_path", "time_series_chart_path", mode="before"
+    )
+    @classmethod
+    def resolve_paths(cls, value: object, info: ValidationInfo) -> object:
+        if not isinstance(value, str):
+            return value
+        path = Path(value)
+        root = (info.context or {}).get("root")
+        return path if root is None or path.is_absolute() else Path(root) / path
 
 
-def _read_json(path: Path) -> dict[str, Any]:
+class SupplierQuoteRequest(_StrictConfigModel):
+    form: str | None = Field(default=None, min_length=1)
+    no_form: Literal[True] | None = None
+
+    @model_validator(mode="after")
+    def choose_one_request_route(self) -> SupplierQuoteRequest:
+        if (self.form is None) == (self.no_form is None):
+            raise ValueError("quote_request must contain exactly one of form or no_form=true")
+        return self
+
+
+class SupplierRecord(_StrictConfigModel):
+    name: str = Field(min_length=1)
+    website: str = Field(min_length=1)
+    status: Literal["active", "inactive", "manual_review"] = "active"
+    connector_type: str = Field(default="manual", min_length=1)
+    connector_config: dict[str, Any] = Field(default_factory=dict)
+    phone: str | None = None
+    email: str | None = None
+    kind: Literal["supplier", "benchmark"] = "supplier"
+    quote_request: SupplierQuoteRequest | None = None
+    notes: str = ""
+
+
+class SupplierRegistry(_StrictConfigModel):
+    suppliers: list[SupplierRecord]
+    excluded_domains: list[str]
+
+
+def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_settings(root: Path | None = None) -> Settings:
     base = root or CHECKOUT_ROOT
-    data = _read_json(base / "config" / "settings.json")
+    settings_path = base / "config" / "settings.json"
+    data = _read_json(settings_path)
+    if not isinstance(data, dict):
+        raise ValueError(f"{settings_path} must contain a JSON object")
+    if "excluded_domains" in data:
+        raise ValueError(
+            f"{settings_path}: excluded_domains belongs in config/suppliers.json"
+        )
     registry = load_supplier_registry(base)
-    return Settings(
-        database_path=base / data["database_path"],
-        chart_path=base / data["chart_path"],
-        time_series_chart_path=base / data.get("time_series_chart_path", "data/oilwatch-time-series.png"),
-        home=HomeConfig(**data["home"]),
-        default_postcode=data.get("default_postcode", ""),
-        radius_miles=data.get("radius_miles", 50),
-        quote_quantity_liters=data.get("quote_quantity_liters", 1000),
-        quote_max_workers=data.get("quote_max_workers", 4),
-        max_quote_age_days=data.get("max_quote_age_days", 30),
-        currency=data.get("currency", "GBP"),
-        search_queries=data.get("search_queries", []),
-        excluded_domains=registry["excluded_domains"],
-        login_urls=data.get("login_urls", {}),
-        microsoft_client_id=data.get("microsoft_client_id", ""),
-        fuel_mail_min_probability=data.get("fuel_mail_min_probability", 0.8),
-        scheduler=SchedulerConfig(**data.get("scheduler", {})),
+    data["time_series_chart_path"] = data.get(
+        "time_series_chart_path", "data/oilwatch-time-series.png"
     )
+    data["excluded_domains"] = registry["excluded_domains"]
+    try:
+        return Settings.model_validate(data, context={"root": base})
+    except ValidationError as exc:
+        raise ValueError(f"Invalid settings in {settings_path}: {exc}") from exc
 
 
 def load_supplier_registry(root: Path | None = None) -> dict[str, Any]:
@@ -132,22 +185,27 @@ def load_supplier_registry(root: Path | None = None) -> dict[str, Any]:
     the list of suppliers to chase is reviewable and shared rather than sitting
     in an ignored settings file.
 
-    A file that is not an object is refused rather than read as an empty
-    register: a stale bare list would silently leave every supplier unimported,
-    which looks exactly like an install with no suppliers yet.
+    A missing or malformed register fails rather than becoming an empty list:
+    either condition would otherwise look exactly like an install with no
+    suppliers yet.
     """
     base = root or CHECKOUT_ROOT
     path = base / "config" / "suppliers.json"
     if not path.exists():
-        return {"suppliers": [], "excluded_domains": []}
-    data = json.loads(path.read_text(encoding="utf-8"))
+        raise FileNotFoundError(f"Supplier registry does not exist: {path}")
+    data = _read_json(path)
     if not isinstance(data, dict):
         raise ValueError(
             f"{path} holds a bare {type(data).__name__}; it must be an object with "
             "'suppliers' and 'excluded_domains' keys"
         )
+    try:
+        registry = SupplierRegistry.model_validate(data)
+    except ValidationError as exc:
+        raise ValueError(f"Invalid supplier registry in {path}: {exc}") from exc
     return {
-        "suppliers": data.get("suppliers", []),
-        "excluded_domains": data.get("excluded_domains", []),
+        "suppliers": [
+            supplier.model_dump(exclude_unset=True) for supplier in registry.suppliers
+        ],
+        "excluded_domains": registry.excluded_domains,
     }
-

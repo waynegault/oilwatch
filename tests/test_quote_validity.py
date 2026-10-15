@@ -7,6 +7,8 @@ from contextlib import closing
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from oilwatch.analytics import AnalyticsService
 from oilwatch.db import Database
 from oilwatch.models import QuoteResult
@@ -40,8 +42,23 @@ class ValidityDefaultsTests(unittest.TestCase):
 
     def test_applies_to_non_ok_quotes_too(self) -> None:
         """A failed quote still gets one, so the field is never absent."""
-        record = _result(status="error", price_per_liter=None, total_price=None).to_record()
+        record = _result(
+            status="error",
+            price_per_liter=None,
+            total_price=None,
+            reason="site_error",
+        ).to_record()
         self.assertTrue(record["valid_until"])
+
+    def test_quote_fields_are_strict_and_status_matches_price_presence(self) -> None:
+        with self.assertRaises(ValidationError):
+            _result(quantity_liters="1000")
+        with self.assertRaises(ValidationError):
+            _result(status="unknown")
+        with self.assertRaises(ValidationError):
+            _result(price_per_liter=None)
+        with self.assertRaises(ValidationError):
+            _result(status="error", reason="site_error")
 
 
 class ValidityPersistenceTests(unittest.TestCase):

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal, get_args
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def utcnow_naive() -> datetime:
@@ -27,7 +28,8 @@ def utcnow_naive() -> datetime:
 #: a form submission or registration, which have their own vocabularies
 #: (``submitted``, ``sent``, ``no_address``, …). Quote rows are the only ones
 #: these three describe.
-QUOTE_STATUSES = ("ok", "manual_action_required", "error")
+QuoteStatus = Literal["ok", "manual_action_required", "error"]
+QUOTE_STATUSES = get_args(QuoteStatus)
 
 #: The ``reason`` vocabulary of a quote row that is not ``ok`` — why the app could
 #: not price that supplier this time. Also a closed set, and read by the same kind
@@ -38,7 +40,7 @@ QUOTE_STATUSES = ("ok", "manual_action_required", "error")
 #: synonym for any of these: it says the code that produced the row did not
 #: attribute one, which is a gap in this repository rather than a statement about
 #: the supplier.
-QUOTE_REASONS = (
+QuoteReason = Literal[
     "no_quote_page",  # no web quote exists at all: ask by email
     "quote_by_request",  # a quote page exists but answers a person, not a scraper
     "browser_required",  # this path cannot price it; browser automation can
@@ -46,7 +48,8 @@ QUOTE_REASONS = (
     "login_not_confirmed",  # an authenticated portal did not sign in
     "captcha",  # a bot check stopped the flow
     "site_error",  # the attempt raised: timeout, HTTP error, or a parse failure
-)
+]
+QUOTE_REASONS = get_args(QuoteReason)
 
 #: Why a supplier is named in ``excluded_suppliers`` rather than in ``quotes``: its
 #: newest price is older than the age window, so it is not being compared. One value,
@@ -57,8 +60,11 @@ QUOTE_REASONS = (
 EXCLUDED_REASON = "outside_window"
 
 
-@dataclass(slots=True)
-class SupplierCandidate:
+class _StrictModel(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid", validate_assignment=True)
+
+
+class SupplierCandidate(_StrictModel):
     name: str
     website: str
     query: str
@@ -70,22 +76,21 @@ class SupplierCandidate:
     latitude: float | None = None
     longitude: float | None = None
     distance_miles: float | None = None
-    status: str = "manual_review"
+    status: Literal["active", "inactive", "manual_review"] = "manual_review"
     connector_type: str = "manual"
-    connector_config: dict[str, Any] = field(default_factory=dict)
+    connector_config: dict[str, Any] = Field(default_factory=dict)
     notes: str = ""
 
     def to_record(self) -> dict[str, Any]:
-        return asdict(self)
+        return self.model_dump()
 
 
-@dataclass(slots=True)
-class QuoteResult:
+class QuoteResult(_StrictModel):
     supplier_id: int
     supplier_name: str
     observed_at: datetime
     quantity_liters: int
-    status: str
+    status: QuoteStatus
     price_per_liter: float | None = None
     total_price: float | None = None
     currency: str = "GBP"
@@ -118,17 +123,29 @@ class QuoteResult:
     #:
     #: ``None`` means unclassified rather than "no reason" — most connectors do
     #: not attribute one yet, and that is not a claim that none applies.
-    reason: str | None = None
-    raw_payload: dict[str, Any] = field(default_factory=dict)
+    reason: QuoteReason | None = None
+    raw_payload: dict[str, Any] = Field(default_factory=dict)
     #: When this quote stops being a valid offer. A connector may set it from
     #: what the supplier states on the page; otherwise it defaults below, so
     #: every quote carries a validity.
     valid_until: datetime | None = None
 
+    @model_validator(mode="after")
+    def status_matches_price(self) -> QuoteResult:
+        has_price = self.price_per_liter is not None and self.total_price is not None
+        if self.status == "ok":
+            if not has_price or self.reason is not None:
+                raise ValueError("ok quotes require both prices and cannot have a reason")
+        elif has_price or self.price_per_liter is not None or self.total_price is not None:
+            raise ValueError("non-ok quotes cannot carry prices")
+        elif self.reason is None:
+            raise ValueError("non-ok quotes require a machine-readable reason")
+        return self
+
     def to_record(self) -> dict[str, Any]:
         from datetime import timedelta
 
-        payload = asdict(self)
+        payload = self.model_dump()
         payload["observed_at"] = self.observed_at.isoformat()
         # A day is the working assumption for a heating-oil quote: the suppliers
         # here re-price daily, and it matches the freshness window the tool uses.

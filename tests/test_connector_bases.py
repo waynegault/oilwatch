@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from contextlib import nullcontext
 from typing import Any
 from unittest.mock import patch
 
@@ -33,6 +34,13 @@ class StubSyncConnector(SyncBrowserConnector):
 
 
 class SyncBrowserConnectorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        browser = patch(
+            "oilwatch.connectors.sync_browser.sync_page", return_value=nullcontext(None)
+        )
+        browser.start()
+        self.addCleanup(browser.stop)
+
     def test_quote_shapes_an_ok_result(self) -> None:
         result = StubSyncConnector(1.10).quote(SUPPLIER, 1000, {"postcode": "AB00 0AA"})
 
@@ -121,6 +129,8 @@ class StubBrowserConnector(BrowserConnector):
             observed_at=self.now(),
             quantity_liters=quantity_liters,
             status="ok",
+            price_per_liter=1.0,
+            total_price=quantity_liters,
             source="stub",
         )
 

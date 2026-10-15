@@ -21,6 +21,7 @@ dependencies = [
   "matplotlib>=3.10",
   "msal>=1.30",
   "playwright>=1.40",
+  "pydantic>=2.0,<3",
   "selenium>=4.20",
   "undetected-chromedriver>=3.5",
   "xlrd>=2.0",
@@ -93,4 +94,3 @@ ignore = [
 # thresholds; and S101/PLC0415 (assert is idiomatic in tests, and
 # Playwright/Selenium must stay lazily imported — see
 # connectors/suppliers/__init__.py).
-

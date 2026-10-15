@@ -22,6 +22,8 @@ class ConfigTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def _write_settings(self) -> None:
+        if not (self.root / "config" / "suppliers.json").exists():
+            self._write_register()
         settings = {
             "database_path": "data/test.sqlite",
             "chart_path": "data/test.png",
@@ -52,6 +54,31 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.quote_max_workers, 4)
         self.assertEqual(settings.search_queries, ["heating oil Aberdeenshire"])
         self.assertEqual(settings.scheduler.quote_interval_hours, 24)
+        self.assertEqual(settings.database_path, self.root / "data" / "test.sqlite")
+
+    def test_settings_reject_unknown_keys_and_wrong_types(self) -> None:
+        for key, value in (
+            ("unexpected", True),
+            ("radius_miles", True),
+            ("fuel_mail_min_probability", 1.5),
+        ):
+            with self.subTest(key=key):
+                self._write_settings()
+                path = self.root / "config" / "settings.json"
+                settings = json.loads(path.read_text(encoding="utf-8"))
+                settings[key] = value
+                path.write_text(json.dumps(settings), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    load_settings(self.root)
+
+    def test_home_coordinates_must_be_a_valid_pair(self) -> None:
+        self._write_settings()
+        path = self.root / "config" / "settings.json"
+        settings = json.loads(path.read_text(encoding="utf-8"))
+        settings["home"]["longitude"] = None
+        path.write_text(json.dumps(settings), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "latitude and longitude"):
+            load_settings(self.root)
 
     def test_the_domain_exclusions_come_from_the_register_not_settings(self) -> None:
         """Supplier policy is version controlled; settings.json is not.
@@ -78,6 +105,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(loaded.home.label, "Home")
 
     def test_load_settings_reads_the_login_urls(self) -> None:
+        self._write_register()
         settings = {
             "database_path": "data/test.sqlite",
             "chart_path": "data/test.png",
@@ -97,7 +125,8 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(load_settings(self.root).login_urls, {})
 
     def test_load_supplier_registry_missing_file(self) -> None:
-        self.assertEqual(load_supplier_registry(self.root), {"suppliers": [], "excluded_domains": []})
+        with self.assertRaises(FileNotFoundError):
+            load_supplier_registry(self.root)
 
     def test_load_supplier_registry(self) -> None:
         # The register holds arbitrary JSON, so object is the honest value type;
@@ -111,6 +140,27 @@ class ConfigTests(unittest.TestCase):
             load_supplier_registry(self.root),
             {"suppliers": suppliers, "excluded_domains": ["yell.com"]},
         )
+
+    def test_supplier_registry_rejects_unknown_or_malformed_fields(self) -> None:
+        invalid_records = (
+            {"name": "A", "website": "https://a.example.com", "unexpected": True},
+            {"name": "A", "website": 7},
+            {
+                "name": "A",
+                "website": "https://a.example.com",
+                "quote_request": {"form": "form-a", "no_form": True},
+            },
+            {
+                "name": "A",
+                "website": "https://a.example.com",
+                "quote_request": {"from": "form-a"},
+            },
+        )
+        for record in invalid_records:
+            with self.subTest(record=record):
+                self._write_register(suppliers=[record])
+                with self.assertRaises(ValueError):
+                    load_supplier_registry(self.root)
 
     def test_a_register_that_is_not_an_object_is_refused(self) -> None:
         """A stale bare list must fail loudly, not read as no suppliers at all.
