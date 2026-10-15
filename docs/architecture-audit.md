@@ -46,8 +46,9 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 - A package import-graph scan found no circular imports. No warning-filtering or
   blanket warning suppression was found; the broad exception paths reviewed
   either report their failure or have a documented best-effort contract.
-- The final full-suite run after the fixture/isolation batch passed 844 tests
-  with 6 skipped. Project-wide Ruff and Pyright are clean after the typing batch.
+- Final validation after all code changes: **850 tests passed, 6 skipped, 67.6 seconds**.
+- Command: `.venv\Scripts\python.exe -m unittest discover -s tests -t . -q`.
+- The README count is synchronized; project-wide Ruff and Pyright both pass with no warnings.
 
 ## Commit log
 
@@ -61,6 +62,8 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 | Shared connector fallback and hooks | `52d3211` | Consolidate manual quote construction and make browser login an enforced abstract hook |
 | Mailbox workflow decomposition | `2d123e3` | Extract message parsing, discount capture, quote persistence, and unpriced-message handling from the sweep dispatcher |
 | Mail timestamp diagnostics | `2ca5f2c` | Warn before falling back to the current time for unusable Graph timestamps |
+| CLI test module naming | `bb441f5` | Rename the narrowly scoped test module to match the CLI handler contracts it covers |
+| Verified test count | `9627885` | Update the README after the full suite reached 850 tests |
 | Detached-worker integrity | `3ebb736` | Use the checkout virtualenv, retain worker stderr, mark launch failures, and reject malformed observation timestamps |
 | Hermetic and synthetic test data | `b1f9f23` | Consolidate app fixtures; replace identifying data and stale timestamps; isolate CLI and browser tests |
 | Project-wide typing contracts | `6e0360a` | Close quote status/reason types, plotting date/label types, Excel date-mode validation, and lazy-export type declarations |
