@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -575,13 +574,20 @@ class OilWatchApp:
         gets "running, 0 of 17" rather than "no such job".
         """
         self.db.init_schema()
+        virtualenv_python = self.root / ".venv" / (
+            Path("Scripts") / "python.exe" if os.name == "nt" else Path("bin") / "python"
+        )
+        if not virtualenv_python.is_file():
+            raise FileNotFoundError(
+                f"Repository virtualenv Python does not exist: {virtualenv_python}"
+            )
         job_id = uuid.uuid4().hex
         started_at = utcnow_naive().isoformat()
         total = len(self.db.list_suppliers())
         self.db.create_refresh_job(job_id, started_at, started_by, total)
 
         command = [
-            sys.executable,
+            str(virtualenv_python),
             "-m",
             "oilwatch.cli",
             "quote-all",
@@ -596,10 +602,9 @@ class OilWatchApp:
             # same database as the process that launched it.
             "cwd": str(self.root),
             "stdin": subprocess.DEVNULL,
-            # Output is discarded rather than inherited: the parent's stdout may
-            # be an MCP transport, and a stray line on it breaks the protocol.
+            # The parent's stdout may be an MCP transport, and a stray line on
+            # it breaks the protocol. Worker diagnostics go to a local file.
             "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
             "close_fds": True,
         }
         if os.name == "nt":
@@ -610,7 +615,17 @@ class OilWatchApp:
             )
         else:
             spawn["start_new_session"] = True
-        subprocess.Popen(command, **spawn)
+        worker_log = self.root / "data" / "oilwatch-worker.log"
+        try:
+            worker_log.parent.mkdir(parents=True, exist_ok=True)
+            with worker_log.open("a", encoding="utf-8") as stderr:
+                subprocess.Popen(command, stderr=stderr, **spawn)
+        except OSError as exc:
+            self.db.finish_refresh_job(
+                job_id, "failed", error=f"{type(exc).__name__}: {exc}"
+            )
+            log.exception("Could not start the background quote worker")
+            raise
 
         return {
             "job_id": job_id,
@@ -673,19 +688,21 @@ class OilWatchApp:
 
         Measured from the newest observation of *any* kind — "when did we last go
         and look?" — so a caller can refuse to scrape again without keeping any
-        state of its own. Returns ``{refreshed_at, minutes_ago}``, or None when
-        nothing is on record, when the sweep is older than ``minutes``, or when
-        the stored timestamp cannot be parsed: "no age to report" and "zero
-        minutes ago" are not the same thing, and only the second should stop a
-        refresh.
+        state of its own. Returns         ``{refreshed_at, minutes_ago}``, or None when nothing is on record or
+        the sweep is older than ``minutes``. A malformed or timezone-aware
+        stored timestamp is an error: silently treating it as no recent sweep
+        can trigger another expensive browser run.
         """
         newest = self.db.newest_observation()
         if not newest:
             return None
         try:
             observed = datetime.fromisoformat(newest)
-        except ValueError:
-            return None
+            if observed.tzinfo is not None:
+                raise ValueError("stored observation timestamp must be timezone-naive")
+        except ValueError as exc:
+            log.error("Invalid newest observation timestamp %r: %s", newest, exc)
+            raise ValueError(f"Invalid newest observation timestamp: {newest!r}") from exc
         age_minutes = (utcnow_naive() - observed).total_seconds() / 60
         if age_minutes >= minutes:
             return None
@@ -918,4 +935,3 @@ class OilWatchApp:
                     row["agreed_price_per_liter"] * row["quantity_liters"], 2
                 )
         return rows
-

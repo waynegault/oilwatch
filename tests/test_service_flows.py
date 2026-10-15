@@ -7,10 +7,12 @@ run for real without touching the repo's data. The root itself lives in
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 import unittest
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from oilwatch.models import QuoteResult, SupplierCandidate, utcnow_naive
@@ -740,6 +742,16 @@ class RefreshCooldownStateTests(AppTestCase):
 
         self.assertIsNone(self.app.refresh_recently_done(10))
 
+    def test_an_invalid_observation_timestamp_is_logged_and_raises(self) -> None:
+        for timestamp in ("not-a-date", "2026-10-15T12:00:00+00:00"):
+            with (
+                self.subTest(timestamp=timestamp),
+                patch.object(self.app.db, "newest_observation", return_value=timestamp),
+                self.assertLogs("oilwatch.service", level="ERROR"),
+                self.assertRaisesRegex(ValueError, "Invalid newest observation timestamp"),
+            ):
+                self.app.refresh_recently_done(10)
+
 
 class SweepMarkerTests(AppTestCase):
     """Still running, or dead? — the question a timed-out caller cannot answer.
@@ -845,6 +857,13 @@ class RefreshJobTests(AppTestCase):
     """
 
     overrides = None
+
+    def _create_virtualenv_python(self) -> Path:
+        relative = Path("Scripts") / "python.exe" if os.name == "nt" else Path("bin") / "python"
+        executable = self.root / ".venv" / relative
+        executable.parent.mkdir(parents=True)
+        executable.write_text("test placeholder", encoding="utf-8")
+        return executable
 
     def _job(self, job_id: str = "job-1", age_minutes: int = 0, total: int = 3) -> str:
         self.app.db.init_schema()
@@ -966,17 +985,49 @@ class RefreshJobTests(AppTestCase):
         for a background sweep is the one expected to end before it finishes.
         """
         self._init()
+        python = self._create_virtualenv_python()
         with patch("oilwatch.service.subprocess.Popen") as popen:
             started = self.app.start_background_sweep(started_by="mcp")
 
         command = popen.call_args.args[0]
+        self.assertEqual(command[0], str(python))
         self.assertIn("quote-all", command)
         self.assertIn("--job-id", command)
         self.assertIn(started["job_id"], command)
         # From the checkout, so the worker reads the same config and database.
         self.assertEqual(popen.call_args.kwargs["cwd"], str(self.root))
+        self.assertEqual(
+            popen.call_args.kwargs["stderr"].name,
+            str(self.root / "data" / "oilwatch-worker.log"),
+        )
         # And the id it returned is already readable, before the worker starts.
         self.assertEqual(self.app.refresh_job_status(started["job_id"])["state"], "running")
+
+    def test_background_sweep_requires_the_checkout_virtualenv(self) -> None:
+        self._init()
+        with (
+            patch("oilwatch.service.subprocess.Popen") as popen,
+            self.assertRaisesRegex(FileNotFoundError, "Repository virtualenv Python"),
+        ):
+            self.app.start_background_sweep()
+
+        popen.assert_not_called()
+        self.assertIsNone(self.app.db.refresh_job())
+
+    def test_spawn_failure_marks_the_job_failed_and_preserves_the_error(self) -> None:
+        self._init()
+        self._create_virtualenv_python()
+        with (
+            patch("oilwatch.service.subprocess.Popen", side_effect=OSError("spawn denied")),
+            self.assertLogs("oilwatch.service", level="ERROR"),
+            self.assertRaisesRegex(OSError, "spawn denied"),
+        ):
+            self.app.start_background_sweep()
+
+        job = self.app.db.refresh_job()
+        assert job is not None
+        self.assertEqual(job["state"], "failed")
+        self.assertIn("spawn denied", job["error"])
 
 
 class SupplierOutcomeTests(AppTestCase):

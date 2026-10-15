@@ -58,7 +58,7 @@ what an earlier 216-vs-88 test count and an 8-vs-9 tool count were doing.
 
 | What | Count |
 |------|-------|
-| Tests | 841, all passing offline |
+| Tests | 844, all passing offline |
 | MCP tools | 10 (streamable HTTP, or spawned as stdio on demand) |
 | CLI commands | 22 |
 | Modules under `oilwatch/` | 55 Python files |
@@ -302,7 +302,7 @@ Recording a purchase is a deliberate CLI act by the owner
 | `status` | Snapshot + price trend + buy/hold recommendation, including the last purchase, the same `no_quote_suppliers` / `failed_suppliers` split, `awaiting_reply` (requests still owed a price, oldest first — a form or an email is answered later by a person, so writing the ask down is the only way to tell a supplier thinking from one never asked), and `refresh` (whether a sweep is running now) | None |
 | `chart` | Market summary chart; returns a file path | None |
 | `time_series_chart` | Per-supplier prices with Brent crude on a second axis; returns a path | None |
-| `refresh_prices` | Scrape fresh quotes from all suppliers — **slow** (minutes, browser automation). Returns `{cached, cooldown_minutes, refreshed_at, results}`; within the 10-minute cooldown it returns `cached: true` and starts nothing, and if a sweep is **already running** it returns `in_progress: true` with `started_at`/`started_by`/`seconds_ago` and starts nothing either. `background: true` instead starts the sweep as its own **detached process** and returns `{job_id, state, started_at, total}` at once | `postcode: str`, `force: bool`, `background: bool` |
+| `refresh_prices` | Scrape fresh quotes from all suppliers — **slow** (minutes, browser automation). Returns `{cached, cooldown_minutes, refreshed_at, results}`; within the 10-minute cooldown it returns `cached: true` and starts nothing, and if a sweep is **already running** it returns `in_progress: true` with `started_at`/`started_by`/`seconds_ago` and starts nothing either. `background: true` instead starts the sweep as its own **detached process** using this checkout's `.venv` Python; worker stderr is appended to `data/oilwatch-worker.log` | `postcode: str`, `force: bool`, `background: bool` |
 | `refresh_status` | A background sweep's progress and results: `state` (`running`/`finished`/`failed`), `done` of `total`, the `error` when it failed, the same `results` a foreground call returns, and `stale: true` when a job still says running but its worker is gone | `job_id: str` (defaults to the newest) |
 | `update_brent` | Fetch the latest Brent crude daily series from the EIA | None |
 
@@ -696,7 +696,7 @@ Oil Price Webscraper/
 Tests use Python's built-in `unittest` and run offline (HTTP is mocked, SQLite
 uses a temp database), so no network or supplier sites are touched.
 
-`python -m unittest discover -s tests -t .` — 841 tests, all offline.
+`python -m unittest discover -s tests -t .` — 844 tests, all offline.
 
 ### Run from the command line
 

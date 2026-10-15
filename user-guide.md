@@ -601,6 +601,8 @@ change, a shut depot. Partial results are normal and are not an error.
   `refresh_status(job_id)` for `state`, `done` of `total`, and the `results` a
   foreground call would have returned. A `stale: true` there means the worker is
   gone — treat it as failed rather than waiting.
+  The worker uses this checkout's `.venv` Python; its stderr, including
+  startup diagnostics, is appended to `data/oilwatch-worker.log`.
 - If the call does hit the 300 s timeout, do **not** assume the scrape failed:
   read `current_prices` and look at the `observed_at` dates to see what actually
   landed. Its `refresh` block answers the question you were about to re-run the
