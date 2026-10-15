@@ -347,7 +347,7 @@ class AnalyticsService:
         ax2.set_ylabel("Variance")
 
         lines = ax1.get_lines() + ax2.get_lines()
-        ax1.legend(lines, [line.get_label() for line in lines], loc="upper left")
+        ax1.legend(lines, [str(line.get_label()) for line in lines], loc="upper left")
         ax1.set_title("Heating Oil Market Summary")
         ax1.grid(alpha=0.2)
         fig.tight_layout()
@@ -390,6 +390,7 @@ class AnalyticsService:
 
         _select_agg_backend()
         from matplotlib import pyplot as plt
+        from matplotlib.dates import date2num
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -397,8 +398,9 @@ class AnalyticsService:
             points.sort(key=lambda point: point[0])
             xs = [point[0] for point in points]
             ys = [point[1] for point in points]
-            ax.plot(xs, ys, marker="o", linewidth=2, label=name)
+            ax.plot(date2num(xs), ys, marker="o", linewidth=2, label=name)
 
+        ax.xaxis_date()
         ax.set_xlabel("Date")
         ax.set_ylabel("Price per litre (GBP, inc. VAT)")
         ax.set_title("Heating Oil Price Time Series by Supplier")
@@ -410,12 +412,23 @@ class AnalyticsService:
             by = [point[1] for point in brent_points]
             ax_brent = ax.twinx()
             ax_brent.plot(
-                bx, by, color="#1f77b4", linestyle="--", linewidth=2, label="Brent crude ($/barrel)"
+                date2num(bx),
+                by,
+                color="#1f77b4",
+                linestyle="--",
+                linewidth=2,
+                label="Brent crude ($/barrel)",
             )
+            ax_brent.xaxis_date()
             ax_brent.set_ylabel("Brent crude ($/barrel)")
             ax_brent.grid(False)
             lines = ax.get_lines() + ax_brent.get_lines()
-            ax.legend(lines, [line.get_label() for line in lines], loc="upper left", fontsize=9)
+            ax.legend(
+                lines,
+                [str(line.get_label()) for line in lines],
+                loc="upper left",
+                fontsize=9,
+            )
         else:
             ax.legend(loc="upper left", fontsize=9)
 
@@ -424,4 +437,3 @@ class AnalyticsService:
         fig.savefig(output_path, dpi=160)
         plt.close(fig)
         return output_path
-

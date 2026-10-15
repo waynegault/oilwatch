@@ -10,6 +10,27 @@ working while importing only the connector that is actually selected.
 from __future__ import annotations
 
 import importlib
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from oilwatch.connectors.suppliers.boilerjuice import BoilerJuiceBrowserConnector
+    from oilwatch.connectors.suppliers.fuelsoft import FuelsoftConnector
+    from oilwatch.connectors.suppliers.fueltool import FueltoolConnector
+    from oilwatch.connectors.suppliers.highland_fuels import HighlandFuelsConnector
+    from oilwatch.connectors.suppliers.homefuels_direct import HomeFuelsDirectConnector
+    from oilwatch.connectors.suppliers.homefuels_direct_browser import (
+        HomeFuelsDirectBrowserConnector,
+    )
+    from oilwatch.connectors.suppliers.oilfast import OilfastConnector
+    from oilwatch.connectors.suppliers.regency_oils import RegencyOilsConnector
+    from oilwatch.connectors.suppliers.rix import RixConnector
+    from oilwatch.connectors.suppliers.rix_browser import RixBrowserConnector
+    from oilwatch.connectors.suppliers.scottish_fuels import ScottishFuelsConnector
+    from oilwatch.connectors.suppliers.scottish_fuels_browser import (
+        ScottishFuelsBrowserConnector,
+    )
+    from oilwatch.connectors.suppliers.valueoils import ValueOilsConnector
+    from oilwatch.connectors.suppliers.valueoils_browser import ValueOilsBrowserConnector
 
 # Public connector name -> the submodule that defines it. Held as strings so a
 # name is only imported when something asks for it.
@@ -103,8 +124,20 @@ def get_supplier_connector(website: str, prefer_browser: bool = False):
     return _build(chosen) if chosen else None
 
 
-__all__ = [  # noqa: PLE0604 - the starred entry yields _CONNECTORS' keys, which are strings
+__all__ = [
     "get_supplier_connector",
-    # The connector classes, by their public names.
-    *_CONNECTORS,
+    "HomeFuelsDirectConnector",
+    "ValueOilsConnector",
+    "OilfastConnector",
+    "RixConnector",
+    "RegencyOilsConnector",
+    "ScottishFuelsConnector",
+    "BoilerJuiceBrowserConnector",
+    "FueltoolConnector",
+    "FuelsoftConnector",
+    "HighlandFuelsConnector",
+    "RixBrowserConnector",
+    "ScottishFuelsBrowserConnector",
+    "ValueOilsBrowserConnector",
+    "HomeFuelsDirectBrowserConnector",
 ]

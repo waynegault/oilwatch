@@ -36,7 +36,7 @@ from oilwatch.connectors.base import BaseConnector
 from oilwatch.credentials import get_supplier_credentials
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import QuoteResult
+from oilwatch.models import QuoteReason, QuoteResult, QuoteStatus
 from oilwatch.pricing import inclusive_price_and_total, pence_to_pounds
 from oilwatch.waiting import wait_until
 
@@ -450,9 +450,9 @@ class ScottishFuelsBrowserConnector(BaseConnector):
         supplier: dict[str, Any],
         quantity_liters: int,
         notes: str,
-        reason: str | None = None,
+        reason: QuoteReason | None = None,
         *,
-        status: str = "manual_action_required",
+        status: QuoteStatus = "manual_action_required",
     ) -> QuoteResult:
         """A non-quote result, optionally classified.
 
@@ -479,4 +479,3 @@ class ScottishFuelsBrowserConnector(BaseConnector):
             source="scottish_fuels_browser",
             notes=f"{notes} Contact: {contact}" if contact else notes,
         )
-

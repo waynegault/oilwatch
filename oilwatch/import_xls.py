@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import xlrd
 
@@ -46,7 +46,7 @@ def _supplier_id_map(db: Database) -> dict[str, int]:
     }
 
 
-def _serial_to_date(value: float, datemode: int) -> str:
+def _serial_to_date(value: float, datemode: Literal[0, 1]) -> str:
     return xlrd.xldate_as_datetime(value, datemode).date().isoformat()
 
 
@@ -54,13 +54,16 @@ def import_heating_oil(db: Database, xls_path: Path, quantity_liters: int = 1000
     """Import the ``Heating Oil`` sheet as quotes. Returns number of rows inserted."""
     book = xlrd.open_workbook(str(xls_path), on_demand=True)
     sheet = book.sheet_by_name("Heating Oil")
+    if book.datemode not in (0, 1):
+        raise ValueError(f"Unsupported Excel date mode: {book.datemode}")
+    datemode: Literal[0, 1] = book.datemode
 
     # Header dates live in row 1, from column 3 onward.
     date_cols: list[tuple[int, str]] = []
     for col in range(3, sheet.ncols):
         header = sheet.cell(1, col).value
         if isinstance(header, (int, float)):
-            date_cols.append((col, _serial_to_date(float(header), book.datemode)))
+            date_cols.append((col, _serial_to_date(float(header), datemode)))
 
     id_map = _supplier_id_map(db)
 

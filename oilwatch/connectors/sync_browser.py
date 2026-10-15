@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from oilwatch.connectors.base import BaseConnector
-from oilwatch.models import QuoteResult
+from oilwatch.models import QuoteReason, QuoteResult, QuoteStatus
 from oilwatch.pricing import inclusive_price_and_total, inclusive_total
 
 
@@ -120,9 +120,9 @@ class SyncBrowserConnector(BaseConnector):
         supplier: dict[str, Any],
         quantity_liters: int,
         notes: str,
-        reason: str,
+        reason: QuoteReason,
         *,
-        status: str = "manual_action_required",
+        status: QuoteStatus = "manual_action_required",
     ) -> QuoteResult:
         """A quote this connector cannot give, with the reason it cannot.
 
@@ -154,4 +154,3 @@ class SyncBrowserConnector(BaseConnector):
             source=self.source,
             notes=f"{notes} Contact: {contact}" if contact else notes,
         )
-

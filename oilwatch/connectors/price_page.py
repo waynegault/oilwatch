@@ -7,7 +7,7 @@ import httpx
 
 from oilwatch.connectors.base import BaseConnector
 from oilwatch.http import build_client
-from oilwatch.models import QuoteResult
+from oilwatch.models import QuoteReason, QuoteResult, QuoteStatus
 from oilwatch.pricing import apply_vat, inclusive_total, normalise_price_per_litre
 
 
@@ -89,9 +89,9 @@ class PricePageConnector(BaseConnector):
         supplier: dict[str, Any],
         quantity_liters: int,
         notes: str,
-        reason: str,
+        reason: QuoteReason,
         *,
-        status: str = "manual_action_required",
+        status: QuoteStatus = "manual_action_required",
     ) -> QuoteResult:
         """A quote this connector cannot give, with the reason it cannot.
 
@@ -127,4 +127,3 @@ class PricePageConnector(BaseConnector):
         if vat_rate:
             price = apply_vat(price, float(vat_rate))
         return price
-

@@ -44,7 +44,7 @@ from oilwatch.connectors.base import BaseConnector
 from oilwatch.http import build_client, request_with_retry
 from oilwatch.identity import load_contact
 from oilwatch.logging_setup import get_logger
-from oilwatch.models import QuoteResult
+from oilwatch.models import QuoteReason, QuoteResult, QuoteStatus
 from oilwatch.pricing import inclusive_total
 
 log = get_logger("connectors.highland_fuels")
@@ -169,9 +169,9 @@ class HighlandFuelsConnector(BaseConnector):
         supplier: dict[str, Any],
         quantity_liters: int,
         notes: str,
-        reason: str,
+        reason: QuoteReason,
         *,
-        status: str = "manual_action_required",
+        status: QuoteStatus = "manual_action_required",
     ) -> QuoteResult:
         """A quote this connector cannot give, with the reason it cannot.
 
@@ -199,4 +199,3 @@ class HighlandFuelsConnector(BaseConnector):
             source="highland_fuels",
             notes=f"{notes} Contact: {contact}" if contact else notes,
         )
-
