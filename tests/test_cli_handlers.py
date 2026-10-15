@@ -1,4 +1,4 @@
-"""The handler paths the rest of the suite leaves unexercised.
+"""Remaining CLI handler contracts not covered by the command-specific suites.
 
 Covers: `api-discover` resolving a URL from `--supplier-id` (including a bad id),
 `register`'s summary and its `--output` save, and `login-email`'s
