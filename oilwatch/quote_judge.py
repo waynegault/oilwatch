@@ -239,7 +239,7 @@ def fuel_mail_probability(
             }
         },
     }
-    headers = {"Authorization": "Bearer " + key}
+    headers = {"Authorization": f"Bearer {key}"}
     body: object
     try:
         if client is not None:

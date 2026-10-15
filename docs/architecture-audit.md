@@ -16,7 +16,7 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 | AUD-006 | P2 | The two largest package modules (`db.py`, 1,038 lines; `service.py`, 836 lines) warrant function-level review for cohesive boundaries. File size alone is not proof that splitting improves the design. | File inventory at audit start; 41 database methods and 34 application-facade methods reviewed by responsibility. | Reviewed — no module extraction justified: `Database` methods share SQLite schema/connection and row-mapping contracts; `OilWatchApp` is the application facade and its operations coordinate shared collaborators. Keep the size visible for a future change that establishes an independent persistence or application-service boundary. |
 | AUD-007 | P1 | Five effective-price integration tests used a fixed 2026-09-10 quote even though the default comparison window is 30 days. The fixture aged out and the tests failed as time passed. | `tests/test_effective_price.py`; baseline run on 2026-10-15 had failures/errors from this cause. | Fixed in this batch — quote timestamps and validity are generated relative to the test clock; discount observations remain synthetic and recent. |
 | AUD-008 | P1 | The baseline unit suite was not hermetic: CLI dispatch and default-root tests needed the ignored local settings file; three sync-connector tests launched a real Playwright browser despite testing stub results. | `tests/test_cli.py`, `tests/test_app.py`, `tests/test_connector_bases.py`. Baseline: 837 tests, 3 failures, 12 errors, 6 skipped, 612.8 seconds; settings file and Playwright browser were absent. | Fixed in this batch — CLI tests use a configured mock app, default-root checks use a temporary checkout, and browser tests stub page creation. |
-| AUD-009 | P1 | The fuel-mail classifier reads its API key but sends a literal mask as the `Authorization` header. Any real request is unauthorized; the existing test asserted the broken mask rather than the bearer-token contract. | `oilwatch/quote_judge.py:242`; `tests/test_quote_judge.py` asserted the mask. | Fixed in this batch — the request now sends the configured bearer key and the mock verifies it. |
+| AUD-009 | P1 | The fuel-mail classifier reads its API key but sends a literal mask as the `Authorization` header. Any real request is unauthorized; the existing test asserted the broken mask rather than the bearer-token contract. | `oilwatch/quote_judge.py:242`; `tests/test_quote_judge.py` asserted the mask. | **Withdrawn by the post-audit review — the premise was false.** The header was already `f"Bearer {key}"` and the test already asserted `Bearer test-key`; the change rewrote that line as `"Bearer " + key` and reworded the assertion, which is the same string twice, so no request ever changed. Both lines are reverted. See *Post-audit review*. |
 | AUD-010 | P2 | The LLM-using mail-classification path has request-shape/failure tests and a threshold calibration utility, but no fixed, labeled benchmark suite that reports classification quality, latency, and cost across model changes. The current test suite cannot detect quality or performance regressions. | `oilwatch/quote_judge.py`, `tools/fuel_mail_calibration.py`, `tests/test_quote_judge.py`; no benchmark dataset or benchmark runner is present. | Deferred — requires an owner-reviewed, sanitized labeled corpus and a chosen metric; do not invent labels or call the external model from unit tests. |
 | AUD-011 | P2 | The repository-wide type check reported 15 errors and one warning: quote reason/status strings were wider than their validated vocabularies, chart date inputs and legend labels did not satisfy Matplotlib's typed API, the Excel date mode was unchecked, and lazy exports were not statically declared. | Full Pyright run on 2026-10-15; affected code in `analytics.py`, connector bases, `import_xls.py`, and `connectors/suppliers/__init__.py`. | Fixed in this batch — propagated closed quote literal types, converted date inputs through Matplotlib's date-number API, validated Excel date mode, and declared lazy exports for type checking without eager imports. Full Pyright and focused tests pass. |
 | AUD-012 | P2 | `load_client_id()` caught every exception from settings loading and presented invalid settings or a missing supplier register as if the client ID were simply absent. | `oilwatch/graph_email.py:load_client_id`; `tests/test_graph_email_flows.py`. | Fixed in this batch — only an absent settings file selects the environment/configuration guidance; errors from an existing malformed configuration and from missing required registry data now propagate. |
@@ -67,3 +67,42 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 | Detached-worker integrity | `3ebb736` | Use the checkout virtualenv, retain worker stderr, mark launch failures, and reject malformed observation timestamps |
 | Hermetic and synthetic test data | `b1f9f23` | Consolidate app fixtures; replace identifying data and stale timestamps; isolate CLI and browser tests |
 | Project-wide typing contracts | `6e0360a` | Close quote status/reason types, plotting date/label types, Excel date-mode validation, and lazy-export type declarations |
+
+## Post-audit review — 2026-10-15
+
+A second reading of this register against the code, the live configuration and the live
+database, made before the branch was landed on `main` (fast-forward; it was a direct
+descendant of `main`). Everything in the table above was checked and kept except AUD-009.
+
+1. **AUD-009 withdrawn — the premise was false.** `oilwatch/quote_judge.py` already sent
+   the configured key as a bearer token (`f"Bearer {key}"`), and `tests/test_quote_judge.py`
+   already asserted `Bearer test-key`. A grep for every `Authorization`/`Bearer` line in
+   `oilwatch/` finds exactly two and both are correct — the other is the mailbox's OAuth
+   header. The batch changed `f"Bearer {key}"` to `"Bearer " + key`, and the assertion to
+   `"Bearer " + "test-key"`: the same string twice, so no request ever changed and there was
+   no classifier defect to find. Both lines are reverted.
+
+2. **The consolidated `_manual()` had lost the reasoning it consolidated.** AUD-013 rightly
+   folded five copies into `BaseConnector._manual`, but the removed docstrings were the only
+   place some of them stated why the note excludes the supplier's phone ("the phone on the
+   record is contact data, not a route this app offers: it never rings a supplier") and why
+   `status` is kept separate from `reason`. The one method now carries that reasoning once,
+   rather than five times or not at all.
+
+3. **`pyright tests` was red, which contradicted this register's "project-wide Pyright
+   passes" line.** Bare `pyright` (the package scope) is genuinely clean, but the test tree
+   reported two errors the refactor introduced: instantiating the deliberately login-less
+   `BrowserConnector` subclass in `tests/test_connector_bases.py`, and passing an untyped
+   scraped `connector_config` in `tests/test_config.py`. Both are fixed at the assertion —
+   one owned `# type: ignore[abstract]` carrying its reason (the convention in
+   `docs/inspection.md` row 15.13), and one `Any`-typed payload, which is what a scrape
+   actually is. `pyright tests` is back to zero.
+
+**Verified on the real install, not on fixtures.** The audit's own tests use synthetic data,
+so this was checked against what is actually on this machine: `load_settings()` and
+`load_supplier_registry()` accept the ignored `settings.json` and the tracked register
+unchanged (no forbidden keys anywhere, and all 18 `quote_request` records already
+well-formed as `{form: …}` or `{no_form: true}`); all 18 stored `connector_config_json` rows
+parse through the new reader; and the stored newest observation is timezone-naive and
+parses, so AUD-004's new raise cannot fire on this data. **850 tests pass**, `ruff check` is
+clean.

@@ -93,7 +93,7 @@ class RequestShapeTests(_KeyedTestCase):
 
     def test_the_key_travels_as_a_bearer_token(self) -> None:
         quote_judge.fuel_mail_probability("a message", client=self.client)
-        self.assertEqual(self.sent["authorization"], "Bearer " + "test-key")
+        self.assertEqual(self.sent["authorization"], "Bearer test-key")
 
     def test_only_the_opening_of_a_message_is_judged(self) -> None:
         """What the mail *is* is legible from its opening; the rest is footer.
