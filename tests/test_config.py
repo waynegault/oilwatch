@@ -6,9 +6,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from oilwatch.config import load_settings, load_supplier_registry
+from oilwatch.config import SupplierRegistry, load_settings, load_supplier_registry
 from oilwatch.connectors import get_supplier_connector
 from oilwatch.form_submit import SUPPLIER_FORMS
+from oilwatch.models import SupplierCandidate
 
 
 class ConfigTests(unittest.TestCase):
@@ -155,12 +156,36 @@ class ConfigTests(unittest.TestCase):
                 "website": "https://a.example.com",
                 "quote_request": {"from": "form-a"},
             },
+            {
+                "name": "A",
+                "website": "https://a.example.com",
+                "connector_config": {"unexpected": "ignored"},
+            },
+            {
+                "name": "A",
+                "website": "https://a.example.com",
+                "connector_config": {"vat_rate": "0.05"},
+            },
+            {
+                "name": "A",
+                "website": "https://a.example.com",
+                "connector_config": {"quote_fields": {"litres": []}},
+            },
         )
         for record in invalid_records:
             with self.subTest(record=record):
                 self._write_register(suppliers=[record])
                 with self.assertRaises(ValueError):
                     load_supplier_registry(self.root)
+
+    def test_discovery_candidates_validate_connector_config(self) -> None:
+        with self.assertRaises(ValueError):
+            SupplierCandidate(
+                name="A",
+                website="https://a.example.com",
+                query="heating oil",
+                connector_config={"unexpected": True},
+            )
 
     def test_a_register_that_is_not_an_object_is_refused(self) -> None:
         """A stale bare list must fail loudly, not read as no suppliers at all.
@@ -175,6 +200,10 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             load_supplier_registry(self.root)
         self.assertIn("bare list", str(caught.exception))
+
+    def test_example_supplier_register_matches_the_strict_schema(self) -> None:
+        example = Path(__file__).resolve().parents[1] / "config" / "suppliers.example.json"
+        SupplierRegistry.model_validate(json.loads(example.read_text(encoding="utf-8")))
 
 
 class ShippedRegisterTests(unittest.TestCase):

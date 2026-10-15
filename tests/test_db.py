@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import timedelta
 from pathlib import Path
 
@@ -43,6 +44,27 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(len(suppliers), 1)
         self.assertEqual(suppliers[0]["name"], "A Renamed")
         self.assertEqual(suppliers[0]["phone"], "01224 123456")
+
+    def test_upsert_rejects_invalid_connector_configuration(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Invalid connector_config"):
+            self.db.upsert_supplier(
+                self._supplier(
+                    "A",
+                    "https://a.example.com",
+                    connector_config={"unexpected": True},
+                )
+            )
+
+    def test_read_rejects_malformed_persisted_connector_configuration(self) -> None:
+        supplier_id = self.db.upsert_supplier(self._supplier("A", "https://a.example.com"))
+        with closing(self.db.connect()) as conn, conn:
+            conn.execute(
+                "UPDATE suppliers SET connector_config_json = ? WHERE id = ?",
+                ('{"quote_fields":{"litres":[]}}', supplier_id),
+            )
+
+        with self.assertRaisesRegex(ValueError, "Invalid connector_config"):
+            self.db.get_supplier(supplier_id)
 
     def test_record_quote_roundtrip(self) -> None:
         supplier_id = self.db.upsert_supplier(self._supplier("A", "https://a.example.com"))

@@ -5,6 +5,8 @@ from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from oilwatch.config import ConnectorConfig
+
 
 def utcnow_naive() -> datetime:
     """Return the current UTC time as a naive datetime.
@@ -78,11 +80,13 @@ class SupplierCandidate(_StrictModel):
     distance_miles: float | None = None
     status: Literal["active", "inactive", "manual_review"] = "manual_review"
     connector_type: str = "manual"
-    connector_config: dict[str, Any] = Field(default_factory=dict)
+    connector_config: ConnectorConfig = Field(default_factory=ConnectorConfig)
     notes: str = ""
 
     def to_record(self) -> dict[str, Any]:
-        return self.model_dump()
+        record = self.model_dump()
+        record["connector_config"] = self.connector_config.model_dump(exclude_unset=True)
+        return record
 
 
 class QuoteResult(_StrictModel):

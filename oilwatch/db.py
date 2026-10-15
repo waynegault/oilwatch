@@ -7,6 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from oilwatch.config import parse_connector_config, validate_connector_config
 from oilwatch.models import utcnow_naive
 from oilwatch.supplier_integrity import (
     SupplierIdentityConflict,
@@ -289,7 +290,9 @@ class Database:
             "longitude": record.get("longitude"),
             "distance_miles": record.get("distance_miles"),
             "connector_type": record.get("connector_type", "manual"),
-            "connector_config_json": json.dumps(record.get("connector_config", {})),
+            "connector_config_json": json.dumps(
+                validate_connector_config(record.get("connector_config", {}))
+            ),
             "kind": record.get("kind", "supplier"),
             "notes": record.get("notes", ""),
         }
@@ -1120,5 +1123,7 @@ class Database:
     @staticmethod
     def _supplier_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         data = dict(row)
-        data["connector_config"] = json.loads(data.pop("connector_config_json") or "{}")
+        data["connector_config"] = parse_connector_config(
+            data.pop("connector_config_json")
+        )
         return data

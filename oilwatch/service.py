@@ -15,6 +15,7 @@ from oilwatch.config import (
     Settings,
     load_settings,
     load_supplier_registry,
+    parse_connector_config,
 )
 from oilwatch.db import Database
 from oilwatch.discovery import DiscoveryService
@@ -413,7 +414,7 @@ class OilWatchApp:
         promoting it would hand a reader a link they cannot order from. An absent
         value means "not recorded", not "no page exists".
         """
-        config = json.loads(row.get("connector_config_json") or "{}")
+        config = parse_connector_config(row.get("connector_config_json"))
         order_page = config.get("order_page")
         kind = row.get("kind") or "supplier"
         phone = row.get("phone")

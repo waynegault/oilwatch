@@ -123,12 +123,23 @@ class SupplierQuoteRequest(_StrictConfigModel):
         return self
 
 
+class ConnectorConfig(_StrictConfigModel):
+    quote_url: str | None = None
+    order_page: str | None = None
+    price_regex: str | None = None
+    quote_method: Literal["GET", "POST"] = "POST"
+    quote_fields: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    vat_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    product_value: str | None = None
+    product_sku: str | None = None
+
+
 class SupplierRecord(_StrictConfigModel):
     name: str = Field(min_length=1)
     website: str = Field(min_length=1)
     status: Literal["active", "inactive", "manual_review"] = "active"
     connector_type: str = Field(default="manual", min_length=1)
-    connector_config: dict[str, Any] = Field(default_factory=dict)
+    connector_config: ConnectorConfig = Field(default_factory=ConnectorConfig)
     phone: str | None = None
     email: str | None = None
     kind: Literal["supplier", "benchmark"] = "supplier"
@@ -143,6 +154,22 @@ class SupplierRegistry(_StrictConfigModel):
 
 def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def validate_connector_config(value: object) -> dict[str, Any]:
+    try:
+        config = ConnectorConfig.model_validate(value)
+    except ValidationError as exc:
+        raise ValueError(f"Invalid connector_config: {exc}") from exc
+    return config.model_dump(exclude_unset=True)
+
+
+def parse_connector_config(value: str | None) -> dict[str, Any]:
+    try:
+        raw = json.loads(value or "{}")
+    except json.JSONDecodeError as exc:
+        raise ValueError("Invalid connector_config_json") from exc
+    return validate_connector_config(raw)
 
 
 def load_settings(root: Path | None = None) -> Settings:
