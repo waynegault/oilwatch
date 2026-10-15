@@ -376,140 +376,11 @@ class GraphEmailMonitor:
                 )
                 continue
 
-            text = self._body_text(message)
-
-            # Capture discount codes before anything is deleted: the message is
-            # removed once processed, so an uncaptured code is gone for good.
-            # A discount-only email (no price in it) still earns its keep here.
-            from oilwatch.discounts import looks_like_an_offer, parse_discounts
-
-            stamp = message_received(message)
-
-            offers = parse_discounts(text, received_at=stamp)
-            for offer in offers:
-                app.db.record_discount(
-                    {
-                        "supplier_id": supplier["id"],
-                        "code": offer.code,
-                        "amount_gbp": offer.amount_gbp,
-                        "min_litres": offer.min_litres,
-                        "max_litres": offer.max_litres,
-                        "expires_at": offer.expires_at.isoformat() if offer.expires_at else None,
-                        "terms": offer.terms,
-                        "source": "email",
-                        "observed_at": stamp.isoformat(),
-                    }
-                )
-            if offers:
-                # A discount-only message is the one branch that writes rows and
-                # still says nothing: `scanned` counts it, `unrecognised` does not,
-                # and every other known-sender branch leaves a line - so the sweep's
-                # own arithmetic stopped adding up. On 2026-09-23 the ValueOils mail
-                # was read, its three codes refreshed and the message deleted, all
-                # under "scanned 191, recorded 0, 190 from unrecognised" with
-                # nothing naming it, which is where a lost discount hides.
-                log.info(
-                    "captured %d discount offer(s) from %s (%s)",
-                    len(offers),
-                    supplier["name"],
-                    domain,
-                )
-
-            ex_vat = extract_ppl(text)
-            if ex_vat is None and not offers:
-                # Nothing to record. Clear it out of the inbox so supplier mail
-                # does not pile up, but deliberately do NOT mark it processed:
-                # it stays in Deleted Items, still visible to a later sweep and
-                # to any future parsing improvement.
-                #
-                # Said whether or not the message is in the inbox. These lines
-                # used to sit inside the branch that deletes, so supplier mail
-                # that was not in the inbox - a newsletter already in Deleted
-                # Items - was re-scanned every sweep without a word, and that is
-                # what made a sweep's own arithmetic fail to add up on
-                # 2026-09-21: scanned minus unrecognised counts the messages that
-                # should each leave a line, and one of them left none, every hour.
-                if inbox and message.get("parentFolderId") == inbox:
-                    self.delete(token, message_id)
-                    outcome = "cleared from the inbox"
-                else:
-                    outcome = "left where it is"
-                if looks_like_an_offer(text):
-                    # It reads like an offer but no rule could read it, so it may
-                    # be a discount in a format we cannot parse yet. Say so rather
-                    # than lose it in silence; it stays re-scannable until a rule
-                    # for that format exists.
-                    log.warning(
-                        "possible offer no rule could read in %r from %s; %s",
-                        message.get("subject", ""),
-                        domain,
-                        outcome,
-                    )
-                else:
-                    log.info(
-                        "nothing to record in %r from %s; %s",
-                        message.get("subject", ""),
-                        domain,
-                        outcome,
-                    )
-                continue
-
-            if ex_vat is not None:
-                price_per_liter = apply_vat(ex_vat, DOMESTIC_VAT_RATE)
-                quantity = app.settings.quote_quantity_liters
-                record = {
-                    "supplier_id": supplier["id"],
-                    # The email's own date, not now: now that the sweep reaches
-                    # back through old mail, dating an old reply today would let a
-                    # stale price pass the recency window as if it were current.
-                    "observed_at": stamp.isoformat(),
-                    "quantity_liters": quantity,
-                    "status": "ok",
-                    "price_per_liter": price_per_liter,
-                    "total_price": inclusive_total(price_per_liter, quantity),
-                    "currency": app.settings.currency,
-                    "source": "email",
-                    "notes": f"From email reply ({domain})",
-                    "raw_payload": {"from": sender, "subject": message.get("subject", "")},
-                }
-                # A reply that was already mined can arrive here again when its
-                # id changed on a folder move; the same observation is not a
-                # second quote, and must not be reported as one either. Neither
-                # is a copy of a quote we have *just* read: the supplier's own
-                # tool mails one, which would leave two rows for a single quote
-                # event for the reads to choose between. One event, one row - the
-                # reads still carry the rule for the rows already on record.
-                if app.db.copies_a_recent_read(record):
-                    log.info(
-                        "the quote from %s (%s) copies the read just made; "
-                        "not stored as a second observation",
-                        supplier["name"],
-                        domain,
-                    )
-                elif not app.db.quote_already_recorded(record):
-                    app.db.record_quote(record)
-                    recorded.append(record)
-                    log.info(
-                        "recorded %.4f/L from %s (%s)",
-                        price_per_liter,
-                        supplier["name"],
-                        domain,
-                    )
-                else:
-                    # Expected when a reply's id changes on a folder move, so
-                    # this is not a warning - but it is the other branch that
-                    # used to swallow a message without a word.
-                    log.info(
-                        "the same observation from %s (%s) is already recorded; cleared",
-                        supplier["name"],
-                        domain,
-                    )
-
-            app.db.mark_message_processed(message_id)
-            # Delete only from the inbox. Mail already sitting in Deleted Items is
-            # left there, so sweeping the bin can never become a permanent purge.
-            if inbox and message.get("parentFolderId") == inbox:
-                self.delete(token, message_id)
+            quote = self._process_known_supplier_message(
+                app, token, inbox, message, supplier, sender, domain
+            )
+            if quote is not None:
+                recorded.append(quote)
 
         # Always leave a record of the sweep. Recording a quote used to log
         # nothing at all, so an unattended run that captured a reply and one
@@ -532,6 +403,144 @@ class GraphEmailMonitor:
                 ", ".join(sorted(candidates)),
             )
         return recorded
+
+    def _process_known_supplier_message(
+        self,
+        app: Any,
+        token: dict[str, Any],
+        inbox: str | None,
+        message: dict[str, Any],
+        supplier: dict[str, Any],
+        sender: str,
+        domain: str,
+    ) -> dict[str, Any] | None:
+        text = self._body_text(message)
+        stamp = message_received(message)
+        has_offers = self._capture_discounts(app, supplier, stamp, text, domain)
+        ex_vat = extract_ppl(text)
+        if ex_vat is None and not has_offers:
+            self._clear_unpriced_message(token, inbox, message, text, domain)
+            return None
+
+        quote = None
+        if ex_vat is not None:
+            price_per_liter = apply_vat(ex_vat, DOMESTIC_VAT_RATE)
+            quantity = app.settings.quote_quantity_liters
+            record = {
+                "supplier_id": supplier["id"],
+                "observed_at": stamp.isoformat(),
+                "quantity_liters": quantity,
+                "status": "ok",
+                "price_per_liter": price_per_liter,
+                "total_price": inclusive_total(price_per_liter, quantity),
+                "currency": app.settings.currency,
+                "source": "email",
+                "notes": f"From email reply ({domain})",
+                "raw_payload": {"from": sender, "subject": message.get("subject", "")},
+            }
+            quote = self._record_email_quote(app, record, supplier, domain)
+
+        message_id = message.get("id", "")
+        app.db.mark_message_processed(message_id)
+        if inbox and message.get("parentFolderId") == inbox:
+            self.delete(token, message_id)
+        return quote
+
+    @staticmethod
+    def _capture_discounts(
+        app: Any,
+        supplier: dict[str, Any],
+        stamp: datetime,
+        text: str,
+        domain: str,
+    ) -> bool:
+        from oilwatch.discounts import parse_discounts
+
+        offers = parse_discounts(text, received_at=stamp)
+        for offer in offers:
+            app.db.record_discount(
+                {
+                    "supplier_id": supplier["id"],
+                    "code": offer.code,
+                    "amount_gbp": offer.amount_gbp,
+                    "min_litres": offer.min_litres,
+                    "max_litres": offer.max_litres,
+                    "expires_at": offer.expires_at.isoformat() if offer.expires_at else None,
+                    "terms": offer.terms,
+                    "source": "email",
+                    "observed_at": stamp.isoformat(),
+                }
+            )
+        if offers:
+            log.info(
+                "captured %d discount offer(s) from %s (%s)",
+                len(offers),
+                supplier["name"],
+                domain,
+            )
+        return bool(offers)
+
+    def _clear_unpriced_message(
+        self,
+        token: dict[str, Any],
+        inbox: str | None,
+        message: dict[str, Any],
+        text: str,
+        domain: str,
+    ) -> None:
+        from oilwatch.discounts import looks_like_an_offer
+
+        message_id = message.get("id", "")
+        if inbox and message.get("parentFolderId") == inbox:
+            self.delete(token, message_id)
+            outcome = "cleared from the inbox"
+        else:
+            outcome = "left where it is"
+        if looks_like_an_offer(text):
+            log.warning(
+                "possible offer no rule could read in %r from %s; %s",
+                message.get("subject", ""),
+                domain,
+                outcome,
+            )
+        else:
+            log.info(
+                "nothing to record in %r from %s; %s",
+                message.get("subject", ""),
+                domain,
+                outcome,
+            )
+
+    @staticmethod
+    def _record_email_quote(
+        app: Any,
+        record: dict[str, Any],
+        supplier: dict[str, Any],
+        domain: str,
+    ) -> dict[str, Any] | None:
+        if app.db.copies_a_recent_read(record):
+            log.info(
+                "the quote from %s (%s) copies the read just made; "
+                "not stored as a second observation",
+                supplier["name"],
+                domain,
+            )
+            return None
+        if app.db.quote_already_recorded(record):
+            log.info(
+                "the same observation from %s (%s) is already recorded; cleared",
+                supplier["name"],
+                domain,
+            )
+            return None
+        app.db.record_quote(record)
+        log.info(
+            "recorded %.4f/L from %s (%s)",
+            record["price_per_liter"],
+            supplier["name"],
+            domain,
+        )
+        return record
 
     @staticmethod
     def _reads_like_fuel_mail(
