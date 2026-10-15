@@ -21,6 +21,8 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 | AUD-011 | P2 | The repository-wide type check reported 15 errors and one warning: quote reason/status strings were wider than their validated vocabularies, chart date inputs and legend labels did not satisfy Matplotlib's typed API, the Excel date mode was unchecked, and lazy exports were not statically declared. | Full Pyright run on 2026-10-15; affected code in `analytics.py`, connector bases, `import_xls.py`, and `connectors/suppliers/__init__.py`. | Fixed in this batch — propagated closed quote literal types, converted date inputs through Matplotlib's date-number API, validated Excel date mode, and declared lazy exports for type checking without eager imports. Full Pyright and focused tests pass. |
 | AUD-012 | P2 | `load_client_id()` caught every exception from settings loading and presented invalid settings or a missing supplier register as if the client ID were simply absent. | `oilwatch/graph_email.py:load_client_id`; `tests/test_graph_email_flows.py`. | Fixed in this batch — only an absent settings file selects the environment/configuration guidance; errors from an existing malformed configuration and from missing required registry data now propagate. |
 | AUD-013 | P2 | Five connectors duplicated manual-quote construction and contact formatting; one allowed an absent reason despite the quote model rejecting unclassified new results. `BrowserConnector.login()` was a runtime `NotImplementedError` hook rather than an abstract contract. | `_manual` implementations in the HTTP, price-page, Highland, Scottish Fuels, and sync-browser connectors; `oilwatch/connectors/browser_base.py`. | Fixed in this batch — one typed `BaseConnector._manual()` owns the shared behavior and requires a reason; browser connectors must implement login before they can be instantiated. |
+| AUD-014 | P2 | `GraphEmailMonitor.run()` was a 212-line orchestration function mixing sender routing, discount parsing, quote deduplication, database writes, deletion, and reporting. A change to one message outcome required reasoning about every side effect in the whole sweep. | `oilwatch/graph_email.py:GraphEmailMonitor.run`; 100 mailbox/effective-price flow tests. | Fixed in this batch — kept `run()` as the sweep dispatcher and extracted known-sender processing, discount capture, unpriced-message handling, and idempotent quote persistence into named methods. Focused mailbox tests pass. |
+| AUD-015 | P2 | Several long, stateful functions remain: Scottish Fuels and BoilerJuice browser journeys, spreadsheet/form/registration flows, CLI/MCP dispatch, and market snapshot/chart construction. | AST function-length inventory (80+ lines) across `oilwatch/`. | Deferred — these are separate supplier/application workflows, not a single repeated implementation; splitting them without a focused behavior change would add indirection around stateful browser and external-service side effects. The largest routines remain candidates for dedicated, behavior-preserving refactors. |
 
 ## Audit coverage and exclusions
 
@@ -40,6 +42,9 @@ addressed. Findings are closed only after a targeted test and a separate commit.
   counted as findings absent a failing check.
 - No supplier refresh, mailbox access, quote request, or purchase action is part
   of this audit.
+- A package import-graph scan found no circular imports. No warning-filtering or
+  blanket warning suppression was found; the broad exception paths reviewed
+  either report their failure or have a documented best-effort contract.
 - The final full-suite run after the fixture/isolation batch passed 844 tests
   with 6 skipped. Project-wide Ruff and Pyright are clean after the typing batch.
 
@@ -53,6 +58,7 @@ addressed. Findings are closed only after a targeted test and a separate commit.
 | Strict connector configuration | `eb93d6c` | Validate connector-specific configuration in the registry, discovery candidates, and database reads/writes |
 | Mailbox settings error visibility | `4b464bc` | Do not mask invalid settings or a missing supplier registry as a missing OAuth client ID |
 | Shared connector fallback and hooks | `52d3211` | Consolidate manual quote construction and make browser login an enforced abstract hook |
+| Mailbox workflow decomposition | `2d123e3` | Extract message parsing, discount capture, quote persistence, and unpriced-message handling from the sweep dispatcher |
 | Detached-worker integrity | `3ebb736` | Use the checkout virtualenv, retain worker stderr, mark launch failures, and reject malformed observation timestamps |
 | Hermetic and synthetic test data | `b1f9f23` | Consolidate app fixtures; replace identifying data and stale timestamps; isolate CLI and browser tests |
 | Project-wide typing contracts | `6e0360a` | Close quote status/reason types, plotting date/label types, Excel date-mode validation, and lazy-export type declarations |
