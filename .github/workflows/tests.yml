@@ -1,0 +1,37 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    # The application drives Windows APIs - DPAPI credential storage and the
+    # browser connectors - so the suite runs on Windows. The provider and browser
+    # calls are stubbed, so this needs no supplier access and no live sessions.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the package and its development extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Unit tests
+        # The declared way to run this suite; tests needing a local config or a
+        # live browser skip and say so.
+        run: python -m unittest discover -s tests -t . -q
+
+      - name: Lint
+        run: python -m ruff check .
+
+      - name: Type check
+        run: python -m pyright
