@@ -194,15 +194,17 @@ class RefreshTokenCacheTests(unittest.TestCase):
             path.assert_not_called()
 
     def test_a_corrupt_cache_reads_as_none(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            with patch("oilwatch.graph_email.cache_path") as path:
-                # A temporary directory rather than the owner's own cache
-                # directory: this used to borrow the real one's parent, so it
-                # needed that parent to exist and errored on a clean runner.
-                path.return_value = Path(directory) / "corrupt_test.json"
-                path.return_value.write_text("not json", encoding="utf-8")
-                self.assertIsNone(_monitor()._load_refresh_token())
-                path.return_value.unlink(missing_ok=True)
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("oilwatch.graph_email.cache_path") as path,
+        ):
+            # A temporary directory rather than the owner's own cache directory:
+            # this used to borrow the real one's parent, so it needed that parent
+            # to exist and errored on a clean runner.
+            path.return_value = Path(directory) / "corrupt_test.json"
+            path.return_value.write_text("not json", encoding="utf-8")
+            self.assertIsNone(_monitor()._load_refresh_token())
+            path.return_value.unlink(missing_ok=True)
 
     def test_the_token_is_encrypted_at_rest_when_dpapi_is_available(self) -> None:
         """A refresh token grants Mail.ReadWrite, so it is not cached in the clear."""
@@ -224,18 +226,20 @@ class RefreshTokenCacheTests(unittest.TestCase):
 
     def test_a_legacy_plaintext_cache_still_loads(self) -> None:
         """A cache written before encryption must not lock the owner out."""
-        with tempfile.TemporaryDirectory() as directory:
-            with patch("oilwatch.graph_email.cache_path") as path:
-                # As above: a temporary directory, not a path that depends on the
-                # owner's cache directory existing.
-                path.return_value = Path(directory) / "graph_token_cache_legacy_test.json"
-                path.return_value.write_text(
-                    json.dumps({"refresh_token": "legacy"}), encoding="utf-8"
-                )
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("oilwatch.graph_email.cache_path") as path,
+        ):
+            # As above: a temporary directory, not a path that depends on the
+            # owner's cache directory existing.
+            path.return_value = Path(directory) / "graph_token_cache_legacy_test.json"
+            path.return_value.write_text(
+                json.dumps({"refresh_token": "legacy"}), encoding="utf-8"
+            )
 
-                self.assertEqual(_monitor()._load_refresh_token(), "legacy")
+            self.assertEqual(_monitor()._load_refresh_token(), "legacy")
 
-                path.return_value.unlink(missing_ok=True)
+            path.return_value.unlink(missing_ok=True)
 
 
 class TokenTests(unittest.TestCase):
